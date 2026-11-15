@@ -109,7 +109,7 @@ add_dependencies(veyamux-play-test veyamux_shaders)
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")

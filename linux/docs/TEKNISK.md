@@ -139,8 +139,10 @@ kortet.
 samme tonemapping som capture-vejen (HLG: invers OETF + OOTF med γ = 1,2 ved 1000 nits).
 
 ## HDR-output (eksperimentel)
-Menu → *HDR-output* (kræver genstart). VeyAmux beder Qt Quick om en **scRGB-swapchain** (`QSG_RHI_HDR=scrgb`,
-FP16 + `VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT`, instans-udvidelsen `VK_EXT_swapchain_colorspace`). Efter første billede
+Menu → *HDR-output* (kræver genstart). VeyAmux beder Qt Quick om en **HDR10-swapchain** (standard: `QSG_RHI_HDR=hdr10`,
+A2B10G10R10 + `VK_COLOR_SPACE_HDR10_ST2084_EXT`) eller en **scRGB-swapchain** (`scrgb`, FP16 +
+`VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT`), med instans-udvidelsen `VK_EXT_swapchain_colorspace`
+(`VEYAMUX_HDR_MODE=hdr10|scrgb`). Efter første billede
 spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HDR-vejen til, hvis det findes.
 - HDR-kilder tonemappes til *skærmens top-lysstyrke* (400/600/1000/1500 nits) i stedet for 203 nits; SDR-kilder vises med
   hvid = 203 nits (BT.2408).
@@ -148,12 +150,37 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
   `layer.effect` på video-elementet PQ → udvidet sRGB-kodning (`shaders/qt/pq_video.frag`), og hele vinduet tegnes i et
   FP16-lag, der omregnes til lineært scRGB (1,0 = 80 nits, SDR-hvid 203 nits) (`shaders/qt/hdr_window.frag`), så menuen ser
   normal ud.
-- Farverne holdes inden for BT.709 (gamut-komprimering som i SDR-vejen); fuld BT.2020-farveskala er ikke lavet.
-- OBS, optagelse og skærmbilleder omregnes tilbage til SDR (`PqCodedToSdr` i `shaders/PqCode.hlsli`, blød skulder over 0,75).
+- **Fuld BT.2020-farve**: HDR-kilder tonemappes kun i luminans (BT.2390 til skærmens top) og bliver i BT.2020
+  (`HdrToDisplay2020` i `shaders/PqCode.hlsli`); hele kæden arbejder så i lineært BT.2020. SDR-kilder løftes fra
+  BT.709 til BT.2020 i `LxPqOut`. `out8_` er altid PQ-kodet BT.2020 i HDR-tilstand. Video-laget dekoder til BT.709
+  med fortegn (brede farver = negative komponenter), vindueslaget koder til PQ/BT.2020 (HDR10) eller lineært scRGB.
+- OBS, optagelse og skærmbilleder omregnes tilbage til SDR (`PqCodedToSdr`: BT.2020 → BT.709, blød skulder på
+  luminansen over 0,75, Veyras `ToneGamut`; CPU-versionen i `PlayerBridge::sdrCopy`). Målt mod SDR-vejen: højst ±15 i
+  8-bit-værdi på mættede farvefelter.
 - Kræver native Wayland med HDR slået til (KDE Plasma 6 / GNOME 48+, Mesa med Wayland-farvestyring). Gennem XWayland
   findes ingen HDR-swapchain; menuen siger det. Ukendt sammenspil med lsfg-vk (frame generation) på en HDR-swapchain.
 - Testet her kun i en software-GPU med en SDR-swapchain (`VEYAMUX_FORCE_HDR_OUT=1`): kæden, lagene og SDR-kopierne virker,
   ingen Vulkan-valideringsfejl. Ikke testet på en ægte HDR-skærm.
+
+## gamescope og Steam
+- *Start i gamescope* (menu, HDR-afsnittet): VeyAmux genstarter sig selv som
+  `gamescope -f -W <skærm> -H <skærm> -r <Hz> --adaptive-sync [--hdr-enabled] -- VeyAmux` med `QT_QPA_PLATFORM=xcb`,
+  uden `WAYLAND_DISPLAY` og med `ENABLE_GAMESCOPE_WSI=1`. Ikke inde i gamescope i forvejen (Game Mode).
+  `VEYAMUX_GAMESCOPE=0` springer det over.
+- *Tilføj til Steam*: skriver en non-Steam-genvej i `userdata/<konto>/config/shortcuts.vdf` (binær KeyValues; eksisterende
+  genveje bevares, en tidligere VeyAmux-genvej opdateres, første gang gemmes `shortcuts.vdf.veyamux-backup`). Steam skal
+  være lukket. Startindstillinger: `--fullscreen --capture last`. Inde i gamescope starter VeyAmux altid i fuldskærm.
+
+## Signalskift og 120 Hz
+- Fejler capture-kortet (frakoblet), forsøger VeyAmux at åbne det igen hvert sekund med samme tilstand. Kommer der intet
+  billede i 3 s, genstartes streamen (hvert 3. sekund) – mange UVC-kort går i stå, når konsollen skifter
+  opløsning/Hz/HDR.
+- Kører capture med ≥ 95 fps (tilstandens fps eller målt indhold) i 1 s, sættes frame generation på pause (lsfg-vk-
+  multiplikator 1, indstillingen bevares); under 80 fps i 2 s starter den igen.
+
+## Lyd
+Capture-lyden går igennem i blokke på 5 ms (før 20 ms) med ca. 20 ms kø ud (før 50 ms); pipewire-pulse sænker sin
+kvantum tilsvarende. `VEYAMUX_AUDIO_MS=<ms>` (2–40) giver større blokke på travle systemer.
 
 ## Instant replay, optagelse og skærmbilleder
 **F9** gemmer de sidste 30/60/120 s, **F10** starter/stopper en optagelse, **F12** gemmer et PNG-skærmbillede
@@ -207,7 +234,8 @@ Tryk **C** (eller kamera-ikonet). Vælg enhed, tilstand (★ = anbefalet, ≥50 
 `./VeyAmux-x86_64.AppImage --capture /dev/video0`. Kilden antages at være limited-range (typisk for HDMI-capture).
 
 ## Miljøvariabler
-`VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
+`VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
+`--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
 `VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 
 ## Genvejstaster

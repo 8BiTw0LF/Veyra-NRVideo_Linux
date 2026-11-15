@@ -3,8 +3,8 @@
 // Tone mapping as for HDR capture (LxP010): Veyra's HdrToSdr (BT.2390 EETF, hue-preserving gamut compression),
 // SDR white = 203 nits.
 #include "HdrColor.hlsli"
-#include "HdrToSdr.hlsli"
-cbuffer HdrRgbParams : register(b0) { uint width; uint height; uint mode; uint p0; float sourcePeak; float sdrWhite; float2 p1; };
+#include "PqCode.hlsli"
+cbuffer HdrRgbParams : register(b0) { uint width; uint height; uint mode; uint wide; float sourcePeak; float sdrWhite; float2 p1; };
 Texture2D<float4> src : register(t0);     // R16G16B16A16_UNORM, full-range R'G'B'
 RWTexture2D<float4> dst : register(u0);   // linear BT.709, 1.0 = SDR white
 
@@ -29,5 +29,5 @@ void main(uint3 id : SV_DispatchThreadID) {
     } else {
         nits709 = HdrDecodePq(e.rgb) * 80.0;   // PQ -> linear BT.709 in nits
     }
-    dst[id.xy] = float4(max(HdrToSdr(nits709, peak, sdrWhite), 0.0), 1.0);
+    dst[id.xy] = float4(wide != 0 ? HdrToDisplay2020(nits709, peak, sdrWhite) : max(HdrToSdr(nits709, peak, sdrWhite), 0.0), 1.0);
 }

@@ -53,7 +53,11 @@ Window {
               obsRes: "Resolution sent to OBS",
               obsSave: "Save browser file…", obsCopy: "Copy address",
               obsSaved: "Browser file: %1",
+              steamAdd: "Add to Steam", steamHint: "Adds VeyAmux to your Steam library as a non-Steam game: it starts fullscreen on the last capture card, also from Big Picture and Game Mode. Close Steam first.",
               hdrOut: "HDR output (experimental)",
+              gamescope: "Start in gamescope (HDR + VRR)",
+              gamescopeHint: "Runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync even through XWayland. Takes effect at the next start.",
+              gamescopeOn: "Running inside gamescope.",
               hdrOutOn: "HDR display active: HDR sources are shown up to the display peak above, the rest at 203 nits SDR white.",
               hdrOutNo: "No HDR swapchain: turn on HDR in the system's display settings (KDE Plasma 6 / GNOME 48 or newer) and restart VeyAmux.",
               hdrOutRestart: "Takes effect when VeyAmux restarts.",
@@ -64,6 +68,7 @@ Window {
               recSave: "Save replay (F9)", recStart: "Record (F10)", recStop: "Stop (F10)", recShot: "Screenshot (F12)", recFolder: "Folder",
               obsHelp: "In OBS: Sources → + → Browser → tick \"Local file\" → pick the saved file, and set width/height to your canvas (e.g. 1920 × 1080). Only the video is sent: add the sound with Application Audio Capture (VeyAmux) or straight from the capture card.",
               lsPerf: "Performance mode",
+              fgPaused: "Paused automatically: the capture runs at about 120 Hz, so no frames are generated. Resumes when it drops below 80 fps.",
               lsPerfHint: "Lighter Lossless Scaling model: faster, slightly lower quality. Flow scale is set automatically for your resolution (now %1 %).",
               lsFixed: "Fixed 2× (doubles)", lsFixedHint: "Always doubles the frame rate (60 → 120 fps).",
               ls3x: "Fixed 3× (triples)", ls3xHint: "Always triples the frame rate (60 → 180 fps, 40 → 120 fps). Needs a display fast enough for the result.",
@@ -110,7 +115,11 @@ Window {
               obsRes: "Opløsning til OBS",
               obsSave: "Gem browserfil…", obsCopy: "Kopiér adresse",
               obsSaved: "Browserfil: %1",
+              steamAdd: "Tilføj til Steam", steamHint: "Lægger VeyAmux i dit Steam-bibliotek som non-Steam-spil: det starter i fuldskærm på det sidste capture-kort, også fra Big Picture og Game Mode. Luk Steam først.",
               hdrOut: "HDR-output (eksperimentel)",
+              gamescope: "Start i gamescope (HDR + VRR)",
+              gamescopeHint: "Kører VeyAmux i fuldskærm inde i gamescope, som giver HDR og adaptiv synkronisering selv gennem XWayland. Træder i kraft ved næste start.",
+              gamescopeOn: "Kører inde i gamescope.",
               hdrOutOn: "HDR-skærm aktiv: HDR-kilder vises op til skærmens top-lysstyrke ovenfor, resten med 203 nits SDR-hvid.",
               hdrOutNo: "Ingen HDR-swapchain: slå HDR til i systemets skærmindstillinger (KDE Plasma 6 / GNOME 48 eller nyere), og genstart VeyAmux.",
               hdrOutRestart: "Træder i kraft, når VeyAmux genstartes.",
@@ -121,6 +130,7 @@ Window {
               recSave: "Gem replay (F9)", recStart: "Optag (F10)", recStop: "Stop (F10)", recShot: "Skærmbillede (F12)", recFolder: "Mappe",
               obsHelp: "I OBS: Kilder → + → Browser → sæt flueben i \"Lokal fil\" → vælg den gemte fil, og sæt bredde/højde til dit lærred (fx 1920 × 1080). Kun billedet sendes: tilføj lyden med programlyd-optagelse (Application Audio Capture → VeyAmux) eller direkte fra capture-kortet.",
               lsPerf: "Ydelsestilstand (performance mode)",
+              fgPaused: "Sat på pause automatisk: capture kører med ca. 120 Hz, så der laves ingen ekstra billeder. Starter igen under 80 fps.",
               lsPerfHint: "Lettere Lossless Scaling-model: hurtigere, lidt lavere kvalitet. Flow scale sættes automatisk efter din opløsning (nu %1 %).",
               lsFixed: "Fast 2× (fordobler)", lsFixedHint: "Fordobler altid billedfrekvensen (60 → 120 fps).",
               ls3x: "Fast 3× (tredobler)", ls3xHint: "Tredobler altid billedfrekvensen (60 → 180 fps, 40 → 120 fps). Kræver en skærm, der er hurtig nok til resultatet.",
@@ -154,6 +164,7 @@ Window {
     layer.format: ShaderEffectSource.RGBA16F
     layer.effect: ShaderEffect {
         property real white: 203.0
+        property real mode: player.hdrModeActive
         fragmentShader: "qrc:/shaders/hdr_window.frag.qsb"
     }
 
@@ -426,6 +437,11 @@ Window {
                         }
                         Segmented {
                             visible: player.hdrOutput
+                            width: parent.width; model: ["HDR10", "scRGB"]
+                            current: player.hdrMode; onPicked: (i) => player.hdrMode = i
+                        }
+                        Segmented {
+                            visible: player.hdrOutput
                             width: parent.width; model: ["400", "600", "1000", "1500 nits"]
                             readonly property var peaks: [400, 600, 1000, 1500]
                             current: Math.max(0, peaks.indexOf(player.displayPeak))
@@ -438,8 +454,21 @@ Window {
                             text: player.hdrOutputRestart ? t("hdrOutRestart") : player.hdrOutputActive ? t("hdrOutOn")
                                   : player.hdrOutputNoVulkan ? t("hdrOutSw") : player.hdrOutputXwayland ? t("hdrOutX11") : t("hdrOutNo")
                         }
+                        Item {
+                            visible: player.gamescopeAvailable || player.inGamescope
+                            width: parent.width; height: 26
+                            Text { text: t("gamescope"); color: Theme.label; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
+                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                checked: player.gamescope; onToggled: (v) => player.gamescope = v }
+                        }
+                        Text {
+                            visible: player.gamescopeAvailable || player.inGamescope
+                            width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13
+                            color: player.inGamescope ? Theme.accent3 : Theme.muted
+                            text: player.inGamescope ? t("gamescopeOn") : t("gamescopeHint")
+                        }
                         Rectangle {
-                            visible: player.hdrOutputRestart
+                            visible: player.hdrOutputRestart || player.gamescopeRestart
                             width: hdrRs.implicitWidth + 22; height: 26; radius: 8; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
                             Text { id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
                             MouseArea { id: hdrRsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.restartApp() }
@@ -562,6 +591,18 @@ Window {
                     ObsSection { width: parent.width; tr: win.t }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     RecordSection { width: parent.width; tr: win.t }
+                    Rectangle { width: parent.width; height: 1; color: Theme.line }
+                    Column {
+                        width: parent.width; spacing: 8
+                        Text { text: "Steam"; color: Theme.heading; font.pixelSize: 18; font.weight: Font.Bold; font.letterSpacing: 0.5 }
+                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("steamHint") }
+                        Rectangle {
+                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10
+                            color: steamMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                            Text { id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 14; font.weight: Font.DemiBold }
+                            MouseArea { id: steamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.addToSteam() }
+                        }
+                    }
                 }
             }
         }

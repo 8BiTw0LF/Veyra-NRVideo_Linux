@@ -245,6 +245,8 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     info_.videoCodec = fourccName(mode.fourcc);
     info_.audioCodec = audioSource.empty() ? "" : "live";
     capAudioSource_ = audioSource;
+    capPath_ = devicePath;
+    capMode_ = mode;
     quit_ = false; endedFired_ = false; eof_ = false; showOne_ = false;
     serial_ = 1; vpkts_.abort = apkts_.abort = false;
     { std::lock_guard l(fq_m_); frames_.clear(); }
@@ -270,16 +272,34 @@ void MediaEngine::captureLoop() {
     using clk = std::chrono::steady_clock;
     clk::time_point lastShown{};
     double paceMs = 0;
+    // Reopens the device with the same mode: when the card is unplugged, or when it stops delivering after the
+    // console changes resolution/refresh rate/HDR (many UVC cards stall until the stream is restarted).
+    auto reopen = [&]() -> bool {
+        cap_->close();
+        std::string e;
+        return cap_->open(capPath_, capMode_, e);
+    };
+    clk::time_point lastReopen{};
     while (!quit_) {
         std::string err;
         const bool toGpu = rawLive_.load();
         const auto r = toGpu ? cap_->readLatest(raw, 100, err) : cap_->read(rgba, 100, err);
         if (r == CaptureSource::Result::Error) {
-            if (cb_.onError) cb_.onError(err);
-            break;
+            if (cb_.onError) cb_.onError("Capture card lost, reconnecting...");
+            noSignal = true;
+            while (!quit_ && !reopen()) std::this_thread::sleep_for(std::chrono::seconds(1));
+            lastReopen = clk::now();
+            idle = 0;
+            continue;
         }
         if (r == CaptureSource::Result::Timeout) {
             if (++idle >= 10 && !noSignal) { noSignal = true; if (cb_.onError) cb_.onError("No signal from the capture card"); }
+            // no picture for 3 s: restart the stream once every 3 s (recovers cards that stall on a signal change)
+            if (idle >= 30 && clk::now() - lastReopen > std::chrono::seconds(3)) {
+                lastReopen = clk::now();
+                reopen();
+                idle = 10;
+            }
             continue;
         }
         idle = 0;
@@ -320,15 +340,26 @@ void MediaEngine::captureLoop() {
     }
 }
 
+static int qEnvIntOr(const char* name, int fallback) {
+    const char* v = std::getenv(name);
+    return v && *v ? std::atoi(v) : fallback;
+}
+
 void MediaEngine::captureAudioLoop() {
     constexpr int kRate = 48000;
+    // Low-latency pass-through: 5 ms blocks in, ~20 ms queued out (was 20 / 50 ms). PipeWire (pipewire-pulse) lowers
+    // its graph quantum to match. VEYAMUX_AUDIO_MS=<block ms> trades latency for robustness on busy systems.
+    const int blockMs = std::clamp(qEnvIntOr("VEYAMUX_AUDIO_MS", 5), 2, 40);
+    const int queueMs = std::max(20, blockMs * 4);
     pa_sample_spec ss{PA_SAMPLE_S16LE, kRate, 2};
     pa_buffer_attr rattr;
     rattr.maxlength = rattr.tlength = rattr.prebuf = rattr.minreq = uint32_t(-1);
-    rattr.fragsize = uint32_t(pa_usec_to_bytes(20000, &ss));
+    rattr.fragsize = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 1000, &ss));
     pa_buffer_attr pattr;
-    pattr.maxlength = pattr.prebuf = pattr.minreq = pattr.fragsize = uint32_t(-1);
-    pattr.tlength = uint32_t(pa_usec_to_bytes(50000, &ss));
+    pattr.maxlength = pattr.fragsize = uint32_t(-1);
+    pattr.tlength = uint32_t(pa_usec_to_bytes(pa_usec_t(queueMs) * 1000, &ss));
+    pattr.prebuf = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 2000, &ss));   // start playing after two blocks
+    pattr.minreq = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 1000, &ss));
     int err = 0;
     const char* dev = capAudioSource_ == "@default" ? nullptr : capAudioSource_.c_str();
     pa_simple* rec = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
@@ -339,7 +370,7 @@ void MediaEngine::captureAudioLoop() {
         pa_simple_free(rec);
         return;
     }
-    std::vector<int16_t> buf(960 * 2);                  // 20 ms
+    std::vector<int16_t> buf(size_t(kRate / 1000 * blockMs) * 2);   // one block
     // Delay line for the audio offset (sound held back to match a picture that is delayed by processing)
     std::vector<int16_t> line;
     size_t lineHead = 0, lineFill = 0;
@@ -347,9 +378,9 @@ void MediaEngine::captureAudioLoop() {
     while (!quit_) {
         if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
         if (!playing_.load()) continue;
-        if (cb_.onAudio)   // the block started 20 ms ago and is heard after the audio delay
+        if (cb_.onAudio)   // the block started one block ago and is heard after the audio delay
             cb_.onAudio(buf.data(), int(buf.size() / 2),
-                        std::chrono::steady_clock::now() - std::chrono::milliseconds(20 - std::max(0, audioDelayMs_.load())));
+                        std::chrono::steady_clock::now() - std::chrono::milliseconds(blockMs - std::max(0, audioDelayMs_.load())));
         const float vol = muted_.load() ? 0.0f : volume_.load();
         if (vol != 1.0f)
             for (auto& s : buf) s = int16_t(std::clamp(int(std::lround(s * vol)), -32768, 32767));
@@ -365,7 +396,8 @@ void MediaEngine::captureAudioLoop() {
         }
         if (pa_simple_write(out, buf.data(), buf.size() * 2, &err) < 0) break;
         // Capture and output clocks drift apart; keep the playback queue short so audio never lags the picture.
-        if (++tick % 25 == 0 && pa_simple_get_latency(out, &err) > 150000) pa_simple_flush(out, &err);
+        // checked every ~0.5 s; more than three queue lengths behind: drop the backlog
+        if (++tick % std::max(1, 500 / blockMs) == 0 && pa_simple_get_latency(out, &err) > pa_usec_t(queueMs) * 3000) pa_simple_flush(out, &err);
     }
     pa_simple_free(out);
     pa_simple_free(rec);

@@ -133,6 +133,7 @@ private:
         return s.hdrOut ? std::clamp(std::min(s.displayPeak, s.hdrPeak), 203.0f, 10000.0f) : 203.0f;
     }
     float frameNits_ = 203.0f;
+    bool frame2020_ = false;   // HDR output: the working image holds BT.2020 (HDR source) instead of BT.709
     std::atomic<bool> outPq_{false};
     uint32_t pqFrame_ = 0;
     void retire(ImageRes& img);

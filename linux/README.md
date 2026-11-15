@@ -7,8 +7,8 @@
 <p align="center">
   A native <b>Linux</b> video player and capture-card viewer with GPU enhancement and Lossless Scaling frame generation,
   shipped as a single <b>AppImage</b>.<br>
-  <b>Under 1 ms of processing per frame</b> (0.7 ms of CPU work measured at 3840×2160 on an RX 9070 XT; the menu shows the
-  measured GPU time live) · GPL-3.0 ·
+  Zero-copy GPU path, <b>under 1 ms of CPU work per frame</b> at 4K; the menu shows the delay VeyAmux adds, measured live ·
+  GPL-3.0 ·
   Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a> (Windows)
 </p>
 
@@ -23,12 +23,14 @@ generation.
 
 It is built for **low latency**. The capture card's frame is uploaded once and converted, enhanced and displayed
 entirely on the GPU, inside the UI's own Vulkan frame: no copy back to the CPU, no extra queue, and only the newest
-frame is ever shown. VeyAmux's own processing takes **under 1 ms per frame** — 0.7 ms of CPU work measured for a
-3840×2160 NV12 capture on an AMD RX 9070 XT. The bottom of the menu shows the real numbers for your system, measured
-with GPU timestamps: the GPU time of every stage (input, noise reduction, anti-aliasing, upscaling, finish, output),
-the CPU time, and the time from the capture driver's timestamp until the GPU has finished the picture ("in VeyAmux").
-Noise reduction and upscaling to 4K cost GPU time on top. The capture card, USB transfer and display add their own
-latency, as with any capture setup.
+frame is ever shown.
+
+What that means in numbers, measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (both) and
+FSR 1: **under 1 ms of CPU work** per frame and **about 7 ms of GPU work**. The menu shows one figure, *Delay in VeyAmux*:
+the time from the capture driver's timestamp until the picture is finished on the GPU. In that setup it reads
+**about 29–32 ms**; most of it is the picture waiting for the next display frame, not processing. Lighter settings
+(no noise reduction, no upscaling) lower it. The capture card, USB transfer, Lossless Scaling and the display add their
+own latency on top, as with any capture setup.
 
 VeyAmux is a standalone Linux version (Qt 6 / QML, FFmpeg, Vulkan) based on Veyra-NRVideo by Likely7. Veyra's original
 HLSL shaders are reused, compiled to SPIR-V. NVIDIA- and Windows-specific parts (DLSS, NVOF, Reflex, AMD HIP-NR, etc.)
@@ -63,16 +65,25 @@ normally and the menu tells you what is missing. Frame generation can also be tu
 
 **Sources**
 - **Capture cards** via V4L2 (YUYV, UYVY, NV12, P010, I420, RGB, MJPEG) with a choice of resolution, frame rate and audio
-  source. Zero-copy GPU path with under 1 ms of processing per frame (see above).
+  source. Zero-copy GPU path (see above). If the card drops out, or stalls when the console switches resolution,
+  refresh rate or HDR, VeyAmux reconnects by itself.
 - **Video files** via FFmpeg with VAAPI hardware decoding (AMD/Intel), audio through PipeWire/PulseAudio.
 - **HDR capture (P010)** and **HDR video files** (HDR10/PQ and HLG): BT.2020 HDR is tone-mapped properly to your SDR
   display (BT.2390, using Veyra's own HDR functions) instead of looking washed out.
 - **HDR output (experimental)**: on a desktop with HDR turned on (KDE Plasma 6, GNOME 48 or newer), VeyAmux can draw
-  into an HDR (scRGB) swapchain, so HDR sources keep their highlights up to the display's peak brightness. The colours
-  are kept within BT.709 for now. Turn it on under *HDR output* in the menu and restart.
+  into an HDR swapchain (HDR10 or scRGB), so HDR sources keep their highlights up to the display's peak brightness and
+  their full BT.2020 colours. Turn it on under *HDR output* in the menu and restart. Recordings, screenshots and OBS
+  still get normal SDR.
+- **gamescope start** (optional): runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync (VRR)
+  even through XWayland.
+- **Steam / Game Mode**: *Add to Steam* puts VeyAmux in your Steam library as a non-Steam game that starts fullscreen on
+  the last capture card, also from Big Picture and Bazzite's Game Mode.
+- **Low-latency audio**: the capture card's sound is passed through in 5 ms blocks (`VEYAMUX_AUDIO_MS` changes it).
 - **Audio delay** (−300 … +300 ms) to line up the sound with the processed picture, and **profiles**: save the picture
   settings under a name, switch with keys 1–9, and bind a profile to a capture signal so it is applied automatically.
 - **VRR mode**: shows the game's own frames at an even pace (e.g. 45 fps) so a VRR display can follow the game.
+- **120 Hz signals**: when the capture runs at about 120 fps, frame generation pauses automatically (2× would ask for
+  240 fps and only add latency) and resumes when it drops below 80 fps.
 - The info line shows what the game **actually** runs at, not just the signal, e.g.
   `≈1920×1080 @ 30 fps → 60 fps (Lossless Scaling 2×) · signal 3840×2160 NV12 @ 60.00 fps`.
 
@@ -203,7 +214,8 @@ Space play/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volume · **F** full
 Besides porting Veyra-NRVideo from Windows (D3D12/C#) to Linux (Vulkan/Qt 6/FFmpeg) as a self-contained AppImage:
 
 - **Low-latency capture path**: V4L2 → Vulkan directly inside Qt's frame (NV12/YUYV/UYVY/P010 conversion on the GPU),
-  under 1 ms of processing per frame at 4K; retries and shows which program holds the card when it is "busy".
+  under 1 ms of CPU work per frame at 4K; retries, shows which program holds the card when it is "busy", and
+  reconnects when the card drops out or stalls on a signal change.
 - **Content measurement**: the real frame rate (new frames per second, with noise filtering) and an estimate of the
   game's actual rendering resolution (FFT analysis of the mirrored spectrum that upscaling leaves behind).
 - **Repeated-frame removal** before processing, so frame generation interpolates between distinct frames.
@@ -212,8 +224,9 @@ Besides porting Veyra-NRVideo from Windows (D3D12/C#) to Linux (Vulkan/Qt 6/FFmp
   the default.
 - **Noise reduction** (non-local means and motion-compensated temporal), measured on synthetic noise: from 31 dB up to
   37–41 dB without losing fine detail.
-- **HDR capture (P010)** and HDR video files with BT.2390 tone mapping to SDR, experimental **HDR output** (scRGB
-  swapchain), and a **VRR mode** that paces the game's own frames evenly.
+- **HDR capture (P010)** and HDR video files with BT.2390 tone mapping to SDR, experimental **HDR output** (HDR10 or
+  scRGB swapchain, BT.2020 colour), and a **VRR mode** that paces the game's own frames evenly.
+- **gamescope start** and **Add to Steam** (non-Steam game shortcut written to `shortcuts.vdf`).
 - **AMD FSR 1** upscaling (EASU + RCAS from the FidelityFX SDK headers).
 - **GPU timing**: Vulkan timestamp queries per stage, shown live in the menu.
 - **Instant replay, recording and screenshots** with VA-API hardware encoding (NV12 conversion on the GPU).

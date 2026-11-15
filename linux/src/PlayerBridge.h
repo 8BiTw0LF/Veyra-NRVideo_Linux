@@ -4,6 +4,7 @@
 #include <cmath>
 #include <QElapsedTimer>
 #include <QSettings>
+#include <QStandardPaths>
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
 #include "MediaEngine.h"
@@ -59,6 +60,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool lsfgActive READ lsfgActive NOTIFY lsfgChanged)
     Q_PROPERTY(bool restartNeeded READ restartNeeded NOTIFY lsfgChanged)
     Q_PROPERTY(int lsfgMultiplier READ lsfgMultiplier NOTIFY lsfgChanged)
+    // frame generation paused automatically while the capture runs at ~120 Hz (the game is already fast)
+    Q_PROPERTY(bool fgPaused READ fgPaused NOTIFY lsfgChanged)
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
     Q_PROPERTY(bool fxaa READ fxaa WRITE setFxaa NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
@@ -73,6 +76,14 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int displayPeak READ displayPeak WRITE setDisplayPeak NOTIFY enhanceChanged)
     Q_PROPERTY(bool hdrOutputXwayland READ hdrOutputXwayland NOTIFY enhanceChanged)
     Q_PROPERTY(bool hdrOutputNoVulkan READ hdrOutputNoVulkan NOTIFY enhanceChanged)
+    // 0 = HDR10 (PQ), 1 = scRGB: the swapchain format chosen in the settings / the one this run uses
+    Q_PROPERTY(int hdrMode READ hdrMode WRITE setHdrMode NOTIFY enhanceChanged)
+    Q_PROPERTY(int hdrModeActive READ hdrModeActive NOTIFY enhanceChanged)
+    // start inside gamescope (HDR + VRR through gamescope's XWayland); takes effect at the next start
+    Q_PROPERTY(bool gamescope READ gamescope WRITE setGamescope NOTIFY enhanceChanged)
+    Q_PROPERTY(bool gamescopeAvailable READ gamescopeAvailable CONSTANT)
+    Q_PROPERTY(bool inGamescope READ inGamescope CONSTANT)
+    Q_PROPERTY(bool gamescopeRestart READ gamescopeRestart NOTIFY enhanceChanged)
     Q_PROPERTY(bool vrr READ vrr WRITE setVrr NOTIFY enhanceChanged)
     Q_PROPERTY(bool vrrRestartNeeded READ vrrRestartNeeded NOTIFY enhanceChanged)
     Q_PROPERTY(int denoiseStrength READ denoiseStrength WRITE setDenoiseStrength NOTIFY enhanceChanged)
@@ -128,7 +139,17 @@ public:
     bool hdrOutput() const { return hdrOutWanted_; }
     void setHdrOutput(bool v) { hdrOutWanted_ = v; QSettings().setValue("enh/hdrOut", v); s_.hdrOut = v && hdrOutActive_; applyEnhance(); }
     bool hdrOutputActive() const { return s_.hdrOut; }
-    bool hdrOutputRestart() const { return hdrOutWanted_ != hdrOutAtStart_; }
+    bool hdrOutputRestart() const { return hdrOutWanted_ != hdrOutAtStart_ || (hdrOutWanted_ && hdrMode_ != hdrModeAtStart_); }
+    int hdrMode() const { return hdrMode_; }
+    void setHdrMode(int m) { hdrMode_ = m == 1 ? 1 : 0; QSettings().setValue("enh/hdrMode", hdrMode_); emit enhanceChanged(); }
+    int hdrModeActive() const { return hdrModeAtStart_; }
+    bool gamescope() const { return QSettings().value("ui/gamescope", false).toBool(); }
+    void setGamescope(bool v) { QSettings().setValue("ui/gamescope", v); emit enhanceChanged(); }
+    bool gamescopeRestart() const { return gamescope() != gamescopeAtStart_; }
+    bool gamescopeAtStart_ = QSettings().value("ui/gamescope", false).toBool();
+    bool gamescopeAvailable() const { return !QStandardPaths::findExecutable("gamescope").isEmpty(); }
+    bool inGamescope() const { return qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") || qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE"); }
+    void setHdrModeAtStart(int m) { hdrModeAtStart_ = m; emit enhanceChanged(); }
     int displayPeak() const { return int(std::lround(s_.displayPeak)); }
     void setDisplayPeak(int v) { s_.displayPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/displayPeak", displayPeak()); applyEnhance(); }
     // main(): what this run asked Qt for, and whether the window really got an HDR (scRGB) swapchain
@@ -158,6 +179,7 @@ public:
     bool lsfgActive() const { return lsfgActive_; }
     bool restartNeeded() const;
     int lsfgMultiplier() const { return lsfgMultiplier_; }
+    bool fgPaused() const { return fgPaused_; }
     double displayHz() const;
     // Set by main() before the window exists: whether Vulkan UI is used and whether lsfg-vk was enabled for this run.
     void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish);
@@ -238,6 +260,8 @@ public:
     Q_INVOKABLE void toggleRecording();
     Q_INVOKABLE void screenshot();
     Q_INVOKABLE void openRecordingsFolder();
+    // Adds VeyAmux to Steam as a non-Steam game (fullscreen, last capture card), for Big Picture / Game Mode
+    Q_INVOKABLE void addToSteam();
 
 public slots:
     QVariantList captureDevices();
@@ -307,10 +331,14 @@ private:
     lsfg::Detection lsfg_;
     bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false, danish_ = false;
     int lsfgMultiplier_ = 2;
+    bool fgPaused_ = false;
+    int fgHighTicks_ = 0, fgLowTicks_ = 0;
+    void checkHighRate();   // 100 ms tick: pause/resume frame generation for ~120 Hz signals
     bool lsfgPerformance_ = false;
     double lastFlow_ = -1;
     QString upError_;
     bool vrrAtStart_ = false;
+    int hdrMode_ = QSettings().value("enh/hdrMode", 0).toInt() == 1 ? 1 : 0, hdrModeAtStart_ = 0;
     bool hdrOutWanted_ = false, hdrOutAtStart_ = false, hdrOutActive_ = false, hdrOutXwayland_ = false, hdrOutNoVulkan_ = false;
     int audioDelay_ = 0;
     QString activeProfile_;

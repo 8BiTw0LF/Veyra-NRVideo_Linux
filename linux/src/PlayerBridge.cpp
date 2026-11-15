@@ -15,6 +15,8 @@
 #include <QRegularExpression>
 #include <QVariantMap>
 #include <QSettings>
+#include <QIcon>
+#include "SteamShortcut.h"
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QStandardPaths>
@@ -76,6 +78,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     tick_.setInterval(100);
     connect(&tick_, &QTimer::timeout, this, [this] {
         if (rec_->recording()) emit recTick();
+        checkHighRate();
         if (!engine_.isOpen()) return;
         emit positionChanged();
         if (engine_.playing() != lastPlaying_) { lastPlaying_ = engine_.playing(); emit playingChanged(); }
@@ -244,27 +247,60 @@ void PlayerBridge::screenshot() {
 }
 
 QImage PlayerBridge::sdrCopy(QImage img) const {
-    // per channel, the same curve as PqCodedToSdr() in shaders/PqCode.hlsli
-    static const std::array<uint8_t, 256> lut = [] {
-        std::array<uint8_t, 256> t{};
+    // The same as PqCodedToSdr() in shaders/PqCode.hlsli: PQ BT.2020 -> nits -> BT.709 relative to 203 nits, soft
+    // shoulder on the luminance, Veyra's hue-preserving gamut compression (ToneGamut), sRGB.
+    static const std::array<float, 256> nits = [] {
+        std::array<float, 256> t{};
         const double m1 = 2610.0 / 16384, m2 = 2523.0 / 32, c1 = 3424.0 / 4096, c2 = 2413.0 / 128, c3 = 2392.0 / 128;
         for (int i = 0; i < 256; ++i) {
             const double e = std::pow(i / 255.0, 1.0 / m2);
-            const double x = 10000.0 * std::pow(std::max(e - c1, 0.0) / (c2 - c3 * e), 1.0 / m1) / 203.0;
-            const double knee = 0.75;
-            double y = x <= knee ? x : knee + (1 - knee) * (1 - std::exp(-(x - knee) / (1 - knee)));
-            y = std::clamp(y, 0.0, 1.0);
-            y = y <= 0.0031308 ? y * 12.92 : 1.055 * std::pow(y, 1 / 2.4) - 0.055;
-            t[size_t(i)] = uint8_t(std::lround(y * 255));
+            t[size_t(i)] = float(10000.0 * std::pow(std::max(e - c1, 0.0) / (c2 - c3 * e), 1.0 / m1) / 203.0);
+        }
+        return t;
+    }();
+    static const std::array<uint8_t, 4096> enc = [] {   // linear [0,1] -> sRGB byte
+        std::array<uint8_t, 4096> t{};
+        for (int i = 0; i < 4096; ++i) {
+            const double y = i / 4095.0;
+            t[size_t(i)] = uint8_t(std::lround(255.0 * (y <= 0.0031308 ? y * 12.92 : 1.055 * std::pow(y, 1 / 2.4) - 0.055)));
         }
         return t;
     }();
     img = img.convertToFormat(QImage::Format_RGBA8888);
-    for (int y = 0; y < img.height(); ++y) {
-        uint8_t* p = img.scanLine(y);
-        for (int x = 0; x < img.width(); ++x, p += 4) { p[0] = lut[p[0]]; p[1] = lut[p[1]]; p[2] = lut[p[2]]; }
+    for (int yy = 0; yy < img.height(); ++yy) {
+        uint8_t* p = img.scanLine(yy);
+        for (int x = 0; x < img.width(); ++x, p += 4) {
+            const float R = nits[p[0]], G = nits[p[1]], B = nits[p[2]];
+            float r = 1.660491f * R - 0.587641f * G - 0.072850f * B;
+            float g = -0.124550f * R + 1.132900f * G - 0.008349f * B;
+            float b = -0.018151f * R - 0.100579f * G + 1.118730f * B;
+            const float y = 0.212639f * r + 0.715169f * g + 0.072192f * b;
+            if (y <= 0) { p[0] = p[1] = p[2] = 0; continue; }
+            const float m = y <= 0.75f ? y : 0.75f + 0.25f * (1.0f - std::exp(-(y - 0.75f) / 0.25f));
+            r *= m / y; g *= m / y; b *= m / y;
+            // ToneGamut: move along the chroma ray toward grey until every channel fits
+            float cr = r - m, cg = g - m, cb = b - m;
+            auto occ = [m](float c) { return c >= 0 ? c / std::max(1.0f - m, 1e-7f) : -c / std::max(m, 1e-7f); };
+            const float ext = std::max({occ(cr), occ(cg), occ(cb)});
+            if (ext > 0.9f) { const float k = (0.9f + 0.1f * (1.0f - std::exp(-(ext - 0.9f) / 0.1f))) / ext; cr *= k; cg *= k; cb *= k; }
+            auto e = [](float v) { return enc[size_t(std::clamp(v, 0.0f, 1.0f) * 4095.0f + 0.5f)]; };
+            p[0] = e(m + cr); p[1] = e(m + cg); p[2] = e(m + cb);
+        }
     }
     return img;
+}
+
+void PlayerBridge::addToSteam() {
+    // the AppImage itself (the binary inside lives in a temporary mount)
+    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    const QString icon = dir + "/veyamux-steam.png";
+    QIcon(":/qml/icons/logo.svg").pixmap(512, 512).save(icon, "PNG");
+    const auto r = veyamux::steam::addShortcut(exe, icon, "--fullscreen --capture last");
+    if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
+    else if (r.message == "Close Steam first") showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
+    else showNotice(L("Could not add to Steam: ", "Kunne ikke tilføje til Steam: ") + r.message);
 }
 
 void PlayerBridge::openRecordingsFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(recFolder(false))); }
@@ -399,6 +435,32 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
     return t;
 }
 
+// A 120 Hz capture (signal mode or a game running at ~120 fps) needs no generated frames: 2x would ask for 240 fps,
+// more than the display shows, and only adds latency and GPU load. Frame generation is paused (multiplier 1, the
+// setting itself is kept) after 1 s at >= 95 fps and resumes after 2 s below 80 fps.
+void PlayerBridge::checkHighRate() {
+    const bool live = engine_.isOpen() && engine_.isLive();
+    double rate = 0;
+    if (live) {
+        const auto c = engine_.liveContent();
+        rate = std::max(engine_.info().fps, c.staticPicture ? 0.0 : c.contentFps);
+    }
+    const bool high = live && rate >= 95.0;
+    const bool low = !live || rate < 80.0;
+    fgHighTicks_ = high ? fgHighTicks_ + 1 : 0;
+    fgLowTicks_ = low ? fgLowTicks_ + 1 : 0;
+    bool change = false;
+    if (!fgPaused_ && fgHighTicks_ >= 10) { fgPaused_ = true; change = true; }
+    if (fgPaused_ && fgLowTicks_ >= 20) { fgPaused_ = false; change = true; }
+    if (!change) return;
+    if (s_.lsfgFg())
+        showNotice(fgPaused_ ? L("120 Hz signal: frame generation paused", "120 Hz-signal: frame generation sat på pause")
+                             : L("Frame generation resumed", "Frame generation kører igen"));
+    updateLsfgMultiplier();
+    emit lsfgChanged();
+    emit mediaChanged();
+}
+
 // "→ 120 fps" after the source rate when frame generation raises it: source rate x multiplier for Lossless Scaling
 // (lsfg-vk generates its frames after VeyAmux, in the driver layer).
 QString PlayerBridge::outputFpsText(double srcFps) const {
@@ -509,7 +571,7 @@ void PlayerBridge::setFrameGenMode(int v) {
     { QSettings q; q.setValue("enh/frameGenMode", v); }
     if (lsfgActive_) {
         // lsfg-vk hot-reloads the multiplier: 1 = joined but no generated frames.
-        lsfgMultiplier_ = isLs ? (v == 3 ? 3 : 2) : 1;
+        lsfgMultiplier_ = isLs && !fgPaused_ ? (v == 3 ? 3 : 2) : 1;
         lsfg::writeConfig(lsfg_, lsfgMultiplier_, lsfgPerformance_, lsfgFlowScale());
     }
     applyEnhance();
@@ -790,7 +852,8 @@ void PlayerBridge::setLsfgPerformance(bool v) {
 void PlayerBridge::updateLsfgMultiplier() {
     if (!lsfgActive_) return;
     int m = lsfgMultiplier_;
-    if (s_.frameGen == veyamux::FrameGenMode::LsfgFixed3) m = 3;
+    if (fgPaused_) m = 1;
+    else if (s_.frameGen == veyamux::FrameGenMode::LsfgFixed3) m = 3;
     else if (s_.lsfgFg()) m = 2;
     else m = 1;
     const double flow = lsfgFlowScale();
@@ -849,6 +912,7 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         {"Capture audio unavailable: ", "Capture-lyd utilgængelig: "},
         {"Audio output unavailable: ", "Lydudgang utilgængelig: "},
         {"No signal from the capture card", "Intet signal fra capture-kortet"},
+        {"Capture card lost, reconnecting...", "Capture-kortet forsvandt – forbinder igen …"},
         {"Capture device disconnected", "Capture-enheden blev frakoblet"},
         {"Vulkan unavailable: ", "Vulkan utilgængelig: "},
         {"Could not set up the enhancement chain: ", "Kunne ikke starte forbedringskæden: "},

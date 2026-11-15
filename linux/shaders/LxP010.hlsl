@@ -4,8 +4,8 @@
 // (BT.2390 EETF in the PQ domain with a Hermite shoulder, hue-preserving gamut compression), SDR white = 203 nits
 // (ITU-R BT.2408).
 #include "HdrColor.hlsli"
-#include "HdrToSdr.hlsli"
-cbuffer P010Params : register(b0) { uint width; uint height; uint fullRange; uint p0; float sourcePeak; float sdrWhite; float2 p1; };
+#include "PqCode.hlsli"
+cbuffer P010Params : register(b0) { uint width; uint height; uint fullRange; uint wide; float sourcePeak; float sdrWhite; float2 p1; };   // wide: HDR output, keep BT.2020
 Texture2D<float>  rawY : register(t0);        // R16_UNORM: 10 significant bits in the top of each 16-bit sample
 Texture2D<float2> rawUV : register(t1);       // R16G16_UNORM, half resolution
 RWTexture2D<float4> dst : register(u0);       // linear BT.709, 1.0 = SDR white
@@ -23,6 +23,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     // BT.2020 NCL Y'CbCr -> R'G'B' (PQ-coded)
     const float3 pq = saturate(float3(y + 1.4746 * v, y - 0.164553 * u - 0.571353 * v, y + 1.8814 * u));
     // linear BT.709 in nits; components outside the 709 gamut stay negative until HdrToSdr compresses the gamut
-    const float3 sdr = HdrToSdr(HdrDecodePq(pq) * 80.0, sourcePeak, sdrWhite);
+    const float3 sdr = wide != 0 ? HdrToDisplay2020(HdrDecodePq(pq) * 80.0, sourcePeak, sdrWhite)
+                                 : HdrToSdr(HdrDecodePq(pq) * 80.0, sourcePeak, sdrWhite);
     dst[id.xy] = float4(max(sdr, 0.0), 1.0);
 }

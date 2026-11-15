@@ -151,11 +151,13 @@ bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const 
     if (hdr) {
         const float white = hdrTarget(s);
         frameNits_ = white;
-        struct { uint32_t w, h, mode, p0; float peak, white, p1, p2; } hp{uint32_t(w), uint32_t(h), uint32_t(hdr), 0,
+        frame2020_ = s.hdrOut;
+        struct { uint32_t w, h, mode, wide; float peak, white, p1, p2; } hp{uint32_t(w), uint32_t(h), uint32_t(hdr), s.hdrOut ? 1u : 0u,
                                                                          std::clamp(s.hdrPeak, 203.0f, 10000.0f), white, 0, 0};
         run("LxHdrRgb", {&src16_}, {&lin_}, &hp, sizeof hp, w, h, 16);
     } else {
         frameNits_ = 203.0f;
+        frame2020_ = false;
         RgbParams rp{};
         rp.width = w; rp.height = h; rp.transfer = 1; rp.limited = 0;   // sws already produced full-range sRGB-coded RGB
         run("RgbToLinear", {&src_}, {&lin_}, &rp, sizeof rp, w, h, 16);
@@ -256,7 +258,8 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     }
     outPq_ = s.hdrOut;
     if (s.hdrOut) {   // HDR display: PQ-coded light (1.0 in the working image = frameNits_ nits)
-        struct { uint32_t w, h; float nits; uint32_t frame; } pp{uint32_t(ow), uint32_t(oh), frameNits_, uint32_t(++pqFrame_)};
+        struct { uint32_t w, h; float nits; uint32_t frame, wide, p0, p1, p2; } pp{uint32_t(ow), uint32_t(oh), frameNits_, uint32_t(++pqFrame_),
+                                                                             frame2020_ ? 1u : 0u, 0, 0, 0};
         run("LxPqOut", {cur}, {&out8_}, &pp, sizeof pp, ow, oh, 16);
     } else {
         ScaleParams sp{uint32_t(ow), uint32_t(oh), uint32_t(ow), uint32_t(oh), 1.0f, 0.0f, 0, 0};
@@ -410,7 +413,8 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         // HDR: PQ/BT.2020 -> tone-mapped linear SDR straight into the working image (keeps all 10 bits)
         const float white = hdrTarget(s);
         frameNits_ = white;
-        struct { uint32_t w, h, full, p0; float peak, white, p1, p2; } hp{W, H, in.fullRange ? 1u : 0u, 0,
+        frame2020_ = s.hdrOut;
+        struct { uint32_t w, h, full, wide; float peak, white, p1, p2; } hp{W, H, in.fullRange ? 1u : 0u, s.hdrOut ? 1u : 0u,
                                                                          std::clamp(s.hdrPeak, 203.0f, 10000.0f), white, 0, 0};
         run("LxP010", {&rawY16_, &rawUV16_}, {&lin_}, &hp, sizeof hp, in.w, in.h, 16);
     } else if (in.fmt != LiveInput::RGBA) {
@@ -420,6 +424,7 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     }
     if (in.fmt != LiveInput::P010) {
         frameNits_ = 203.0f;
+        frame2020_ = false;
         RgbParams rp{};
         rp.width = W; rp.height = H; rp.transfer = 1; rp.limited = 0;
         run("RgbToLinear", {&src_}, {&lin_}, &rp, sizeof rp, in.w, in.h, 16);

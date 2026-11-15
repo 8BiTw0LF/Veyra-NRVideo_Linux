@@ -97,12 +97,12 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
 
 int main(int argc, char** argv) {
     if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) qputenv("QSG_RENDER_LOOP", "threaded");
-    // Qt 6.4's Wayland plugin loads the Vulkan loader as plain "libvulkan.so", which only exists where the -dev package
-    // is installed (not on Bazzite/Fedora Atomic/SteamOS). Without this the native Wayland Vulkan UI fails and VeyAmux
-    // ends up on XWayland (no HDR). The X11 plugin already asks for libvulkan.so.1.
     // Grey (not sub-pixel/LCD) text antialiasing: sub-pixel text gets coloured fringes when the window is scaled by the
     // compositor, drawn through a layer (HDR output) or captured.
     if (!qEnvironmentVariableIsSet("QSG_DISTANCEFIELD_ANTIALIASING")) qputenv("QSG_DISTANCEFIELD_ANTIALIASING", "gray");
+    // Qt 6.4's Wayland plugin loads the Vulkan loader as plain "libvulkan.so", which only exists where the -dev package
+    // is installed (not on Bazzite/Fedora Atomic/SteamOS). Without this the native Wayland Vulkan UI fails and VeyAmux
+    // ends up on XWayland (no HDR). The X11 plugin already asks for libvulkan.so.1.
     if (!qEnvironmentVariableIsSet("QT_VULKAN_LIB")) qputenv("QT_VULKAN_LIB", "libvulkan.so.1");
     // libva looks for the host Mesa VAAPI drivers; distros keep them in different places.
     if (!qEnvironmentVariableIsSet("LIBVA_DRIVERS_PATH"))
@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux15");
+    QCoreApplication::setApplicationVersion("2.1.5-linux16");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -141,6 +141,36 @@ int main(int argc, char** argv) {
         else if (args[i] == "--capture" && i + 1 < args.size()) capturePath = args[++i];
         else if (args[i] == "--grab" && i + 1 < args.size()) grabPath = args[++i];
         else if (!args[i].startsWith("--")) openFile = args[i];
+    }
+
+    // ---- gamescope (optional): run inside Valve's compositor for HDR and VRR through XWayland ----
+    // Not when already inside gamescope (Steam Game Mode, or this relaunch).
+    if (!probing && QSettings().value("ui/gamescope", false).toBool() && qEnvironmentVariable("VEYAMUX_GAMESCOPE") != "0"
+        && !qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") && !qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE")) {
+        const QString gs = QStandardPaths::findExecutable("gamescope");
+        if (gs.isEmpty()) {
+            qWarning("gamescope is not installed; starting normally");
+        } else {
+            QScreen* sc = app.primaryScreen();
+            const QSize px = sc ? sc->size() * sc->devicePixelRatio() : QSize(1920, 1080);
+            const int hz = sc ? std::max(30, qRound(sc->refreshRate())) : 60;
+            QStringList a{"-f", "-W", QString::number(px.width()), "-H", QString::number(px.height()),
+                          "-r", QString::number(hz), "--adaptive-sync"};
+            if (QSettings().value("enh/hdrOut", false).toBool()) a << "--hdr-enabled";
+            a << "--" << relaunchTarget() << args.mid(1);
+            QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+            env.insert("VEYAMUX_IN_GAMESCOPE", "1");
+            env.insert("QT_QPA_PLATFORM", "xcb");        // gamescope's own XWayland, not the desktop's Wayland
+            env.remove("WAYLAND_DISPLAY");
+            env.insert("ENABLE_GAMESCOPE_WSI", "1");     // HDR swapchains for X11 Vulkan apps inside gamescope
+            QProcess p;
+            p.setProgram(gs);
+            p.setArguments(a);
+            p.setProcessEnvironment(env);
+            qInfo("Starting inside gamescope: %s %s", qPrintable(gs), qPrintable(a.join(' ')));
+            if (p.startDetached()) return 0;
+            qWarning("Could not start gamescope; starting normally");
+        }
     }
 
     // ---- graphics backend ----
@@ -187,6 +217,10 @@ int main(int argc, char** argv) {
     }
     const bool hdrOutSetting = !probing && QSettings().value("enh/hdrOut", false).toBool() && qEnvironmentVariable("VEYAMUX_HDR_OUT") != "0";
     bool hdrOutRequested = hdrOutSetting;
+    // HDR10 (PQ, BT.2020, 10 bit) is the common HDR format (KDE, GNOME, gamescope); scRGB (FP16) is the alternative.
+    int hdrMode = QSettings().value("enh/hdrMode", 0).toInt() == 1 ? 1 : 0;
+    if (qEnvironmentVariable("VEYAMUX_HDR_MODE") == "scrgb") hdrMode = 1;
+    if (qEnvironmentVariable("VEYAMUX_HDR_MODE") == "hdr10") hdrMode = 0;
     if (vulkanUi) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
         vkInst = std::make_unique<QVulkanInstance>();
@@ -198,7 +232,7 @@ int main(int argc, char** argv) {
         // Needs the colour-space extension; Qt falls back to a normal swapchain if the display/compositor can't do it.
         if (hdrOutRequested && vkInst->supportedExtensions().contains(QByteArrayLiteral("VK_EXT_swapchain_colorspace"))) {
             exts << QByteArrayLiteral("VK_EXT_swapchain_colorspace");
-            qputenv("QSG_RHI_HDR", "scrgb");
+            qputenv("QSG_RHI_HDR", hdrMode == 1 ? "scrgb" : "hdr10");
         } else {
             hdrOutRequested = false;
         }
@@ -250,12 +284,16 @@ int main(int argc, char** argv) {
     }
     player.setWindow(win);
     player.setHdrOutputState(hdrOutSetting, false);   // until the swapchain test below says otherwise
+    player.setHdrModeAtStart(hdrMode);
     player.setHdrOutputXwayland(QGuiApplication::platformName() == "xcb" && qEnvironmentVariableIsSet("WAYLAND_DISPLAY"));
     player.setHdrOutputNoVulkan(!vulkanUi);
     win->setVisible(true);
+    // --fullscreen, and always inside gamescope (Steam Game Mode or VeyAmux's own gamescope start)
+    if (args.contains("--fullscreen") || qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") || qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE"))
+        win->showFullScreen();
     if (vulkanUi && hdrOutRequested) {
         // Same test Qt makes before it creates the swapchain: does the window surface offer FP16 + extended sRGB?
-        QObject::connect(win, &QQuickWindow::frameSwapped, &player, [&player, win, inst = vkInst.get(), ctx = vkCtx.get()] {
+        QObject::connect(win, &QQuickWindow::frameSwapped, &player, [&player, win, hdrMode, inst = vkInst.get(), ctx = vkCtx.get()] {
             static bool done = false;
             if (done) return;
             done = true;
@@ -267,11 +305,17 @@ int main(int argc, char** argv) {
                 getFormats(ctx->physical(), surf, &n, nullptr);
                 std::vector<VkSurfaceFormatKHR> f(n);
                 if (n) getFormats(ctx->physical(), surf, &n, f.data());
-                for (const auto& sf : f)
-                    ok = ok || (sf.format == VK_FORMAT_R16G16B16A16_SFLOAT && sf.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT);
+                for (const auto& sf : f) {
+                    if (hdrMode == 1)
+                        ok = ok || (sf.format == VK_FORMAT_R16G16B16A16_SFLOAT && sf.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT);
+                    else
+                        ok = ok || ((sf.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 || sf.format == VK_FORMAT_A2R10G10B10_UNORM_PACK32)
+                                    && sf.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT);
+                }
             }
             if (qEnvironmentVariableIsSet("VEYAMUX_FORCE_HDR_OUT")) ok = true;   // test hook (SDR swapchain, clipped)
-            qInfo("HDR output: %s", ok ? "scRGB swapchain available" : "the display/compositor offers no HDR swapchain; using SDR");
+            qInfo("HDR output: %s", ok ? (hdrMode == 1 ? "scRGB swapchain available" : "HDR10 swapchain available")
+                                       : "the display/compositor offers no HDR swapchain; using SDR");
             QMetaObject::invokeMethod(&player, [&player, ok] { player.setHdrOutputState(true, ok); }, Qt::QueuedConnection);
         }, Qt::DirectConnection);
     }
@@ -360,6 +404,8 @@ int main(int argc, char** argv) {
         QTimer::singleShot(1500, [&] { player.toggleRecording(); });
         QTimer::singleShot(4500, [&] { player.toggleRecording(); player.saveReplay(); player.screenshot(); });
     }
+    // --capture last: the card used last time (Steam / Game Mode shortcut)
+    if (capturePath == "last") capturePath = player.lastCaptureDevice();
     if (!capturePath.isEmpty()) QTimer::singleShot(0, [&] { player.openCaptureAuto(capturePath); });
     if (!openFile.isEmpty()) QTimer::singleShot(0, [&] { player.openPath(openFile); });
     if (!grabPath.isEmpty()) {

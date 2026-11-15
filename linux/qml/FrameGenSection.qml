@@ -97,6 +97,11 @@ Column {
         title: tr("lsPerf"); detail: tr("lsPerfHint").replace("%1", player.lsfgFlowPercent)
         checked: player.lsfgPerformance; onToggled: (v) => player.lsfgPerformance = v
     }
+    Text {
+        visible: player.fgPaused && player.frameGenMode >= 2
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.accent3
+        text: tr("fgPaused")
+    }
 
     // Lossless Scaling status / actions
     Rectangle {

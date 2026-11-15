@@ -146,6 +146,8 @@ private:
     std::atomic<bool> skipRepeats_{false};   // live: drop repeated pictures (frame generation or VRR pacing is on)
     std::atomic<bool> vrrPacing_{false};     // live: space the game's pictures evenly (VRR display)
     std::string capAudioSource_;
+    std::string capPath_;          // for reconnecting after the card drops out or stalls on a signal change
+    CaptureMode capMode_{};
     std::chrono::steady_clock::time_point liveStart_;
     std::atomic<bool> quit_{false};
     std::atomic<bool> playing_{false};
