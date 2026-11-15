@@ -1,3 +1,38 @@
+<!-- veyamux-fork:start -->
+> [!NOTE]
+> **This is a fork of [Veyra-NRVideo](https://github.com/Likely7/Veyra-NRVideo) by [Likely7](https://github.com/Likely7) that adds
+> VeyAmux, a native Linux version.** The Windows program is Likely7's Veyra, unchanged. For Windows, download the
+> [official Veyra releases](https://github.com/Likely7/Veyra-NRVideo/releases) and report Windows issues there. This fork is not
+> affiliated with or endorsed by the Veyra project.
+
+## 🐧 VeyAmux: Veyra on Linux
+
+**VeyAmux** brings Veyra's real-time GPU enhancement to Linux as a single **AppImage**. Download it, make it executable and
+run it. Nothing to install, and it runs on most distributions (developed on Bazzite with an AMD RX 9070 XT).
+
+- **Capture cards with very low latency:** V4L2 → Vulkan in the UI's own frame, with no copy back to the CPU. Supports
+  NV12/YUYV/UYVY/P010 (HDR).
+- **Upscaling:** Lanczos, AMD FSR 1 and AMD FSR 3.1. **Noise reduction:** spatial and motion-compensated temporal.
+  Also sharpening, FXAA (Veyra's own shaders) and colour controls.
+- **HDR:** HDR capture and HDR10/HLG files, tone-mapped with Veyra's BT.2390 functions. Experimental HDR output on
+  KDE Plasma 6 / GNOME 48. **VRR pacing** for games below the signal rate.
+- **Lossless Scaling frame generation** (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), with automatic detection.
+- **Instant replay, recording and screenshots**, encoded on the GPU (VA-API). **OBS browser source.** **Profiles**
+  per capture signal. **Automatic updates** through Gear Lever / AppImageUpdate.
+
+**[⬇ Download the latest VeyAmux AppImage](../../releases/latest)** · [Linux README and install guide](linux/README.md) ·
+[technical notes (Danish)](linux/docs/TEKNISK.md)
+
+```sh
+chmod +x VeyAmux-x86_64.AppImage && ./VeyAmux-x86_64.AppImage
+```
+
+The Linux sources are in [`linux/`](linux/) (Qt 6 / Vulkan / FFmpeg, GPL-3.0 like Veyra). GitHub Actions builds the
+AppImage on every change and publishes it when a `veyamux-v*` tag is pushed.
+
+---
+<!-- veyamux-fork:end -->
+
 <div align="center">
 
 <img width="300" height="300" alt="40e9b0ec-d341-4375-b5ad-e86344407880" src="https://github.com/user-attachments/assets/30c0253e-6963-447d-a83b-29269d9323e2" />

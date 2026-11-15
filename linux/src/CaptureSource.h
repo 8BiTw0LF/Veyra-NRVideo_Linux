@@ -1,0 +1,99 @@
+// VeyAmux for Linux - V4L2 capture-card input (UVC HDMI capture dongles, Elgato/AVerMedia/etc. in UVC mode).
+#pragma once
+#include <chrono>
+#include "ContentProbe.h"
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+struct SwsContext;
+struct v4l2_buffer;
+struct AVCodecContext;
+struct AVFrame;
+struct AVPacket;
+
+namespace veyamux {
+
+struct CaptureDevice {
+    std::string path;   // /dev/videoN
+    std::string name;   // V4L2 card name
+};
+
+struct CaptureMode {
+    uint32_t fourcc = 0;
+    int w = 0, h = 0;
+    double fps = 0;
+    uint32_t num = 1, den = 30;   // frame interval (num/den seconds)
+    std::string label;            // "1920x1080 @ 60 fps · YUYV"
+};
+
+std::vector<CaptureDevice> listCaptureDevices();
+// Sorted best-first: >=50 fps first, then resolution, then fps, uncompressed before MJPEG.
+std::vector<CaptureMode> listCaptureModes(const std::string& path);
+std::string fourccName(uint32_t fourcc);
+
+// Converts one captured buffer to RGBA8 (tightly packed).
+class FrameConverter {
+public:
+    FrameConverter();
+    ~FrameConverter();
+    bool init(uint32_t fourcc, int w, int h, int stride, std::string& error);
+    bool convert(const uint8_t* data, size_t size, std::vector<uint8_t>& rgba, std::string& error);
+    void setFullRange(bool v) { fullRange_ = v; }
+private:
+    uint32_t fourcc_ = 0; int w_ = 0, h_ = 0, stride_ = 0; bool fullRange_ = false;
+    int pixFmt_ = -1;
+    SwsContext* sws_ = nullptr;
+    AVCodecContext* mjpeg_ = nullptr;
+    AVFrame* frame_ = nullptr;
+    AVPacket* pkt_ = nullptr;
+};
+
+// A captured frame ready for the GPU. YUYV/UYVY/NV12/P010 are passed through untouched (converted on the GPU);
+// MJPEG and the remaining formats are decoded to RGBA on the capture thread. P010 = 10-bit HDR (PQ, BT.2020).
+struct RawFrame {
+    enum Fmt { RGBA, YUYV, UYVY, NV12, P010 } fmt = RGBA;
+    std::vector<uint8_t> data;
+    int w = 0, h = 0, stride = 0;     // stride in bytes
+    bool repeat = false;              // same picture as the previous delivered frame (game slower than the signal)
+    std::chrono::steady_clock::time_point captured{};   // when the driver finished receiving it (V4L2 timestamp)
+};
+
+class CaptureSource {
+public:
+    enum class Result { Frame, Timeout, Error };
+    CaptureSource();
+    ~CaptureSource();
+    bool open(const std::string& path, const CaptureMode& mode, std::string& error);
+    void close();
+    Result read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error);
+    // Newest frame only; anything older that the driver queued is dropped immediately (lowest latency).
+    Result readLatest(RawFrame& out, int timeoutMs, std::string& error);
+    int width() const { return w_; }
+    int height() const { return h_; }
+    double fps() const { return fps_; }
+    const std::string& cardName() const { return card_; }
+    void setFullRange(bool v) { conv_.setFullRange(v); }
+    // What the signal actually carries (content frame rate, estimated rendering resolution).
+    ContentProbe::Result content() const { return probe_.result(); }
+    // read(): was the frame just returned a repeat of the previous one?
+    bool lastWasRepeat() const { return lastRepeat_; }
+private:
+    struct Buf { void* start = nullptr; size_t length = 0; };
+    bool dequeueNewest(v4l2_buffer& held, std::string& error);
+    int fd_ = -1;
+    uint32_t fourcc_ = 0;
+    int rawStride_ = 0;
+    std::vector<Buf> bufs_;
+    bool streaming_ = false;
+    int w_ = 0, h_ = 0; double fps_ = 0; std::string card_;
+    FrameConverter conv_;
+    ContentProbe probe_;
+    FrameDiff delivered_;             // repeat detection against the last frame handed out
+    bool lastRepeat_ = false;
+    void probeRaw(const v4l2_buffer& b);
+    void probeRgba(const std::vector<uint8_t>& rgba);
+};
+
+} // namespace veyamux

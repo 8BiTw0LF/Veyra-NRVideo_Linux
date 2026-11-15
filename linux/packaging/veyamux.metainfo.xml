@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>veyamux</id>
+  <name>VeyAmux</name>
+  <summary>Low-latency capture-card viewer and video player with GPU enhancement</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>VeyAmux shows the picture from a capture card or plays a video file and enhances it on the GPU with very low latency: the capture frame is converted, enhanced and displayed entirely in Vulkan.</p>
+    <ul>
+      <li>Upscaling with Lanczos, AMD FSR 1 or AMD FSR 3.1</li>
+      <li>Noise reduction (spatial, temporal), sharpening, FXAA and colour controls</li>
+      <li>HDR capture and HDR video, tone-mapped to SDR or shown on an HDR display (experimental), VRR pacing</li>
+      <li>Lossless Scaling frame generation through lsfg-vk (optional)</li>
+      <li>Instant replay, recording and screenshots with hardware encoding</li>
+      <li>OBS browser source</li>
+    </ul>
+    <p>Based on Veyra-NRVideo by Likely7.</p>
+  </description>
+  <url type="homepage">https://github.com/8BiTw0LF/VeyAmux</url>
+  <launchable type="desktop-id">veyamux.desktop</launchable>
+  <provides><binary>veyamux</binary></provides>
+  <releases><release version="2.1.5-linux15" date="2026-11-15"/></releases>
+</component>

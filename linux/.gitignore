@@ -1,0 +1,10 @@
+# build output
+/build/
+/dist/
+/.tools
+*.AppImage
+# editors
+*.swp
+.vscode/
+.idea/
+__pycache__/
