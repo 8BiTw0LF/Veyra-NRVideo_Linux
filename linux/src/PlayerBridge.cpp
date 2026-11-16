@@ -731,7 +731,7 @@ void PlayerBridge::setFrameGenMode(int v) {
 void PlayerBridge::setFxaaQuality(int v) { s_.fxaaQuality = qBound(0, v, 2); applyEnhance(); }
 void PlayerBridge::setSharpen(double v) { s_.sharpen = float(qBound(0.0, v, 1.0)); applyEnhance(); }
 void PlayerBridge::setExposure(double v) { s_.exposure = float(qBound(-3.0, v, 3.0)); applyEnhance(); }
-void PlayerBridge::setContrast(double v) { s_.contrast = float(qBound(0.5, v, 1.5)); applyEnhance(); }
+void PlayerBridge::setContrast(double v) { s_.contrast = float(qBound(0.6, v, 1.4)); applyEnhance(); }
 void PlayerBridge::setSaturation(double v) { s_.saturation = float(qBound(0.0, v, 2.0)); applyEnhance(); }
 void PlayerBridge::resetEnhance() {
     // picture settings only: frame generation and VRR (which may need a restart) are kept

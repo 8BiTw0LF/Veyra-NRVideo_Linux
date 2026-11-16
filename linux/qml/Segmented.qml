@@ -11,10 +11,10 @@ Row {
         model: root.model
         Rectangle {
             width: (root.width - (root.model.length - 1) * root.spacing) / root.model.length
-            height: 34; radius: 10
+            height: 38; radius: 11
             color: ma.containsMouse && root.enabled ? Theme.surfaceHover : Theme.surface
             gradient: index === root.current ? Theme.sunset : null
-            Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 14; font.weight: index === root.current ? Font.DemiBold : Font.Medium
+            Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 16; font.weight: index === root.current ? Font.DemiBold : Font.Medium
                 color: index === root.current ? Theme.accentInk : Theme.text }
             MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; enabled: root.enabled
                 cursorShape: Qt.PointingHandCursor; onClicked: root.picked(index) }

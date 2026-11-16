@@ -34,8 +34,8 @@ Column {
                 id: col
                 width: root.width - 44
                 spacing: 2
-                Text { width: parent.width; text: opt.title; color: opt.sel ? Theme.heading : Theme.text; font.pixelSize: 15; font.weight: Font.Medium; wrapMode: Text.Wrap }
-                Text { width: parent.width; text: opt.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 13; wrapMode: Text.Wrap }
+                Text { width: parent.width; text: opt.title; color: opt.sel ? Theme.heading : Theme.text; font.pixelSize: 17; font.weight: Font.Medium; wrapMode: Text.Wrap }
+                Text { width: parent.width; text: opt.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
             }
         }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; enabled: opt.usable; cursorShape: Qt.PointingHandCursor
@@ -54,8 +54,8 @@ Column {
         Column {
             id: stCol
             x: 34; y: 5; width: parent.width - 34 - 52; spacing: 2
-            Text { width: parent.width; text: st.title; color: Theme.text; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap }
-            Text { width: parent.width; text: st.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 13; wrapMode: Text.Wrap }
+            Text { width: parent.width; text: st.title; color: Theme.text; font.pixelSize: 16; font.weight: Font.Medium; wrapMode: Text.Wrap }
+            Text { width: parent.width; text: st.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
         }
         ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 4; y: 6; checked: st.checked; onToggled: (v) => st.toggled(v) }
     }
@@ -66,11 +66,11 @@ Column {
         signal clicked()
         width: lbText.implicitWidth + 22; height: 32; radius: 10
         color: lbMa.containsMouse ? Theme.accentHover : Theme.accent
-        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
+        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
         MouseArea { id: lbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lb.clicked() }
     }
 
-    Text { text: tr("fg"); color: Theme.heading; font.pixelSize: 18; font.weight: Font.Bold; font.letterSpacing: 0.5 }
+    Text { text: tr("fg"); color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5 }
 
     Option { mode: 0; title: tr("fgOff") }
     SubToggle {
@@ -81,11 +81,11 @@ Column {
     Row {
         visible: player.vrrRestartNeeded
         x: 34; spacing: 10
-        Text { text: tr("vrrRestart"); color: Theme.warn; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter; width: root.width - 34 - vrrBtn.width - 12; wrapMode: Text.Wrap }
+        Text { text: tr("vrrRestart"); color: Theme.warn; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter; width: root.width - 34 - vrrBtn.width - 12; wrapMode: Text.Wrap }
         LinkButton { id: vrrBtn; text: tr("restartNow"); onClicked: player.restartApp() }
     }
 
-    Text { text: "Lossless Scaling"; color: Theme.label; font.pixelSize: 14; font.weight: Font.Medium; topPadding: 4 }
+    Text { text: "Lossless Scaling"; color: Theme.label; font.pixelSize: 16; font.weight: Font.Medium; topPadding: 4 }
     Option { mode: 2; usable: root.lsUsable; title: tr("lsFixed"); detail: tr("lsFixedHint") }
     Option {
         mode: 3; usable: root.lsUsable; title: tr("ls3x")
@@ -95,7 +95,7 @@ Column {
     // Free alternative when Lossless Scaling is not available: AMD FSR 3.1 frame generation inside VeyAmux
     Text {
         visible: !root.lsUsable || player.frameGenMode === 5
-        text: tr("fsrFgTitle"); color: Theme.label; font.pixelSize: 14; font.weight: Font.Medium; topPadding: 4
+        text: tr("fsrFgTitle"); color: Theme.label; font.pixelSize: 16; font.weight: Font.Medium; topPadding: 4
     }
     Option {
         visible: !root.lsUsable || player.frameGenMode === 5
@@ -109,7 +109,7 @@ Column {
     }
     Text {
         visible: player.fgPaused && player.frameGenMode >= 2
-        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.accent3
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.accent3
         text: tr("fgPaused")
     }
 
@@ -124,7 +124,7 @@ Column {
             id: lsCol
             x: 10; y: 8; width: parent.width - 20; spacing: 8
             Text {
-                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13
+                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                 color: root.ls === "active" ? Theme.ok : (root.lsUsable ? Theme.text : Theme.warn)
                 text: {
                     switch (root.ls) {
@@ -141,7 +141,7 @@ Column {
                 }
             }
             Text {
-                width: parent.width; wrapMode: Text.WrapAnywhere; font.pixelSize: 13
+                width: parent.width; wrapMode: Text.WrapAnywhere; font.pixelSize: 15
                 visible: player.lsfgLog !== ""
                 color: player.lsfgLog.indexOf("[ERROR]") >= 0 || player.lsfgLog.indexOf("[WARNING]") >= 0
                        || player.lsfgLog.indexOf("lsfg-vk-cli") >= 0 ? Theme.warn : Theme.label
