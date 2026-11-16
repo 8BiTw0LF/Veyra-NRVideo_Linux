@@ -43,13 +43,17 @@ struct EnhanceSettings {
     float contrast = 1.0f;
     float saturation = 1.0f;
     FrameGenMode frameGen = FrameGenMode::Off;
+    // "Retro TV": CRT-Geom (curved CRT, scanlines, aperture grille) as the last picture stage, at the output size.
+    // Like frame generation it does not depend on the "Enhance" switch. retroLines: simulated lines (0 = the source's).
+    bool retroTv = false;
+    int retroLines = 240;
     // Frame generation is independent of the "Enhance" switch (that one only covers upscale/AA/sharpen/grade).
     bool lsfgFg() const { return frameGen == FrameGenMode::LsfgFixed || frameGen == FrameGenMode::LsfgFixed3; }
     bool fgPaused = false;    // ~120 Hz capture: no generated frames
     bool fsrFg() const { return frameGen == FrameGenMode::FsrFree && !fgPaused; }
 
     bool isIdentity() const {
-        return (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
+        return !retroTv && (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
                             contrast == 1.0f && saturation == 1.0f));
     }
 };
@@ -162,6 +166,7 @@ private:
     ImageRes src_, lin_, linB_, luma_, up_, fin_, out8_;
     std::unique_ptr<FsrUpscaler> fsrUp_;
     std::unique_ptr<FsrFrameGen> fg_;
+    uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)
     BufferRes nisStaging_;
     bool recordNis(const ImageRes& src, int w, int h, int ow, int oh);

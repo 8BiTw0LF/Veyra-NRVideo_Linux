@@ -71,6 +71,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool fgPaused READ fgPaused NOTIFY lsfgChanged)
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
     Q_PROPERTY(bool fxaa READ fxaa WRITE setFxaa NOTIFY enhanceChanged)
+    Q_PROPERTY(bool retroTv READ retroTv WRITE setRetroTv NOTIFY enhanceChanged)
+    Q_PROPERTY(int retroLines READ retroLines WRITE setRetroLines NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
     Q_PROPERTY(int denoise READ denoise WRITE setDenoise NOTIFY enhanceChanged)
     // HDR capture (P010): brightest level of the source in nits (tone-mapped to SDR)
@@ -150,6 +152,8 @@ public:
     int upscaler() const { return int(s_.upscaler); }
     QString upscalerError() const { return upError_; }
     bool fxaa() const { return s_.fxaa; }
+    bool retroTv() const { return s_.retroTv; }
+    int retroLines() const { return s_.retroLines; }
     int denoise() const { return int(s_.denoise); }
     int hdrPeak() const { return int(std::lround(s_.hdrPeak)); }
     void setHdrPeak(int v) { s_.hdrPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/hdrPeak", hdrPeak()); applyEnhance(); }
@@ -240,6 +244,8 @@ public:
     void setScale(double v);
     void setUpscaler(int v);
     void setFxaa(bool v);
+    void setRetroTv(bool v) { s_.retroTv = v; applyEnhance(); }
+    void setRetroLines(int v) { s_.retroLines = (v == 0 || v == 240 || v == 480) ? v : 240; applyEnhance(); }
     void setFrameGenMode(int v);
     void setFxaaQuality(int v);
     void setSharpen(double v);

@@ -46,6 +46,8 @@ Window {
               fsrNeedsScale: "Choose 1.5×, 2× or 3× to use it.",
               fsrFallback: "FSR 3.1 could not start, using Lanczos: ",
               capture: "Capture card", captureTitle: "Capture card or window", device: "Device", mode: "Mode (resolution · rate · format)", audio: "Audio source", noAudio: "No audio", defaultInput: "Default input (system default microphone)",
+              retroHint: "Makes the picture look like an old CRT television (CRT-Geom from ShaderGlass): a slightly curved glass screen with rounded corners, visible scanlines and the TV's red-green-blue phosphor stripes. Best for retro games. It replaces the upscaling method and the sharpness setting.",
+              retroLines: "Scanlines",
               screenShare: "Window or screen …",
               screenShareHint: "Share a program's window or a whole screen, and VeyAmux treats it like a capture card (upscaling, frame generation, recording). After Start, your desktop asks what to share. Choose no audio if the program plays its own sound.",
               noDevices: "No capture devices found. Check that the card is connected (it must appear as /dev/video*).",
@@ -119,6 +121,8 @@ Window {
               fsrNeedsScale: "Vælg 1,5×, 2× eller 3× for at bruge den.",
               fsrFallback: "FSR 3.1 kunne ikke starte, bruger Lanczos: ",
               capture: "Capture-kort", captureTitle: "Capture-kort eller vindue", device: "Enhed", mode: "Tilstand (opløsning · frekvens · format)", audio: "Lydkilde", noAudio: "Ingen lyd", defaultInput: "Standard-indgang (systemets standardmikrofon)",
+              retroHint: "Får billedet til at ligne et gammelt billedrørs-tv (CRT-Geom fra ShaderGlass): en let buet glasskærm med runde hjørner, synlige billedlinjer og tv'ets røde, grønne og blå fosforstriber. Bedst til retrospil. Den erstatter opskaleringsmetoden og skarphedsindstillingen.",
+              retroLines: "Billedlinjer",
               screenShare: "Vindue eller skærm …",
               screenShareHint: "Del et programs vindue eller en hel skærm, så behandler VeyAmux det som et capture-kort (opskalering, frame generation, optagelse). Efter Start spørger skrivebordet, hvad der skal deles. Vælg ingen lyd, hvis programmet selv spiller lyden.",
               noDevices: "Ingen capture-enheder fundet. Tjek at kortet er tilsluttet (det skal vises som /dev/video*).",
@@ -709,6 +713,27 @@ Window {
                     y: 0; width: area.colW
                     spacing: 26
                     FrameGenSection { width: parent.width; tr: win.t }
+                    Rectangle { width: parent.width; height: 1; color: Theme.line }
+                    // ---- Retro TV (CRT-Geom)
+                    Column {
+                        width: parent.width; spacing: 10
+                        Item {
+                            width: parent.width; height: 28
+                            Text { text: "Retro TV"; color: Theme.heading; font.pixelSize: 18; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
+                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                checked: player.retroTv; onToggled: (v) => player.retroTv = v }
+                        }
+                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("retroHint") }
+                        Text { visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 14 }
+                        Segmented {
+                            visible: player.retroTv
+                            width: parent.width
+                            readonly property var values: [240, 480, 0]
+                            model: ["240", "480", t("native")]
+                            current: Math.max(0, values.indexOf(player.retroLines))
+                            onPicked: (i) => player.retroLines = values[i]
+                        }
+                    }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     RecordSection { width: parent.width; tr: win.t }
                 }

@@ -70,7 +70,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -222,7 +222,17 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         cur = &linB_;
         timer_.mark(ctx_.active(), GpuTimer::AntiAlias);
     }
-    if (s.enabled && (ow != w || oh != h)) {
+    if (s.retroTv) {
+        // Retro TV: CRT-Geom draws the source straight at the output size (it does its own scaling, so it replaces the
+        // upscaler; sharpening after it would only sharpen the scanlines)
+        struct { uint32_t sw, sh, ow, oh, frame; float simW, simH; uint32_t p0; } cp{
+            uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh), uint32_t(++crtFrame_), 0.0f,
+            s.retroLines > 0 ? float(std::min(s.retroLines, h)) : 0.0f, 0};
+        run("LxCrtGeom", {cur}, {&up_}, &cp, sizeof cp, ow, oh, 16);
+        cur = &up_;
+        upHistory_ = false;
+        timer_.mark(ctx_.active(), GpuTimer::Upscale);
+    } else if (s.enabled && (ow != w || oh != h)) {
         bool done = false;
         // A setup failure is not retried every frame (context creation stalls the GPU): only after the size or the
         // upscaler choice changes.
@@ -260,8 +270,8 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     } else {
         upHistory_ = false;
     }
-    if (s.enabled && (s.sharpen > 0.001f || s.exposure != 0.0f || s.contrast != 1.0f || s.saturation != 1.0f)) {
-        EnhanceParams ep{uint32_t(ow), uint32_t(oh), s.sharpen, s.exposure, s.contrast, s.saturation, {0, 0}};
+    if (s.enabled && ((s.sharpen > 0.001f && !s.retroTv) || s.exposure != 0.0f || s.contrast != 1.0f || s.saturation != 1.0f)) {
+        EnhanceParams ep{uint32_t(ow), uint32_t(oh), s.retroTv ? 0.0f : s.sharpen, s.exposure, s.contrast, s.saturation, {0, 0}};
         run("LxEnhance", {cur}, {&fin_}, &ep, sizeof ep, ow, oh, 16);
         cur = &fin_;
     }

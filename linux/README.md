@@ -108,6 +108,9 @@ normally and the menu tells you what is missing. Frame generation can also be tu
   *Both*, in three strengths. Removes grain, dithering and compression noise, so *Sharpness* can be raised without
   sharpening the noise.
 - **Sharpness** (contrast-adaptive), **FXAA** (Veyra's original shaders), exposure, contrast and saturation.
+- **Retro TV**: makes the picture look like an old CRT television, with a curved screen, rounded corners, scanlines and an
+  aperture-grille phosphor mask. This is CRT-Geom as in ShaderGlass' `crt-geom` preset (cgwg, Themaister and DOLLS,
+  GPL-2.0+). Choose 240 or 480 scanlines, or the source's own. It replaces the upscaling method.
 
 **Frame generation (Lossless Scaling)**
 - *Fixed 2×* (default) and *Fixed 3×* through lsfg-vk, for VeyAmux's own window only. VeyAmux finds Lossless Scaling

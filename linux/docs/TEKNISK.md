@@ -114,6 +114,28 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   Lanczos). Konklusion: på video er FSR 3.1 blødere end Lanczos; derfor er Lanczos standard. FSR 4.1.2 findes kun som lukkede
   Windows-DLL'er og kan ikke bruges i et Linux-program.
 
+## Retro TV (CRT-Geom)
+`shaders/LxCrtGeom.hlsl` er crt-geom fra ShaderGlass' forudindstilling `crt/crt-geom`. ShaderGlass har den kun som
+oversat DirectX-bytekode, så det er en oversættelse af den kilde, ShaderGlass er bygget fra: libretro slang-shaders
+`a4f3aee`, `crt/shaders/crt-geom.slang` (GPL-2.0-or-later). Alle parametre er ShaderGlass' standardværdier:
+- CRTgamma 2,4, monitorgamma 2,2, afstand 1,5, krumningsradius 2, hjørner 0,03.
+- Maske 1 (aperture grille) med styrke 0,3 og scanline-vægt 0,3.
+- Interlace-simulering til.
+
+Kørsel:
+- Den sidder til sidst i kæden og tegner kilden direkte i udgangsstørrelsen, så den erstatter opskaleringsmetoden.
+  Skarphed springes over, mens eksponering, kontrast og mætning stadig gælder.
+- Den virker uafhængigt af Forbedring-kontakten, ligesom frame generation.
+
+Forskelle fra originalen (billedet er det samme):
+- **Compute-shader:** én tråd pr. udgangspixel. Vertex-værdierne udregnes pr. pixel, og `fwidth` udregnes ud fra
+  nabopixlen.
+- **Lineært lys:** kæden arbejder i lineært lys, så kilden gamma-kodes (2,2) før crt-geom's CRTgamma, og resultatet skrives
+  tilbage som lineært lys.
+- **Billedlinjer:** crt-geom's `ysize` er 240, 480 eller kildens egne. Et capture-kort leverer 240p skaleret op til 1080p,
+  så hver simuleret linje tager gennemsnittet af de kilderækker, den dækker (op til 8), i stedet for at plukke én.
+- **Maske:** kun maske 1 er med.
+
 ## Frame generation
 Menu → *Frame generation*:
 - **Lossless Scaling – Fast 2× (fordobler, standard) / Fast 3× (tredobler)** – kræver at du har købt Lossless Scaling på Steam og har installeret

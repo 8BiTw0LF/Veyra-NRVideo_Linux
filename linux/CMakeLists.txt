@@ -44,7 +44,7 @@ endforeach()
 foreach(q 3 4 5)
   veyamux_spv(AaFxaa${q} "${ORIG_SHADERS}/AaFxaa.hlsl" -DFXAA_PRESET=${q})
 endforeach()
-foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail)
+foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
 # AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
