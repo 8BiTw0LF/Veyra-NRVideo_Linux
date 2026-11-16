@@ -166,7 +166,10 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
 - *Start i gamescope* (menu, HDR-afsnittet): VeyAmux genstarter sig selv som
   `gamescope -f -W <skærm> -H <skærm> -r <Hz> --adaptive-sync [--hdr-enabled] -- VeyAmux` med `QT_QPA_PLATFORM=xcb`,
   uden `WAYLAND_DISPLAY` og med `ENABLE_GAMESCOPE_WSI=1`. Ikke inde i gamescope i forvejen (Game Mode).
-  `VEYAMUX_GAMESCOPE=0` springer det over.
+  `VEYAMUX_GAMESCOPE=0` springer det over. Andre swapchain-lag ødelægger gamescopes WSI-lag ("Creating swapchain for
+  non-Gamescope swapchain", kan fryse skrivebordet): inde i gamescope fjernes `ENABLE_HDR_WSI`, og lsfg-vk slås fra
+  (`DISABLE_LSFGVK=1`). Crash-vagt: kommer gamescope-starten ikke op (mærket `ui/gamescopeLaunching` ryddes efter 5 s),
+  slås gamescope-start fra ved næste start.
 - *Tilføj til Steam*: skriver en non-Steam-genvej i `userdata/<konto>/config/shortcuts.vdf` (binær KeyValues; eksisterende
   genveje bevares, en tidligere VeyAmux-genvej opdateres, første gang gemmes `shortcuts.vdf.veyamux-backup`). Steam skal
   være lukket. Startindstillinger: `--fullscreen --capture last`. Inde i gamescope starter VeyAmux altid i fuldskærm.

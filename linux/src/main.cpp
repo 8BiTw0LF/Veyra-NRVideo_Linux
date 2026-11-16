@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux17");
+    QCoreApplication::setApplicationVersion("2.1.5-linux18");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -153,6 +153,17 @@ int main(int argc, char** argv) {
 
     // ---- gamescope (optional): run inside Valve's compositor for HDR and VRR through XWayland ----
     // Not when already inside gamescope (Steam Game Mode, or this relaunch).
+    // Crash guard: if the last gamescope start never reported "running fine", gamescope is switched off again.
+    bool gamescopeFailed = false;
+    if (!probing && !qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE")) {
+        QSettings q;
+        if (q.value("ui/gamescopeLaunching", false).toBool()) {
+            q.remove("ui/gamescopeLaunching");
+            q.setValue("ui/gamescope", false);
+            gamescopeFailed = true;
+            qWarning("The last start inside gamescope did not come up; gamescope start switched off");
+        }
+    }
     if (!probing && QSettings().value("ui/gamescope", false).toBool() && qEnvironmentVariable("VEYAMUX_GAMESCOPE") != "0"
         && !qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") && !qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE")) {
         const QString gs = QStandardPaths::findExecutable("gamescope");
@@ -171,6 +182,13 @@ int main(int argc, char** argv) {
             env.insert("QT_QPA_PLATFORM", "xcb");        // gamescope's own XWayland, not the desktop's Wayland
             env.remove("WAYLAND_DISPLAY");
             env.insert("ENABLE_GAMESCOPE_WSI", "1");     // HDR swapchains for X11 Vulkan apps inside gamescope
+            // Other swapchain layers break gamescope's WSI layer ("Creating swapchain for non-Gamescope swapchain"):
+            // the desktop HDR layer (ENABLE_HDR_WSI) and Lossless Scaling's lsfg-vk are left out inside gamescope.
+            env.remove("ENABLE_HDR_WSI");
+            env.insert("DISABLE_HDR_WSI", "1");
+            env.insert("VEYAMUX_LSFG", "0");
+            env.insert("DISABLE_LSFGVK", "1");
+            QSettings().setValue("ui/gamescopeLaunching", true);
             QProcess p;
             p.setProgram(gs);
             p.setArguments(a);
@@ -327,6 +345,10 @@ int main(int argc, char** argv) {
             QMetaObject::invokeMethod(&player, [&player, ok] { player.setHdrOutputState(true, ok); }, Qt::QueuedConnection);
         }, Qt::DirectConnection);
     }
+    if (qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE"))   // came up inside gamescope: clear its crash guard
+        QTimer::singleShot(5000, &app, [] { QSettings().remove("ui/gamescopeLaunching"); });
+    if (gamescopeFailed)
+        QTimer::singleShot(1500, &player, [&player] { player.noticeGamescopeFailed(); });
     if (lsfgEnabled) {
         // Running fine for a few seconds with lsfg-vk loaded: clear the crash guard.
         QTimer::singleShot(8000, &app, [] { QSettings q; q.remove("lsfg/launching"); });

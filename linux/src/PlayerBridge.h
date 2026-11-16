@@ -303,6 +303,11 @@ public:
     Q_INVOKABLE void toggleStream();
     // Adds VeyAmux to Steam as a non-Steam game (fullscreen, last capture card), for Big Picture / Game Mode
     Q_INVOKABLE void addToSteam();
+    void noticeGamescopeFailed() {
+        showNotice(L("gamescope did not start last time, so VeyAmux starts normally (gamescope start switched off)",
+                     "gamescope startede ikke sidst, så VeyAmux starter normalt (start i gamescope er slået fra)"));
+        emit enhanceChanged();
+    }
     // Start VeyAmux when the capture card is plugged in (autostart watcher)
     Q_PROPERTY(bool autostart READ autostart WRITE setAutostart NOTIFY recChanged)
     bool autostart() const;
