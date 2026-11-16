@@ -4,6 +4,8 @@
 #include <cmath>
 #include <QElapsedTimer>
 #include <QSettings>
+#include <mutex>
+#include <deque>
 #include <QStandardPaths>
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
@@ -32,6 +34,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY audioChanged)
     // Audio offset in ms (positive = sound later); capture can only delay the sound
     Q_PROPERTY(int audioDelay READ audioDelay WRITE setAudioDelay NOTIFY audioChanged)
+    // Output device (sink name, "" = system default) and loudness levelling
+    Q_PROPERTY(QString audioOutput READ audioOutput WRITE setAudioOutput NOTIFY audioChanged)
+    Q_PROPERTY(bool normalize READ normalize WRITE setNormalize NOTIFY audioChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY audioChanged)
     Q_PROPERTY(QString gpuName READ gpuName NOTIFY statsChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -74,6 +79,7 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool hdrOutputActive READ hdrOutputActive NOTIFY enhanceChanged)
     Q_PROPERTY(bool hdrOutputRestart READ hdrOutputRestart NOTIFY enhanceChanged)
     Q_PROPERTY(int displayPeak READ displayPeak WRITE setDisplayPeak NOTIFY enhanceChanged)
+    Q_PROPERTY(int displayPeakEdid READ displayPeakEdid NOTIFY enhanceChanged)
     Q_PROPERTY(bool hdrOutputXwayland READ hdrOutputXwayland NOTIFY enhanceChanged)
     Q_PROPERTY(bool hdrOutputNoVulkan READ hdrOutputNoVulkan NOTIFY enhanceChanged)
     // 0 = HDR10 (PQ), 1 = scRGB: the swapchain format chosen in the settings / the one this run uses
@@ -100,6 +106,17 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int recHeight READ recHeight WRITE setRecHeight NOTIFY recChanged)
     Q_PROPERTY(bool recording READ recording NOTIFY recChanged)
     Q_PROPERTY(QString recInfo READ recInfo NOTIFY recTick)
+    // Live stream (RTMP): 0 = Twitch, 1 = YouTube, 2 = own server URL; the key is kept in the settings file
+    Q_PROPERTY(bool streaming READ streaming NOTIFY recChanged)
+    // Frame-time overlay (F3): intervals between pictures on screen (ms, newest last) and a summary line
+    Q_PROPERTY(bool overlay READ overlay WRITE setOverlay NOTIFY overlayChanged)
+    Q_PROPERTY(QVariantList overlayGraph READ overlayGraph NOTIFY overlayTick)
+    Q_PROPERTY(QString overlayStats READ overlayStats NOTIFY overlayTick)
+    Q_PROPERTY(double overlayTarget READ overlayTarget NOTIFY overlayTick)
+    Q_PROPERTY(int streamService READ streamService WRITE setStreamService NOTIFY recChanged)
+    Q_PROPERTY(QString streamKey READ streamKey WRITE setStreamKey NOTIFY recChanged)
+    Q_PROPERTY(QString streamServer READ streamServer WRITE setStreamServer NOTIFY recChanged)
+    Q_PROPERTY(int streamKbps READ streamKbps WRITE setStreamKbps NOTIFY recChanged)
     Q_PROPERTY(double sharpen READ sharpen WRITE setSharpen NOTIFY enhanceChanged)
     Q_PROPERTY(double exposure READ exposure WRITE setExposure NOTIFY enhanceChanged)
     Q_PROPERTY(double contrast READ contrast WRITE setContrast NOTIFY enhanceChanged)
@@ -150,8 +167,13 @@ public:
     bool gamescopeAvailable() const { return !QStandardPaths::findExecutable("gamescope").isEmpty(); }
     bool inGamescope() const { return qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") || qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE"); }
     void setHdrModeAtStart(int m) { hdrModeAtStart_ = m; emit enhanceChanged(); }
-    int displayPeak() const { return int(std::lround(s_.displayPeak)); }
-    void setDisplayPeak(int v) { s_.displayPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/displayPeak", displayPeak()); applyEnhance(); }
+    // 0 = automatic (the display's own maximum from its EDID, 1000 nits if it does not say)
+    int displayPeak() const { return peakAuto_ ? 0 : int(std::lround(s_.displayPeak)); }
+    void setDisplayPeak(int v);
+    int displayPeakEdid() const { return edidPeak_; }   // 0 = unknown
+    // EDID HDR static metadata: the display's maximum luminance in nits for a DRM connector ("DP-1"), 0 if not given
+    static int edidPeakNits(const QString& connector);
+    static int edidPeakFromBytes(const QByteArray& edid);
     // main(): what this run asked Qt for, and whether the window really got an HDR (scRGB) swapchain
     void setHdrOutputState(bool requested, bool active) {
         hdrOutAtStart_ = requested; hdrOutActive_ = requested && active; s_.hdrOut = hdrOutWanted_ && hdrOutActive_; applyEnhance();
@@ -183,7 +205,11 @@ public:
     double displayHz() const;
     // Set by main() before the window exists: whether Vulkan UI is used and whether lsfg-vk was enabled for this run.
     void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish);
-    void setWindow(QWindow* w) { window_ = w; }
+    void setWindow(QWindow* w) {
+        window_ = w;
+        refreshEdidPeak();
+        if (w) connect(w, &QWindow::screenChanged, this, [this] { refreshEdidPeak(); applyEnhance(); });
+    }
     QString translateMessage(const QString& msg) const;
     int fxaaQuality() const { return s_.fxaaQuality; }
     QStringList profiles() const;
@@ -260,13 +286,37 @@ public:
     Q_INVOKABLE void toggleRecording();
     Q_INVOKABLE void screenshot();
     Q_INVOKABLE void openRecordingsFolder();
+    bool streaming() const { return rec_ && rec_->streaming(); }
+    bool overlay() const { return overlay_; }
+    void setOverlay(bool v) { overlay_ = v; QSettings().setValue("ui/overlay", v); emit overlayChanged(); }
+    QVariantList overlayGraph() const { return overlayGraph_; }
+    QString overlayStats() const { return overlayStats_; }
+    double overlayTarget() const { return overlayTarget_; }
+    int streamService() const { return QSettings().value("stream/service", 0).toInt(); }
+    void setStreamService(int v) { QSettings().setValue("stream/service", std::clamp(v, 0, 2)); emit recChanged(); }
+    QString streamKey() const { return QSettings().value("stream/key").toString(); }
+    void setStreamKey(const QString& v) { QSettings().setValue("stream/key", v.trimmed()); emit recChanged(); }
+    QString streamServer() const { return QSettings().value("stream/server").toString(); }
+    void setStreamServer(const QString& v) { QSettings().setValue("stream/server", v.trimmed()); emit recChanged(); }
+    int streamKbps() const { return QSettings().value("stream/kbps", 6000).toInt(); }
+    void setStreamKbps(int v) { QSettings().setValue("stream/kbps", std::clamp(v, 1000, 50000)); emit recChanged(); }
+    Q_INVOKABLE void toggleStream();
     // Adds VeyAmux to Steam as a non-Steam game (fullscreen, last capture card), for Big Picture / Game Mode
     Q_INVOKABLE void addToSteam();
+    // Start VeyAmux when the capture card is plugged in (autostart watcher)
+    Q_PROPERTY(bool autostart READ autostart WRITE setAutostart NOTIFY recChanged)
+    bool autostart() const;
+    void setAutostart(bool on);
 
 public slots:
     QVariantList captureDevices();
     QVariantList captureModes(const QString& path);
     QVariantList audioSources();
+    Q_INVOKABLE QVariantList audioSinks();   // [{name, desc}] from pactl
+    QString audioOutput() const { return QSettings().value("audio/sink").toString(); }
+    void setAudioOutput(const QString& s) { QSettings().setValue("audio/sink", s); engine_.setAudioSink(s.toStdString()); emit audioChanged(); }
+    bool normalize() const { return QSettings().value("audio/normalize", false).toBool(); }
+    void setNormalize(bool v) { QSettings().setValue("audio/normalize", v); engine_.setNormalize(v); emit audioChanged(); }
     QString guessAudioSource(const QString& cardName);
     QString lastCaptureDevice() const;
     QString lastCaptureAudio() const;
@@ -301,6 +351,8 @@ signals:
     void lsfgChanged();
     void obsChanged();
     void recChanged();
+    void overlayChanged();
+    void overlayTick();
     void recTick();
 
 private:
@@ -339,6 +391,9 @@ private:
     QString upError_;
     bool vrrAtStart_ = false;
     int hdrMode_ = QSettings().value("enh/hdrMode", 0).toInt() == 1 ? 1 : 0, hdrModeAtStart_ = 0;
+    bool peakAuto_ = QSettings().value("enh/displayPeakAuto", true).toBool();
+    int edidPeak_ = 0;
+    void refreshEdidPeak();
     bool hdrOutWanted_ = false, hdrOutAtStart_ = false, hdrOutActive_ = false, hdrOutXwayland_ = false, hdrOutNoVulkan_ = false;
     int audioDelay_ = 0;
     QString activeProfile_;
@@ -359,6 +414,13 @@ private:
     int replaySeconds_ = 30, recHeight_ = 1080;
     int recStreamH_ = -2;
     void updateRecordSource();
+    bool overlay_ = QSettings().value("ui/overlay", false).toBool();
+    QVariantList overlayGraph_;
+    QString overlayStats_;
+    double overlayTarget_ = 0;
+    std::mutex fileShownM_;
+    std::deque<double> fileShown_;
+    void updateOverlay();
     QString recFolder(bool pictures) const;
     void onRecMessage(const QString& m, bool error);
     uint64_t fpsCount_ = 0;

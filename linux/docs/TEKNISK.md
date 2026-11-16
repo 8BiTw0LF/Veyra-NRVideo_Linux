@@ -182,6 +182,38 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
 Capture-lyden går igennem i blokke på 5 ms (før 20 ms) med ca. 20 ms kø ud (før 50 ms); pipewire-pulse sænker sin
 kvantum tilsvarende. `VEYAMUX_AUDIO_MS=<ms>` (2–40) giver større blokke på travle systemer.
 
+## Gratis frame generation (AMD FSR 3.1)
+Tilstand 5 (`enh/frameGenMode=5`, vises når Lossless Scaling ikke er fundet): `src/FsrFrameGen.cpp` – FidelityFX optical
+flow + frame interpolation (SDK 1.1.4, MIT) på det færdige billede, med VeyAmux' egen bevægelsesestimering som
+"spil-bevægelsesvektorer", konstant uendelig dybde, beskyttelse af statiske elementer (`LxStatic`) og skarphed i fine
+detaljer (`LxDetail`). Kun capture-vejen: det genererede billede kopieres til et visningsbillede med det samme, det
+rigtige et halvt capture-interval senere (`EnhanceChain::recordShowReal`, `QTimer` → `update()`). Testet: et objekt der
+flytter 8 px pr. billede placeres præcist 4 px i mellembilledet. 120 Hz-reglen gælder også her.
+(Byggefejl rettet: komponenterne skal defineres som `FFX_FI`/`FFX_OF`, ellers er shader-blobbene tomme.)
+
+## Livestream (RTMP)
+`Recorder::startStream`: H.264 (VA-API, ellers libx264) med konstant bitrate, FLV over RTMP/RTMPS via en
+afsendertråd; er den mere end ~5 s bagud, droppes køen og der fortsættes fra næste keyframe. `rw_timeout` 5 s.
+Twitch `rtmp://live.twitch.tv/app/<nøgle>`, YouTube `rtmp://a.rtmp.youtube.com/live2/<nøgle>` eller egen URL.
+Kører samtidig med replay/optagelse (samme koder); startes ikke midt i en optagelse med anden koder-indstilling.
+
+## Billedtids-overlay (F3)
+Tider for hvert billede sat på skærmen (rigtige og genererede, `LiveVulkan::shownTimes`; filer: `onFrame`), vist som
+graf over 2 s med fps, 1%-low (99. percentil), jitter (standardafvigelse), forsinkelse og tabte billeder.
+
+## Automatisk HDR-lysstyrke
+`PlayerBridge::edidPeakFromBytes`: CTA-861-udvidelsen i `/sys/class/drm/card*-<stik>/edid`, HDR Static Metadata
+(udvidet tag 6), maks. luminans = 50 · 2^(CV/32) nits. Stikket findes via `QScreen::name()`. Testet med en syntetisk EDID.
+
+## Lydudgang og lydstyrkeudligning
+Udgang: PulseAudio/PipeWire-sink (`pactl list sinks`), skiftes mens der afspilles. Udligning: RMS over ~0,4 s trækkes mod
+−20 dBFS (angreb 0,3 s, slip 3 s, ±12 dB) plus begrænser ved −1 dBFS. Kun det, man hører – optagelser får originalen.
+
+## Start når capture-kortet tilsluttes
+`veyamux --watch` (fra `~/.config/autostart/veyamux-watch.desktop`): inotify på `/dev`; når kortet med navnet fra sidst
+(`cap/name`, sysfs) dukker op og VeyAmux ikke kører, startes `--fullscreen --capture /dev/videoN`. `--capture last` finder
+også kortet igen, hvis det har fået et andet videoN-nummer.
+
 ## Instant replay, optagelse og skærmbilleder
 **F9** gemmer de sidste 30/60/120 s, **F10** starter/stopper en optagelse, **F12** gemmer et PNG-skærmbillede
 (`~/Videos/VeyAmux`, `~/Pictures/VeyAmux`). I den direkte capture-vej konverteres det viste billede på GPU'en til NV12

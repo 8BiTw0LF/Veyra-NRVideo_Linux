@@ -48,4 +48,35 @@ Column {
         Btn { text: tr("recShot"); onClicked: player.screenshot() }
         Btn { text: tr("recFolder"); onClicked: player.openRecordingsFolder() }
     }
+
+    // ---- live stream (RTMP) ----
+    Item { width: root.width; height: 6 }
+    Text { text: tr("streamTitle"); color: Theme.label; font.pixelSize: 14; font.weight: Font.Medium }
+    Segmented { width: root.width; model: ["Twitch", "YouTube", tr("streamOwn")]
+        current: player.streamService; onPicked: (i) => player.streamService = i }
+    Rectangle {
+        visible: player.streamService === 2
+        width: root.width; height: 32; radius: 9; color: Theme.surfaceDeep; border.color: srvIn.activeFocus ? Theme.accentLine : Theme.border
+        TextInput {
+            id: srvIn; anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+            verticalAlignment: TextInput.AlignVCenter; color: Theme.text; font.pixelSize: 14; clip: true; selectByMouse: true
+            text: player.streamServer; onEditingFinished: player.streamServer = text
+            Text { anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: "rtmp://server/app"; color: Theme.dim; font.pixelSize: 14 }
+        }
+    }
+    Rectangle {
+        width: root.width; height: 32; radius: 9; color: Theme.surfaceDeep; border.color: keyIn.activeFocus ? Theme.accentLine : Theme.border
+        TextInput {
+            id: keyIn; anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+            verticalAlignment: TextInput.AlignVCenter; color: Theme.text; font.pixelSize: 14; clip: true; selectByMouse: true
+            echoMode: TextInput.Password; text: player.streamKey; onEditingFinished: player.streamKey = text
+            Text { anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: tr("streamKey"); color: Theme.dim; font.pixelSize: 14 }
+        }
+    }
+    Segmented { width: root.width; model: ["3500 kbps", "6000 kbps", "8000 kbps"]
+        readonly property var rates: [3500, 6000, 8000]
+        current: Math.max(0, rates.indexOf(player.streamKbps)); onPicked: (i) => player.streamKbps = rates[i] }
+    Btn { text: player.streaming ? tr("streamStop") : tr("streamStart"); danger: player.streaming; primary: !player.streaming
+        onClicked: { player.streamKey = keyIn.text; player.toggleStream() } }
+    Text { width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: tr("streamHint") }
 }

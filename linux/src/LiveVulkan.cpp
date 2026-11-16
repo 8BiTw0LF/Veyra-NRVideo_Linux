@@ -141,7 +141,18 @@ void LiveVulkan::onBeforeRendering() {
             fresh = true;
         }
     }
-    if (!fresh) return;
+    if (!fresh) {
+        // FSR frame generation: the generated frame is on screen; the real one follows half a frame later
+        if (chain_->fgShowRealPending() && std::chrono::steady_clock::now() >= realDue_ - std::chrono::microseconds(1500)) {
+            win_->beginExternalCommands();
+            auto* rif = win_->rendererInterface();
+            auto* cb = static_cast<VkCommandBuffer*>(rif->getResource(win_, QSGRendererInterface::CommandListResource));
+            if (cb && *cb) chain_->recordShowReal(*cb);
+            win_->endExternalCommands();
+            noteShown();
+        }
+        return;
+    }
 
     const auto t0 = std::chrono::steady_clock::now();
     LiveInput in;
@@ -175,9 +186,9 @@ void LiveVulkan::onBeforeRendering() {
     {
         std::lock_guard l(m_);
         error_.clear();
-        upError_ = chain_->upError();
+        upError_ = chain_->fgError().empty() ? chain_->upError() : "Frame generation: " + chain_->fgError();
     }
-    const ImageRes& real = chain_->liveOutput();
+    const ImageRes& real = chain_->liveDisplay();
     const auto tEnd = std::chrono::steady_clock::now();
     lastMs_ = std::chrono::duration<double, std::milli>(tEnd - t0).count();
     // Time inside VeyAmux: from the capture driver's timestamp to the moment the frame's GPU work is queued, plus the
@@ -208,10 +219,31 @@ void LiveVulkan::onBeforeRendering() {
                                      chain_->upError().empty() ? "" : ", upscaling error: ", chain_->upError().c_str());
     }
     publish(realHandle, int(real.width), int(real.height), recreated);
+    if (chain_->fgShowRealPending()) {
+        // show the real frame half a capture interval after the generated one
+        const int halfUs = int(std::clamp(frameMs * 500.0, 3000.0, 30000.0));
+        realDue_ = tEnd + std::chrono::microseconds(halfUs);
+        QMetaObject::invokeMethod(win_, [w = win_, ms = std::max(1, halfUs / 1000 - 1)] {
+            QTimer::singleShot(ms, Qt::PreciseTimer, w, [w] { w->update(); });
+        }, Qt::QueuedConnection);
+    }
+}
+
+void LiveVulkan::noteShown() {
+    ++shown_;
+    const double t = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    std::lock_guard l(timesM_);
+    shownTimes_.push_back(t);
+    while (shownTimes_.size() > 600) shownTimes_.pop_front();
+}
+
+std::vector<double> LiveVulkan::shownTimes() const {
+    std::lock_guard l(timesM_);
+    return {shownTimes_.begin(), shownTimes_.end()};
 }
 
 void LiveVulkan::publish(uint64_t handle, int w, int h, bool recreated) {
-    ++shown_;
+    noteShown();
     imgW_ = w;
     imgH_ = h;
     image_ = handle;

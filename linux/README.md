@@ -76,12 +76,20 @@ normally and the menu tells you what is missing. Frame generation can also be tu
   still get normal SDR.
 - **gamescope start** (optional): runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync (VRR)
   even through XWayland.
+- **Start on plug-in**: VeyAmux can open by itself, fullscreen, when the capture card is plugged in.
+- **Frame-time overlay** (F3): a graph of the last two seconds with fps, 1%-low, jitter and the delay in VeyAmux.
+- **HDR display brightness** is read from the display's EDID automatically (*Auto*).
 - **Steam / Game Mode**: *Add to Steam* puts VeyAmux in your Steam library as a non-Steam game that starts fullscreen on
   the last capture card, also from Big Picture and Bazzite's Game Mode.
+- **Sound output and levelling**: pick the output device (headset, speakers) and turn on *Even out loudness* for a
+  steadier volume.
 - **Low-latency audio**: the capture card's sound is passed through in 5 ms blocks (`VEYAMUX_AUDIO_MS` changes it).
 - **Audio delay** (−300 … +300 ms) to line up the sound with the processed picture, and **profiles**: save the picture
   settings under a name, switch with keys 1–9, and bind a profile to a capture signal so it is applied automatically.
 - **VRR mode**: shows the game's own frames at an even pace (e.g. 45 fps) so a VRR display can follow the game.
+- **Free frame generation**: without Lossless Scaling, *AMD FSR 3.1 2× (free)* doubles the frame rate inside VeyAmux
+  (open source, any GPU, live capture). The motion is estimated from the pictures, so the quality is below Lossless
+  Scaling, and the real frame is shown half a frame later.
 - **120 Hz signals**: when the capture runs at about 120 fps, frame generation pauses automatically (2× would ask for
   240 fps and only add latency) and resumes when it drops below 80 fps.
 - The info line shows what the game **actually** runs at, not just the signal, e.g.
@@ -112,6 +120,10 @@ normally and the menu tells you what is missing. Frame generation can also be tu
 - What is recorded is VeyAmux's finished picture (after upscaling, noise reduction and colour), with the sound, at
   720p/1080p/1440p or the original size. Encoding runs on the graphics card through **VA-API** (HEVC, or H.264), with
   libx264 as a fallback up to 1440p; the picture is converted to NV12 on the GPU, so the display path is not slowed down.
+
+**Live streaming**
+- **Go live** straight to Twitch, YouTube or your own RTMP server: VeyAmux's finished picture and sound, H.264 encoded
+  on the GPU at 3500/6000/8000 kbps, without OBS. Recordings and the replay keep running at the same time.
 
 **Streaming and UI**
 - **OBS browser source**: VeyAmux serves the finished picture (after all enhancements) as MJPEG on `127.0.0.1:47920`.
@@ -206,7 +218,7 @@ VeyAmux. A 30 fps game × 2 = 60 fps fits 60/120 Hz.
 ## Keyboard shortcuts
 
 Space play/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volume · **F** fullscreen · **E** enhancement on/off ·
-**P** menu · **M** mute · **O** open file · **C** capture card · **1–9** profiles · **F9** save replay ·
+**P** menu · **M** mute · **O** open file · **C** capture card · **F3** frame-time overlay · **1–9** profiles · **F9** save replay ·
 **F10** record · **F12** screenshot
 
 ## What was done in the Linux port

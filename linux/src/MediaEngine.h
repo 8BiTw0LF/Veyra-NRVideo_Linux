@@ -85,6 +85,10 @@ public:
     double position() const;
     void setVolume(float v) { volume_ = v; }
     void setMuted(bool m) { muted_ = m; }
+    // Output device (PulseAudio/PipeWire sink name, empty = system default); switched while playing.
+    void setAudioSink(const std::string& sink) { { std::lock_guard l(sinkM_); sink_ = sink; } ++sinkGen_; }
+    // Even out loud and quiet passages (slow automatic gain with a peak limiter), applied to what you hear only.
+    void setNormalize(bool on) { normalize_ = on; }
     // Audio offset in ms, positive = sound later than the picture. Files: -300..+300 (the picture is moved against the
     // audio clock). Capture: 0..+300 (sound is held back; live audio cannot be played earlier than it arrives).
     void setAudioDelay(int ms) { audioDelayMs_ = std::clamp(ms, -300, 300); }
@@ -161,6 +165,11 @@ private:
     std::atomic<bool> endedFired_{false};
     std::atomic<float> volume_{1.0f};
     std::atomic<bool> muted_{false};
+    std::mutex sinkM_;
+    std::string sink_;
+    std::atomic<int> sinkGen_{0};
+    std::atomic<bool> normalize_{false};
+    std::string sinkName() { std::lock_guard l(sinkM_); return sink_; }
     std::atomic<int> audioDelayMs_{0};
     std::mutex gate_m_; std::condition_variable gate_cv_;   // wakes threads on pause/resume/seek/quit
 

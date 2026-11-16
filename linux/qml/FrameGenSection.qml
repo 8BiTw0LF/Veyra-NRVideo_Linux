@@ -1,6 +1,6 @@
 import QtQuick
 
-// Frame generation: Off (optionally VRR pacing) / Lossless Scaling (Fixed 2x = default, Fixed 3x).
+// Frame generation: Off (optionally VRR pacing) / Lossless Scaling (Fixed 2x = default, Fixed 3x) / AMD FSR 3.1 (free).
 Column {
     id: root
     property var tr: function (k) { return k }
@@ -92,8 +92,18 @@ Column {
         detail: tr("ls3xHint")
     }
 
+    // Free alternative when Lossless Scaling is not available: AMD FSR 3.1 frame generation inside VeyAmux
+    Text {
+        visible: !root.lsUsable || player.frameGenMode === 5
+        text: tr("fsrFgTitle"); color: Theme.label; font.pixelSize: 14; font.weight: Font.Medium; topPadding: 4
+    }
+    Option {
+        visible: !root.lsUsable || player.frameGenMode === 5
+        mode: 5; title: tr("fsrFg"); detail: tr("fsrFgHint")
+    }
+
     SubToggle {
-        visible: root.lsUsable && player.frameGenMode >= 2
+        visible: root.lsUsable && (player.frameGenMode === 2 || player.frameGenMode === 3)
         title: tr("lsPerf"); detail: tr("lsPerfHint").replace("%1", player.lsfgFlowPercent)
         checked: player.lsfgPerformance; onToggled: (v) => player.lsfgPerformance = v
     }

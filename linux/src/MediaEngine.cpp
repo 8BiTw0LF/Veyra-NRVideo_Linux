@@ -340,6 +340,32 @@ void MediaEngine::captureLoop() {
     }
 }
 
+// Loudness levelling: the short-term level (RMS over ~0.4 s) is pulled toward -20 dBFS with a slow gain (attack
+// ~0.3 s, release ~3 s, at most +12 dB / -12 dB), then a fast peak limiter keeps it under -1 dBFS.
+struct Leveler {
+    float level = 0.0f, gain = 1.0f, lim = 1.0f;
+    void process(int16_t* s, int frames, int rate) {
+        if (frames <= 0) return;
+        double sum = 0;
+        for (int i = 0; i < frames * 2; ++i) sum += double(s[i]) * s[i];
+        const float rms = float(std::sqrt(sum / (frames * 2)) / 32768.0);
+        const float dt = float(frames) / float(rate);
+        level += (rms - level) * std::min(1.0f, dt / 0.4f);
+        if (level > 0.0005f) {   // not in silence: aim for -20 dBFS
+            const float want = std::clamp(0.1f / level, 0.25f, 4.0f);
+            const float tau = want < gain ? 0.3f : 3.0f;
+            gain += (want - gain) * std::min(1.0f, dt / tau);
+        }
+        constexpr float ceil = 0.89f * 32767.0f;   // -1 dBFS
+        for (int i = 0; i < frames * 2; ++i) {
+            float v = s[i] * gain * lim;
+            if (std::fabs(v) > ceil) { lim *= ceil / std::fabs(v); v = s[i] * gain * lim; }
+            s[i] = int16_t(std::clamp(int(std::lround(v)), -32768, 32767));
+            lim += (1.0f - lim) * 0.00005f;   // limiter release (~0.4 s at 48 kHz stereo)
+        }
+    }
+};
+
 static int qEnvIntOr(const char* name, int fallback) {
     const char* v = std::getenv(name);
     return v && *v ? std::atoi(v) : fallback;
@@ -364,7 +390,12 @@ void MediaEngine::captureAudioLoop() {
     const char* dev = capAudioSource_ == "@default" ? nullptr : capAudioSource_.c_str();
     pa_simple* rec = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
     if (!rec) { if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Capture audio unavailable: ") + pa_strerror(err)); return; }
-    pa_simple* out = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "capture playback", &ss, nullptr, &pattr, &err);
+    int sinkGen = sinkGen_.load();
+    std::string sink = sinkName();
+    pa_simple* out = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sink.empty() ? nullptr : sink.c_str(), "capture playback", &ss, nullptr, &pattr, &err);
+    if (!out && !sink.empty())   // the chosen device is gone: system default
+        out = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "capture playback", &ss, nullptr, &pattr, &err);
+    Leveler leveler;
     if (!out) {
         if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Audio output unavailable: ") + pa_strerror(err));
         pa_simple_free(rec);
@@ -381,9 +412,16 @@ void MediaEngine::captureAudioLoop() {
         if (cb_.onAudio)   // the block started one block ago and is heard after the audio delay
             cb_.onAudio(buf.data(), int(buf.size() / 2),
                         std::chrono::steady_clock::now() - std::chrono::milliseconds(blockMs - std::max(0, audioDelayMs_.load())));
+        if (normalize_.load()) leveler.process(buf.data(), int(buf.size() / 2), kRate);
         const float vol = muted_.load() ? 0.0f : volume_.load();
         if (vol != 1.0f)
             for (auto& s : buf) s = int16_t(std::clamp(int(std::lround(s * vol)), -32768, 32767));
+        if (sinkGen != sinkGen_.load()) {   // output device changed
+            sinkGen = sinkGen_.load();
+            sink = sinkName();
+            pa_simple* n = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sink.empty() ? nullptr : sink.c_str(), "capture playback", &ss, nullptr, &pattr, &err);
+            if (n) { pa_simple_free(out); out = n; }
+        }
         const size_t want = size_t(std::max(0, audioDelayMs_.load())) * (kRate / 1000) * 2;   // samples (both channels)
         if (want > 0) {
             if (line.size() != want + buf.size()) { line.assign(want + buf.size(), 0); lineHead = 0; lineFill = want; }
@@ -629,6 +667,8 @@ void MediaEngine::audioLoop() {
     constexpr int kRate = 48000;
     pa_simple* pa = nullptr;
     bool paFailed = false;
+    Leveler fileLeveler;
+    int fileSinkGen = sinkGen_.load();
     auto openPa = [&] {
         if (pa || paFailed) return;
         pa_sample_spec ss{PA_SAMPLE_S16LE, kRate, 2};
@@ -639,7 +679,9 @@ void MediaEngine::audioLoop() {
         attr.minreq = uint32_t(-1);
         attr.fragsize = uint32_t(-1);
         int err = 0;
-        pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "playback", &ss, nullptr, &attr, &err);
+        const std::string sk = sinkName();
+        pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sk.empty() ? nullptr : sk.c_str(), "playback", &ss, nullptr, &attr, &err);
+        if (!pa && !sk.empty()) pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "playback", &ss, nullptr, &attr, &err);
         if (!pa) {
             paFailed = true;
             if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Audio unavailable: ") + pa_strerror(err));
@@ -686,6 +728,8 @@ void MediaEngine::audioLoop() {
 
             std::vector<int16_t> tap;
             if (cb_.onAudio) tap.assign(buf.begin(), buf.begin() + n * 2);
+            if (normalize_.load()) fileLeveler.process(buf.data(), n, kRate);
+            if (fileSinkGen != sinkGen_.load() && pa) { fileSinkGen = sinkGen_.load(); pa_simple_free(pa); pa = nullptr; }   // output device changed
             const float vol = muted_.load() ? 0.0f : volume_.load();
             if (vol != 1.0f)
                 for (int i = 0; i < n * 2; ++i)

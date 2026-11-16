@@ -45,7 +45,14 @@ public:
     bool recording() const { return recording_.load(); }
     // Writes the replay buffer to an MP4 file in the background. Returns false if there is nothing to save yet.
     bool saveReplay(const std::string& path);
-    bool active() const { return replayOn_.load() || recording_.load(); }
+    bool active() const { return replayOn_.load() || recording_.load() || streaming_.load(); }
+
+    // Live stream over RTMP(S) (Twitch, YouTube, ...): H.264 at kbps (constant bit rate). While streaming, replay and
+    // recordings use the same H.264 encoder. Not while a recording runs with another encoder setting.
+    void startStream(const std::string& url, int kbps);
+    void stopStream();
+    bool streaming() const { return streaming_.load(); }
+    double streamSeconds() const;
 
     // Input (any thread). NV12: Y plane w*h, then interleaved UV w*h/2, tightly packed. Even w/h.
     void pushVideo(std::vector<uint8_t>&& nv12, int w, int h, Clock::time_point t);
@@ -67,6 +74,7 @@ private:
     struct Params;                   // codec parameters of one encoder session (shared with background savers)
     struct Pkt { AVPacket* p = nullptr; bool video = false; bool key = false; double sec = 0; uint64_t gen = 0; };
     struct Mux;
+    struct StreamOut;
 
     void worker();
     bool openVideo(int w, int h, std::string& err);
@@ -111,6 +119,15 @@ private:
     std::vector<float> aPend_[2];    // audio waiting for a full AAC frame
     bool forceKey_ = false;
     std::unique_ptr<Mux> rec_;
+    std::unique_ptr<StreamOut> stream_;
+    std::atomic<bool> streaming_{false};
+    std::string streamUrl_;
+    bool streamStartPending_ = false, streamStopPending_ = false;
+    bool wantH264_ = false;          // encoder preferences (worker): H.264 for RTMP, fixed bit rate
+    int targetKbps_ = 0;
+    Clock::time_point streamStart_{};
+    std::atomic<double> streamSec_{0};
+    void closeVideoEncoder();
     Clock::time_point recStart_{};
     std::atomic<double> recSec_{0};
 

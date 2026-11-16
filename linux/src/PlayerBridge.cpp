@@ -17,6 +17,7 @@
 #include <QSettings>
 #include <QIcon>
 #include "SteamShortcut.h"
+#include "Watcher.h"
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QStandardPaths>
@@ -34,6 +35,11 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     if (QSettings().value("obs/enabled", false).toBool()) setObsEnabled(true);
     MediaEngine::Callbacks cb;
     cb.onFrame = [this](const uint8_t* rgba, int w, int h, double aspect) {
+        if (overlay_) {
+            std::lock_guard l(fileShownM_);
+            fileShown_.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count());
+            while (fileShown_.size() > 600) fileShown_.pop_front();
+        }
         QImage img = QImage(rgba, w, h, w * 4, QImage::Format_RGBA8888).copy();   // detach from engine buffer
         if (!liveVulkanActive() && (obs_.wantsFrames() || rec_->active())) {
             const QImage sdr = s_.hdrOut ? sdrCopy(img) : img;
@@ -68,6 +74,8 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     cb.onLiveFrame = [this](veyamux::RawFrame&& f) { if (liveVk_) liveVk_->submit(std::move(f)); };
     cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) { rec_->pushAudio(pcm, frames, t); };
     engine_.setCallbacks(cb);
+    engine_.setAudioSink(audioOutput().toStdString());
+    engine_.setNormalize(normalize());
     applyEnhance();
     {
         QSettings q;
@@ -77,7 +85,8 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     }
     tick_.setInterval(100);
     connect(&tick_, &QTimer::timeout, this, [this] {
-        if (rec_->recording()) emit recTick();
+        if (rec_->recording() || rec_->streaming()) emit recTick();
+        if (overlay_) updateOverlay();
         checkHighRate();
         if (!engine_.isOpen()) return;
         emit positionChanged();
@@ -204,11 +213,17 @@ QString PlayerBridge::recInfo() const {
     const QString enc = QString::fromStdString(rec_->encoderName());
     const QString e = enc.isEmpty() ? QString() : enc.contains("vaapi") ? enc.section('_', 0, 0).toUpper() + L(" (GPU, VA-API)", " (GPU, VA-API)")
                                                                          : enc + L(" (CPU)", " (CPU)");
+    QStringList parts;
+    if (rec_->streaming()) {
+        const int s = int(rec_->streamSeconds());
+        parts << L("● LIVE %1:%2", "● LIVE %1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'));
+    }
     if (rec_->recording()) {
         const int s = int(rec_->recordingSeconds());
-        return L("● REC %1:%2", "● OPTAGER %1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0')) + (e.isEmpty() ? "" : "  ·  " + e);
+        parts << L("● REC %1:%2", "● OPTAGER %1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'));
     }
-    return e;
+    if (!e.isEmpty()) parts << e;
+    return parts.join("  ·  ");
 }
 
 void PlayerBridge::saveReplay() {
@@ -224,6 +239,104 @@ void PlayerBridge::toggleRecording() {
     } else {
         if (!engine_.isOpen() && !liveVulkanActive()) { showNotice(L("Nothing is playing", "Der afspilles ikke noget")); return; }
         rec_->startRecording((recFolder(false) + "/VeyAmux_" + stamp() + ".mp4").toStdString());
+    }
+    updateRecordSource();
+    emit recChanged();
+    emit recTick();
+}
+
+// Frame-time overlay: the last ~2 s of on-screen picture intervals, plus fps, 1 % low, jitter and the delay in VeyAmux.
+void PlayerBridge::updateOverlay() {
+    std::vector<double> t;
+    if (liveVulkanActive()) t = liveVk_->shownTimes();
+    else { std::lock_guard l(fileShownM_); t.assign(fileShown_.begin(), fileShown_.end()); }
+    const double now = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    std::vector<double> iv;
+    for (size_t i = 1; i < t.size(); ++i)
+        if (now - t[i] < 2000.0) iv.push_back(t[i] - t[i - 1]);
+    if (iv.size() > 240) iv.erase(iv.begin(), iv.end() - 240);
+    overlayGraph_.clear();
+    for (double v : iv) overlayGraph_ << v;
+    if (iv.size() < 4) {
+        overlayStats_ = L("Frame times: waiting for pictures", "Billedtider: venter på billeder");
+        overlayTarget_ = 0;
+    } else {
+        double sum = 0;
+        for (double v : iv) sum += v;
+        const double mean = sum / iv.size();
+        double var = 0;
+        for (double v : iv) var += (v - mean) * (v - mean);
+        std::vector<double> sorted = iv;
+        std::sort(sorted.begin(), sorted.end());
+        const double p99 = sorted[std::min(sorted.size() - 1, size_t(sorted.size() * 0.99))];
+        overlayTarget_ = mean;
+        QString s = QString("%1 fps · %2 ms · 1%-low %3 fps · jitter %4 ms")
+                        .arg(1000.0 / mean, 0, 'f', 1).arg(mean, 0, 'f', 2).arg(1000.0 / p99, 0, 'f', 0).arg(std::sqrt(var / iv.size()), 0, 'f', 2);
+        if (liveVulkanActive() && liveVk_->pipelineMs() > 0) s += L(" · delay %1 ms", " · forsinkelse %1 ms").arg(liveVk_->pipelineMs(), 0, 'f', 1);
+        const auto st = engine_.stats();
+        if (st.dropped) s += L(" · %1 dropped", " · %1 tabt").arg(st.dropped);
+        overlayStats_ = s;
+    }
+    emit overlayTick();
+}
+
+int PlayerBridge::edidPeakFromBytes(const QByteArray& e) {
+    if (e.size() < 256) return 0;
+    const int exts = uint8_t(e[126]);
+    for (int x = 1; x <= exts && (x + 1) * 128 <= e.size(); ++x) {
+        const int b = x * 128;
+        if (uint8_t(e[b]) != 0x02) continue;              // CTA-861 extension
+        const int end = b + uint8_t(e[b + 2]);
+        for (int p = b + 4; p < end && p < b + 127;) {
+            const int tag = uint8_t(e[p]) >> 5, len = uint8_t(e[p]) & 31;
+            // extended tag 6 = HDR static metadata: [6, EOTFs, descriptors, max luminance, max frame-average, min]
+            if (tag == 7 && len >= 4 && uint8_t(e[p + 1]) == 6) {
+                const int cv = uint8_t(e[p + 4]);
+                if (cv > 0) return int(std::lround(50.0 * std::pow(2.0, cv / 32.0)));
+            }
+            p += 1 + len;
+        }
+    }
+    return 0;
+}
+
+int PlayerBridge::edidPeakNits(const QString& connector) {
+    if (connector.isEmpty()) return 0;
+    for (const QString& d : QDir("/sys/class/drm").entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (!d.endsWith("-" + connector)) continue;
+        QFile f("/sys/class/drm/" + d + "/edid");
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        if (const int n = edidPeakFromBytes(f.readAll())) return n;
+    }
+    return 0;
+}
+
+void PlayerBridge::refreshEdidPeak() {
+    QScreen* sc = window_ ? window_->screen() : QGuiApplication::primaryScreen();
+    edidPeak_ = sc ? edidPeakNits(sc->name()) : 0;
+    if (peakAuto_) s_.displayPeak = float(edidPeak_ > 0 ? std::clamp(edidPeak_, 203, 10000) : 1000);
+}
+
+void PlayerBridge::setDisplayPeak(int v) {
+    peakAuto_ = v <= 0;
+    QSettings().setValue("enh/displayPeakAuto", peakAuto_);
+    if (peakAuto_) refreshEdidPeak();
+    else { s_.displayPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/displayPeak", int(std::lround(s_.displayPeak))); }
+    applyEnhance();
+}
+
+void PlayerBridge::toggleStream() {
+    if (rec_->streaming()) {
+        rec_->stopStream();
+    } else {
+        if (!engine_.isOpen() && !liveVulkanActive()) { showNotice(L("Nothing is playing", "Der afspilles ikke noget")); return; }
+        static const char* bases[] = {"rtmp://live.twitch.tv/app/", "rtmp://a.rtmp.youtube.com/live2/"};
+        const int svc = streamService();
+        QString url = svc < 2 ? QString(bases[svc]) + streamKey() : streamServer();
+        if (svc == 2 && !streamKey().isEmpty()) url += (url.endsWith('/') ? "" : "/") + streamKey();
+        if ((svc < 2 && streamKey().isEmpty()) || url.isEmpty()) { showNotice(L("Enter the stream key first", "Indtast stream-nøglen først")); return; }
+        showNotice(L("Connecting…", "Forbinder …"));
+        rec_->startStream(url.toStdString(), streamKbps());
     }
     updateRecordSource();
     emit recChanged();
@@ -306,7 +419,9 @@ void PlayerBridge::addToSteam() {
 void PlayerBridge::openRecordingsFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(recFolder(false))); }
 
 void PlayerBridge::onRecMessage(const QString& m, bool error) {
-    if (m == "recording-started") showNotice(L("Recording started", "Optagelse startet"));
+    if (m == "stream-started") showNotice(L("Live: the stream is running", "Live: streamen kører"));
+    else if (m == "stream-stopped") showNotice(L("Stream stopped", "Stream stoppet"));
+    else if (m == "recording-started") showNotice(L("Recording started", "Optagelse startet"));
     else if (m == "recording-saved") { showNotice(L("Recording saved", "Optagelse gemt")); updateRecordSource(); }
     else if (m.startsWith("replay-saved:")) showNotice(L("Replay saved: %1", "Replay gemt: %1").arg(QFileInfo(m.mid(13)).fileName()));
     else showNotice((error ? L("Recording error: ", "Optagefejl: ") : QString()) + m);
@@ -353,8 +468,8 @@ void PlayerBridge::loadSettings() {
     s_.vrr = q.value("enh/vrr", false).toBool();
     // Default: Lossless Scaling 2x. The old in-app modes (1 AMD FSR / RIFE, 4 RIFE + Lossless Scaling) become 2x.
     {
-        int fg = std::clamp(q.value("enh/frameGenMode", 2).toInt(), 0, 4);
-        if (fg == 1 || fg == 4) fg = 2;
+        int fg = std::clamp(q.value("enh/frameGenMode", 2).toInt(), 0, 5);
+        if (fg == 1 || fg == 4) fg = 2;   // 5 = AMD FSR 3.1 frame generation (free)
         s_.frameGen = veyamux::FrameGenMode(fg);
     }
     lsfgPerformance_ = q.value("lsfg/performance", false).toBool();
@@ -453,7 +568,9 @@ void PlayerBridge::checkHighRate() {
     if (!fgPaused_ && fgHighTicks_ >= 10) { fgPaused_ = true; change = true; }
     if (fgPaused_ && fgLowTicks_ >= 20) { fgPaused_ = false; change = true; }
     if (!change) return;
-    if (s_.lsfgFg())
+    s_.fgPaused = fgPaused_;
+    applyEnhance();
+    if (s_.lsfgFg() || s_.frameGen == veyamux::FrameGenMode::FsrFree)
         showNotice(fgPaused_ ? L("120 Hz signal: frame generation paused", "120 Hz-signal: frame generation sat på pause")
                              : L("Frame generation resumed", "Frame generation kører igen"));
     updateLsfgMultiplier();
@@ -467,6 +584,8 @@ QString PlayerBridge::outputFpsText(double srcFps) const {
     const bool ls = s_.lsfgFg();
     if (ls && lsfgActive_ && lsfgMultiplier_ > 1 && srcFps > 0)
         return QString(" → %1 fps (Lossless Scaling %2×)").arg(std::lround(frameGenBaseFps() * lsfgMultiplier_)).arg(lsfgMultiplier_);
+    if (s_.fsrFg() && liveVulkanActive() && srcFps > 0)
+        return QString(" → %1 fps (AMD FSR 3.1 2×)").arg(std::lround(frameGenBaseFps() * 2));
     return {};
 }
 
@@ -563,11 +682,11 @@ void PlayerBridge::setUpscaler(int v) {
 }
 void PlayerBridge::setFxaa(bool v) { s_.fxaa = v; applyEnhance(); }
 void PlayerBridge::setFrameGenMode(int v) {
-    v = std::clamp(v, 0, 3);
-    if (v == 1) v = 2;
+    v = std::clamp(v, 0, 5);
+    if (v == 1 || v == 4) v = 2;
     const bool wasLs = s_.lsfgFg();
     s_.frameGen = veyamux::FrameGenMode(v);
-    const bool isLs = v >= 2;
+    const bool isLs = v == 2 || v == 3;
     { QSettings q; q.setValue("enh/frameGenMode", v); }
     if (lsfgActive_) {
         // lsfg-vk hot-reloads the multiplier: 1 = joined but no generated frames.
@@ -588,7 +707,7 @@ void PlayerBridge::resetEnhance() {
     // picture settings only: frame generation and VRR (which may need a restart) are kept
     const auto keep = s_;
     s_ = veyamux::EnhanceSettings{};
-    s_.enabled = keep.enabled; s_.frameGen = keep.frameGen; s_.vrr = keep.vrr; s_.hdrPeak = keep.hdrPeak; s_.hdrOut = keep.hdrOut; s_.displayPeak = keep.displayPeak;
+    s_.enabled = keep.enabled; s_.frameGen = keep.frameGen; s_.vrr = keep.vrr; s_.hdrPeak = keep.hdrPeak; s_.hdrOut = keep.hdrOut; s_.displayPeak = keep.displayPeak; s_.fgPaused = keep.fgPaused;
     activeProfile_.clear();
     emit profilesChanged();
     applyEnhance();
@@ -730,6 +849,26 @@ QVariantList PlayerBridge::audioSources() {
     return out;
 }
 
+QVariantList PlayerBridge::audioSinks() {
+    QVariantList out;
+    QProcess p;
+    p.start("pactl", {"list", "sinks"});
+    if (!p.waitForFinished(2500)) { p.kill(); return out; }
+    QString name, desc;
+    auto flush = [&] {
+        if (!name.isEmpty()) { QVariantMap m; m["name"] = name; m["desc"] = desc.isEmpty() ? name : desc; out << m; }
+        name.clear(); desc.clear();
+    };
+    for (const QString& raw : QString::fromUtf8(p.readAllStandardOutput()).split('\n')) {
+        const QString l = raw.trimmed();
+        if (l.startsWith("Sink #")) flush();
+        else if (l.startsWith("Name:")) name = l.mid(5).trimmed();
+        else if (l.startsWith("Description:")) desc = l.mid(12).trimmed();
+    }
+    flush();
+    return out;
+}
+
 QString PlayerBridge::guessAudioSource(const QString& cardName) {
     static const QStringList skip = {"usb", "video", "capture", "hdmi", "audio", "device", "card", "the"};
     QStringList toks;
@@ -747,7 +886,25 @@ QString PlayerBridge::guessAudioSource(const QString& cardName) {
     return bestName;
 }
 
-QString PlayerBridge::lastCaptureDevice() const { return QSettings().value("cap/device").toString(); }
+QString PlayerBridge::lastCaptureDevice() const {
+    // the same card may come back under another /dev/videoN after being re-plugged
+    QSettings q;
+    const QString dev = q.value("cap/device").toString(), name = q.value("cap/name").toString();
+    if (!name.isEmpty() && veyamux::watch::cardName(dev) != name)
+        if (const QString d = veyamux::watch::findDeviceByName(name); !d.isEmpty()) return d;
+    return dev;
+}
+
+void PlayerBridge::setAutostart(bool on) {
+    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
+    QString err;
+    if (!veyamux::watch::setAutostart(on, exe, err)) showNotice(err);
+    else if (on && QSettings().value("cap/name").toString().isEmpty())
+        showNotice(L("Open the capture card once, so VeyAmux knows which card to wait for", "Åbn capture-kortet én gang, så VeyAmux ved, hvilket kort den skal vente på"));
+    emit recChanged();
+}
+
+bool PlayerBridge::autostart() const { return veyamux::watch::autostartEnabled(); }
 QString PlayerBridge::lastCaptureAudio() const { return QSettings().value("cap/audio").toString(); }
 
 bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString& audioSource) {
@@ -762,6 +919,7 @@ bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString
         return false;
     }
     QSettings q; q.setValue("cap/device", path); q.setValue("cap/audio", audioSource);
+    if (const QString n = veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
     updateLsfgMultiplier();
     if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
     if (zeroCopy) { liveVk_->setSettings(s_); liveVk_->setActive(true); }

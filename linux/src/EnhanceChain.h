@@ -5,6 +5,7 @@
 #include <atomic>
 #include <mutex>
 #include "FsrUpscaler.h"
+#include "FsrFrameGen.h"
 #include "MotionEstimator.h"
 #include "GpuTimer.h"
 #include <array>
@@ -18,7 +19,8 @@ namespace veyamux {
 // Frame generation modes. Both are applied by the separately installed lsfg-vk Vulkan layer (Lossless Scaling) on
 // VeyAmux's window after VeyAmux has shown its frame, so the chain itself does nothing for them. Values 1 and 4 were
 // in-app frame generation (AMD FSR 3.1, later RIFE) and are read as LsfgFixed.
-enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3 };   // Lossless Scaling 2x / 3x
+// Lossless Scaling 2x / 3x (lsfg-vk), or AMD FSR 3.1 frame generation inside VeyAmux (free, live capture only)
+enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to Lanczos if FidelityFX cannot run.
@@ -43,6 +45,8 @@ struct EnhanceSettings {
     FrameGenMode frameGen = FrameGenMode::Off;
     // Frame generation is independent of the "Enhance" switch (that one only covers upscale/AA/sharpen/grade).
     bool lsfgFg() const { return frameGen == FrameGenMode::LsfgFixed || frameGen == FrameGenMode::LsfgFixed3; }
+    bool fgPaused = false;    // ~120 Hz capture: no generated frames
+    bool fsrFg() const { return frameGen == FrameGenMode::FsrFree && !fgPaused; }
 
     bool isIdentity() const {
         return (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
@@ -76,6 +80,12 @@ public:
     bool recordLive(VkCommandBuffer cb, int slot, const LiveInput& in, const EnhanceSettings& s, std::string& error,
                     float frameMs = 1000.0f / 60.0f);
     const ImageRes& liveOutput() const { return out8_; }
+    // The image Qt shows: out8_, or with FSR frame generation a separate image that gets the generated frame first
+    // and the real one half a frame later (recordShowReal).
+    const ImageRes& liveDisplay() const { return fgActive_ ? disp_ : out8_; }
+    bool fgShowRealPending() const { return fgActive_ && fgRealPending_; }
+    void recordShowReal(VkCommandBuffer cb);
+    const std::string& fgError() const { return fgError_; }
     // Measured GPU time (Vulkan timestamps), smoothed: total and per stage; -1 when not available.
     float gpuMs() const { return timer_.totalMs(); }
     std::array<float, GpuTimer::kStages> gpuStageMs() const { return timer_.stageMs(); }
@@ -151,6 +161,12 @@ private:
     int w_ = 0, h_ = 0, ow_ = 0, oh_ = 0;
     ImageRes src_, lin_, linB_, luma_, up_, fin_, out8_;
     std::unique_ptr<FsrUpscaler> fsrUp_;
+    std::unique_ptr<FsrFrameGen> fg_;
+    ImageRes fgOut_, disp_;
+    bool fgActive_ = false, fgRealPending_ = false, fgReset_ = true;
+    std::string fgError_;
+    bool recordFg(VkCommandBuffer cb);
+    void copyToDisplay(VkCommandBuffer cb, const ImageRes& src);
     // denoisers
     std::unique_ptr<MotionEstimator> nrMotion_;
     GpuTimer timer_;

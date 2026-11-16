@@ -12,6 +12,8 @@
 #include <QSize>
 #include <QString>
 #include <atomic>
+#include <vector>
+#include <deque>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -39,6 +41,8 @@ public:
     float gpuMs() const { std::lock_guard l(m_); return gpuMs_; }
     std::array<float, veyamux::GpuTimer::kStages> gpuStageMs() const { std::lock_guard l(m_); return gpuStages_; }
     uint64_t framesShown() const { return shown_.load(); }   // frames handed to the display
+    // steady-clock times (ms) of the last pictures put on screen (real and generated), for the frame-time overlay
+    std::vector<double> shownTimes() const;
     // OBS stream: maxHeight -1 = off, 0 = original size. The sink gets every displayed picture
     // from a worker thread, with the delay that keeps the on-screen pacing.
     void setStream(int maxHeight, std::function<void(QImage, int)> sink);
@@ -79,10 +83,14 @@ private:
     std::atomic<uint64_t> seq_{0};        // bumps for every real frame rendered
     std::atomic<uint64_t> lastHandle_{0};
     std::atomic<uint64_t> shown_{0};
+    void noteShown();
+    mutable std::mutex timesM_;
+    std::deque<double> shownTimes_;
     std::mutex sinkM_;
     std::function<void(QImage, int)> sink_;
     std::function<void(veyamux::EnhanceChain::RecFrame&&)> recSink_;
     std::function<void(QImage)> shotCb_;
+    std::chrono::steady_clock::time_point realDue_{};   // FSR frame generation: when the real frame is shown
     std::thread streamThread_;
     std::atomic<bool> streamQuit_{false};
     void streamLoop();

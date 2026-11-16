@@ -1,6 +1,7 @@
 #include "EnhanceChain.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -39,6 +40,9 @@ EnhanceChain::~EnhanceChain() {
     timer_.destroy();
     releaseStream();
     fsrUp_.reset();
+    fg_.reset();
+    ctx_.destroy(fgOut_);
+    ctx_.destroy(disp_);
     nrMotion_.reset();
     releaseResources();
     for (auto& r : retired_) ctx_.destroy(r.img);
@@ -436,6 +440,14 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     if (recMaxH_.load() >= 0) recordRec(cb, out8_, in.time);
     if (shotWanted_.exchange(false)) recordShot(cb, out8_);
 
+    // FSR frame generation: the generated frame goes to the display image now, the real one half a frame later.
+    if (s.fsrFg()) {
+        if (recordFg(cb)) return true;
+    } else if (fgActive_) {
+        fgActive_ = fgRealPending_ = false;   // back to showing out8_ directly
+        fgReset_ = true;
+        ++liveGen_;
+    }
     // Hand the display image to Qt's fragment shader in SHADER_READ_ONLY_OPTIMAL - the layout the QSGTexture
     // wrapper is created with (VideoItem), so Qt's own layout tracking matches reality.
     VkImageMemoryBarrier ob{};
@@ -450,6 +462,82 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ob);
     return true;
+}
+
+// ------------------------------------------------------------------ FSR 3.1 frame generation (live)
+
+void EnhanceChain::copyToDisplay(VkCommandBuffer cb, const ImageRes& src) {
+    VkImageMemoryBarrier b[2]{};
+    for (auto& x : b) {
+        x.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        x.srcQueueFamilyIndex = x.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        x.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    }
+    // display image: whatever Qt left it in -> GENERAL (fully overwritten); source: finished writes -> transfer read
+    b[0].image = disp_.image;
+    b[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    b[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    b[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    b[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    b[1].image = src.image;
+    b[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    b[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    b[1].oldLayout = b[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, b);
+    VkImageCopy c{};
+    c.srcSubresource = c.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    c.extent = {disp_.width, disp_.height, 1};
+    vkCmdCopyImage(cb, src.image, VK_IMAGE_LAYOUT_GENERAL, disp_.image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+    VkImageMemoryBarrier o{};
+    o.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    o.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    o.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    o.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    o.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    o.srcQueueFamilyIndex = o.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    o.image = disp_.image;
+    o.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &o);
+}
+
+bool EnhanceChain::recordFg(VkCommandBuffer cb) {
+    if (disp_.width != out8_.width || disp_.height != out8_.height || !disp_.image) {
+        retire(fgOut_);   // Qt may still be drawing the old display image: freed a few frames later
+        retire(disp_);
+        fgOut_ = ImageRes{};
+        disp_ = ImageRes{};
+        const VkImageUsageFlags u = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        fgOut_ = ctx_.createImage(out8_.width, out8_.height, VK_FORMAT_R8G8B8A8_UNORM, u);
+        disp_ = ctx_.createImage(out8_.width, out8_.height, VK_FORMAT_R8G8B8A8_UNORM, u);
+        if (!fgOut_.image || !disp_.image) { fgError_ = "Out of GPU memory for frame generation"; return false; }
+        ctx_.transitionToGeneral(fgOut_.image);
+        fgReset_ = true;
+        ++liveGen_;
+    }
+    if (!fgActive_) { fgActive_ = true; fgReset_ = true; ++liveGen_; }
+    if (!fg_) fg_ = std::make_unique<FsrFrameGen>(ctx_, dir_);
+    ctx_.computeBarrier();
+    const bool reset = fgReset_;
+    std::string err;
+    if (!fg_->record(cb, out8_, fgOut_, reset, frameMs_, err)) {
+        fgError_ = err;
+        fgActive_ = fgRealPending_ = false;
+        ++liveGen_;
+        return false;
+    }
+    fgError_.clear();
+    fgReset_ = false;
+    copyToDisplay(cb, reset ? out8_ : fgOut_);
+    fgRealPending_ = !reset;
+    return true;
+}
+
+void EnhanceChain::recordShowReal(VkCommandBuffer cb) {
+    if (!fgActive_ || !fgRealPending_) return;
+    copyToDisplay(cb, out8_);
+    fgRealPending_ = false;
+    if (std::getenv("VEYAMUX_DEBUG_FG")) { static int n = 0; if (++n % 30 == 0) std::fprintf(stderr, "FG: %d real frames shown after generated ones\n", n); }
 }
 
 void EnhanceChain::recordStream(VkCommandBuffer cb, const ImageRes& src, int delayMs) {

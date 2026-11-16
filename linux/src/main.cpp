@@ -10,6 +10,8 @@
 #include <QFileInfo>
 #include <QLocale>
 #include <QProcess>
+#include "Watcher.h"
+#include <cstring>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickGraphicsDevice>
@@ -88,7 +90,7 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
         else if (probeVulkan({})) cached = "vulkan";
         else if (canX && probeVulkan("xcb")) cached = "xcb";
         else cached = "software";
-        q.setValue(key, cached);
+        if (cached != "software") q.setValue(key, cached);   // a failed probe is retried at the next start
     }
     if (cached == "vulkan") return UiChoice::Vulkan;
     if (cached == "xcb" && platform == "wayland" && !qEnvironmentVariableIsSet("VEYAMUX_RELAUNCHED")) return UiChoice::RelaunchXcb;
@@ -110,13 +112,19 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux16");
+    QCoreApplication::setApplicationVersion("2.1.5-linux17");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
         const QString now = base + "/VeyAmux/VeyAmux.conf", before = base + "/Veyra/Veyra.conf";
         if (!QFileInfo::exists(now) && QFileInfo::exists(before) && QDir().mkpath(base + "/VeyAmux")) QFile::copy(before, now);
     }
+    // `--watch`: no window, only the capture-card watcher (started from ~/.config/autostart)
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--watch") == 0) {
+            QCoreApplication wapp(argc, argv);
+            return veyamux::watch::run(relaunchTarget());
+        }
     // The UI itself is cheap; what matters is latency. VSync is off by default (like Windows' tearing mode);
     // VEYAMUX_VSYNC=1 turns it back on. VRR mode (frame generation off) presents with vsync, so a VRR display shows
     // each evenly paced picture whole, at the moment it is presented, without tearing.

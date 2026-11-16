@@ -44,7 +44,7 @@ endforeach()
 foreach(q 3 4 5)
   veyamux_spv(AaFxaa${q} "${ORIG_SHADERS}/AaFxaa.hlsl" -DFXAA_PRESET=${q})
 endforeach()
-foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut)
+foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
 # AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
@@ -74,12 +74,16 @@ add_library(veyamux_ffx STATIC
   ${FFX_DIR}/src/shared/ffx_assert.cpp ${FFX_DIR}/src/shared/ffx_breadcrumbs_list.cpp
   ${FFX_DIR}/src/shared/ffx_message.cpp ${FFX_DIR}/src/shared/ffx_object_management.cpp
   ${FFX_DIR}/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp
+  ${FFX_DIR}/src/components/frameinterpolation/ffx_frameinterpolation.cpp
+  ${FFX_DIR}/src/components/opticalflow/ffx_opticalflow.cpp
+  ${FFX_DIR}/src/backends/shared/blob_accessors/ffx_frameinterpolation_shaderblobs.cpp
+  ${FFX_DIR}/src/backends/shared/blob_accessors/ffx_opticalflow_shaderblobs.cpp
   ${FFX_DIR}/src/backends/shared/ffx_shader_blobs.cpp
   ${FFX_DIR}/src/backends/shared/blob_accessors/ffx_fsr3upscaler_shaderblobs.cpp
   ${FFX_DIR}/src/backends/vk/ffx_vk.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_stubs.cpp)
 add_dependencies(veyamux_ffx ffx_shaders)
-target_compile_definitions(veyamux_ffx PRIVATE FFX_FSR3UPSCALER FFX_GCC)
+target_compile_definitions(veyamux_ffx PRIVATE FFX_FSR3UPSCALER FFX_FI FFX_OF FFX_GCC)
 target_compile_options(veyamux_ffx PRIVATE -w -include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_compat.h")
 target_include_directories(veyamux_ffx PRIVATE "${FFX_DIR}/src/components" "${FFX_DIR}/src/shared" "${FFX_DIR}/src/backends/shared" "${FFX_GEN_DIR}")
 target_include_directories(veyamux_ffx PUBLIC "${FFX_DIR}/include" "${FFX_DIR}/include/FidelityFX/host" "${FFX_DIR}/include/FidelityFX/host/backends/vk")
@@ -87,7 +91,7 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
-add_library(veyamux_core STATIC src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/MotionEstimator.cpp)
+add_library(veyamux_core STATIC src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
 target_include_directories(veyamux_core PUBLIC src)
 target_link_libraries(veyamux_core PUBLIC Vulkan::Vulkan veyamux_ffx Threads::Threads)
 target_compile_options(veyamux_core PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_compat.h")
@@ -109,7 +113,7 @@ add_dependencies(veyamux-play-test veyamux_shaders)
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")

@@ -37,12 +37,14 @@ struct Recorder::Mux {
     int64_t offV = -1;   // in kVideoTb
     bool ok = false;
 
-    bool open(const std::string& path, const Params& par, bool fragmented, std::string& err) {
-        int e = avformat_alloc_output_context2(&oc, nullptr, "mp4", path.c_str());
+    bool flv = false;
+    bool open(const std::string& path, const Params& par, bool fragmented, std::string& err, const char* format = "mp4") {
+        flv = std::strcmp(format, "flv") == 0;
+        int e = avformat_alloc_output_context2(&oc, nullptr, format, path.c_str());
         if (e < 0 || !oc) { err = averr(e); return false; }
         AVStream* vs = avformat_new_stream(oc, nullptr);
         avcodec_parameters_copy(vs->codecpar, par.v);
-        if (vs->codecpar->codec_id == AV_CODEC_ID_HEVC) vs->codecpar->codec_tag = MKTAG('h', 'v', 'c', '1');
+        if (vs->codecpar->codec_id == AV_CODEC_ID_HEVC && !flv) vs->codecpar->codec_tag = MKTAG('h', 'v', 'c', '1');
         else vs->codecpar->codec_tag = 0;
         vs->time_base = kVideoTb;
         vi = vs->index;
@@ -53,34 +55,39 @@ struct Recorder::Mux {
             as->time_base = kAudioTb;
             ai = as->index;
         }
-        if ((e = avio_open(&oc->pb, path.c_str(), AVIO_FLAG_WRITE)) < 0) { err = averr(e); close(); return false; }
+        AVDictionary* io = nullptr;
+        if (flv) av_dict_set(&io, "rw_timeout", "5000000", 0);   // a dead connection fails after 5 s instead of hanging
+        e = avio_open2(&oc->pb, path.c_str(), AVIO_FLAG_WRITE, nullptr, &io);
+        av_dict_free(&io);
+        if (e < 0) { err = averr(e); close(); return false; }
         AVDictionary* o = nullptr;
-        av_dict_set(&o, "movflags", fragmented ? "+frag_keyframe+empty_moov+default_base_moof" : "+faststart", 0);
+        if (!flv) av_dict_set(&o, "movflags", fragmented ? "+frag_keyframe+empty_moov+default_base_moof" : "+faststart", 0);
         e = avformat_write_header(oc, &o);
         av_dict_free(&o);
         if (e < 0) { err = averr(e); close(); return false; }
         ok = true;
         return true;
     }
-    // Takes a reference of p (p itself is left untouched).
-    void write(const AVPacket* p, bool video, bool key) {
-        if (!ok) return;
+    // Takes a reference of p (p itself is left untouched). False when writing failed (stream: connection lost).
+    bool write(const AVPacket* p, bool video, bool key) {
+        if (!ok) return false;
         if (offV < 0) {
-            if (!video || !key) return;
+            if (!video || !key) return true;
             offV = p->pts;
         }
-        if (!video && ai < 0) return;
+        if (!video && ai < 0) return true;
         const AVRational tb = video ? kVideoTb : kAudioTb;
         const int64_t off = video ? offV : av_rescale_q(offV, kVideoTb, kAudioTb);
-        if (p->pts < off) return;
+        if (p->pts < off) return true;
         AVPacket* q = av_packet_clone(p);
-        if (!q) return;
+        if (!q) return true;
         q->pts -= off;
         q->dts = (q->dts == AV_NOPTS_VALUE ? q->pts : q->dts - off);
         q->stream_index = video ? vi : ai;
         av_packet_rescale_ts(q, tb, oc->streams[q->stream_index]->time_base);
-        av_interleaved_write_frame(oc, q);
+        const int e = av_interleaved_write_frame(oc, q);
         av_packet_free(&q);
+        return e >= 0;
     }
     void close() {
         if (!oc) return;
@@ -93,7 +100,88 @@ struct Recorder::Mux {
     ~Mux() { close(); }
 };
 
+// The live stream: packets are handed to a sender thread (network writes can block); if it falls more than ~5 s
+// behind, the backlog is dropped and sending resumes at the next key frame.
+struct Recorder::StreamOut {
+    Recorder* r = nullptr;
+    std::string url;
+    std::shared_ptr<Params> par;
+    std::thread t;
+    std::mutex m;
+    std::condition_variable cv;
+    std::deque<std::pair<AVPacket*, bool>> q;   // packet, video
+    bool quit = false, waitingKey = true;
+    std::atomic<bool> failed{false};
+
+    void run() {
+        Mux mux;
+        std::string err;
+        if (!mux.open(url, *par, false, err, "flv")) {
+            failed = true;
+            r->message("Stream: could not connect (" + err + ")", true);
+            return;
+        }
+        r->message("stream-started", false);
+        for (;;) {
+            std::pair<AVPacket*, bool> p{nullptr, false};
+            {
+                std::unique_lock l(m);
+                cv.wait(l, [this] { return quit || !q.empty(); });
+                if (q.empty()) break;
+                p = q.front();
+                q.pop_front();
+            }
+            const bool ok = mux.write(p.first, p.second, (p.first->flags & AV_PKT_FLAG_KEY) != 0);
+            av_packet_free(&p.first);
+            if (!ok) { failed = true; r->message("Stream: connection lost", true); break; }
+        }
+        mux.close();
+    }
+    void push(const AVPacket* p, bool video) {
+        std::lock_guard l(m);
+        if (q.size() > 600) {   // ~5 s behind
+            for (auto& x : q) av_packet_free(&x.first);
+            q.clear();
+            waitingKey = true;
+        }
+        if (waitingKey) {
+            if (!video || !(p->flags & AV_PKT_FLAG_KEY)) return;
+            waitingKey = false;
+        }
+        if (AVPacket* c = av_packet_clone(p)) { q.emplace_back(c, video); cv.notify_one(); }
+    }
+    ~StreamOut() {
+        { std::lock_guard l(m); quit = true; }
+        cv.notify_all();
+        if (t.joinable()) t.join();
+        for (auto& x : q) av_packet_free(&x.first);
+    }
+};
+
 Recorder::Recorder() { thread_ = std::thread([this] { worker(); }); }
+
+void Recorder::startStream(const std::string& url, int kbps) {
+    { std::lock_guard l(qm_); streamUrl_ = url; targetKbps_ = std::clamp(kbps, 1000, 50000); streamStartPending_ = true; streamStopPending_ = false; }
+    streaming_ = true;
+    qcv_.notify_all();
+}
+
+void Recorder::stopStream() {
+    { std::lock_guard l(qm_); streamStopPending_ = true; streamStartPending_ = false; }
+    streaming_ = false;
+    qcv_.notify_all();
+}
+
+double Recorder::streamSeconds() const { return streamSec_.load(); }
+
+void Recorder::closeVideoEncoder() {
+    if (!venc_) return;
+    avcodec_send_frame(venc_, nullptr);
+    drainVideo();
+    avcodec_free_context(&venc_);
+    av_buffer_unref(&hwFrames_);
+    av_frame_free(&swFrame_);
+}
 
 Recorder::~Recorder() {
     { std::lock_guard l(qm_); quit_ = true; recStopPending_ = true; }
@@ -188,6 +276,50 @@ void Recorder::worker() {
             rec_.reset();
             message("recording-saved", false);
         }
+        bool sStart = false, sStop = false;
+        {
+            std::lock_guard l(qm_);
+            if (streamStopPending_ || quit_) { sStop = true; streamStopPending_ = false; }
+            if (streamStartPending_) { sStart = true; }
+        }
+        if (sStop && stream_) {
+            stream_.reset();
+            wantH264_ = false;
+            message("stream-stopped", false);
+        }
+        if (stream_ && stream_->failed.load()) {   // connection failed or lost
+            stream_.reset();
+            streaming_ = false;
+            wantH264_ = false;
+        }
+        if (sStart) {
+            wantH264_ = true;
+            const bool ready = venc_ && encName_.find("hevc") == std::string::npos && venc_->bit_rate == int64_t(targetKbps_) * 1000;
+            if (venc_ && !ready) {
+                if (rec_) {   // the open recording uses another encoder setting
+                    { std::lock_guard l(qm_); streamStartPending_ = false; }
+                    streaming_ = false;
+                    wantH264_ = false;
+                    message("Stop the recording before starting a stream", true);
+                } else {
+                    closeVideoEncoder();   // reopened with H.264 at the stream bit rate on the next frame
+                }
+            } else if (ready) {
+                { std::lock_guard l(qm_); streamStartPending_ = false; }
+                std::shared_ptr<Params> par;
+                { std::lock_guard l(ringM_); par = params_; }
+                auto so = std::make_unique<StreamOut>();
+                so->r = this;
+                { std::lock_guard l(qm_); so->url = streamUrl_; }
+                so->par = par;
+                StreamOut* raw = so.get();
+                so->t = std::thread([raw] { raw->run(); });
+                stream_ = std::move(so);
+                streamStart_ = Clock::now();
+                forceKey_ = true;
+            }
+        }
+        if (stream_) streamSec_ = std::chrono::duration<double>(Clock::now() - streamStart_).count();
         if (start) {
             std::shared_ptr<Params> par;
             { std::lock_guard l(ringM_); par = params_; }
@@ -255,6 +387,7 @@ bool Recorder::openVideo(int w, int h, std::string& err) {
     const Try tries[] = {{"hevc_vaapi", true}, {"h264_vaapi", true}, {"libx264", false}};
     for (const Try& t : tries) {
         if (t.hw && forceSw) continue;
+        if (wantH264_ && std::strstr(t.name, "hevc")) continue;   // RTMP: H.264
         if (!t.hw && h > 1440 && !std::getenv("VEYAMUX_REC_SOFTWARE")) continue;   // too slow on the CPU above 1440p
         const AVCodec* codec = avcodec_find_encoder_by_name(t.name);
         if (!codec) continue;
@@ -278,6 +411,10 @@ bool Recorder::openVideo(int w, int h, std::string& err) {
         c->bit_rate = int64_t(std::clamp(mpix * (hevc ? 10.0 : 14.0), 4.0, 80.0) * 1e6);   // ~20 Mbit/s HEVC at 1080p60
         c->rc_max_rate = c->bit_rate * 3 / 2;
         c->rc_buffer_size = int(c->bit_rate);
+        if (targetKbps_ > 0 && wantH264_) {   // live stream: constant bit rate
+            c->bit_rate = c->rc_max_rate = int64_t(targetKbps_) * 1000;
+            c->rc_buffer_size = int(c->bit_rate * 2);
+        }
         AVBufferRef* frames = nullptr;
         if (t.hw) {
             frames = av_hwframe_ctx_alloc(hwDevice_);
@@ -370,11 +507,8 @@ void Recorder::encodeVideo(Job& j) {
     if (venc_ && (j.w != vw_ || j.h != vh_)) {
         // The picture size changed: a recording cannot continue in the same file, the replay restarts.
         if (rec_) { rec_->close(); rec_.reset(); recording_ = false; message("recording-saved", false); }
-        avcodec_send_frame(venc_, nullptr);
-        drainVideo();
-        avcodec_free_context(&venc_);
-        av_buffer_unref(&hwFrames_);
-        av_frame_free(&swFrame_);
+        if (stream_) { stream_.reset(); streaming_ = false; wantH264_ = false; message("Stream stopped: the picture size changed", true); }
+        closeVideoEncoder();
     }
     if (!venc_) {
         std::string err;
@@ -455,6 +589,7 @@ void Recorder::drainAudio() {
 void Recorder::deliver(AVPacket* p, bool video) {
     const bool key = (p->flags & AV_PKT_FLAG_KEY) != 0;
     if (rec_) rec_->write(p, video, key);
+    if (stream_ && !stream_->failed.load()) stream_->push(p, video);
     if (replayOn_.load()) {
         Pkt k;
         k.p = p; k.video = video; k.key = key; k.gen = video ? gen_ : 0;
