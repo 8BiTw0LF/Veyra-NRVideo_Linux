@@ -415,7 +415,7 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
         if (r != ScreenCastStream::Result::Frame) return r == ScreenCastStream::Result::Timeout ? Result::Timeout : Result::Error;
         w_ = f.w; h_ = f.h;
         lastRepeat_ = false;
-        probe_.feed(f.data.data() + 1, f.w, f.h, f.stride, 4, f.captured);   // green ~ luma: measured picture rate
+        if (f.data.size() >= size_t(f.stride) * f.h) probe_.feed(f.data.data() + 1, f.w, f.h, f.stride, 4, f.captured);   // green ~ luma: measured picture rate
         rgba.swap(f.data);
         return Result::Frame;
     }
@@ -446,7 +446,8 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
         const auto r = sc_->readLatest(out, timeoutMs, error);
         if (r == ScreenCastStream::Result::Frame) {
             w_ = out.w; h_ = out.h;
-            probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);   // measured picture rate
+            if (out.data.size() >= size_t(out.stride) * out.h)
+                probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);   // measured picture rate
         }
         return r == ScreenCastStream::Result::Frame ? Result::Frame : r == ScreenCastStream::Result::Timeout ? Result::Timeout : Result::Error;
     }

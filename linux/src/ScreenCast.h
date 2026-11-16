@@ -49,7 +49,8 @@ private:
 
     std::mutex m_;
     std::condition_variable cv_;
-    std::vector<uint8_t> latest_;
+    std::vector<uint8_t> latest_;   // newest finished picture (under m_)
+    std::vector<uint8_t> spare_;    // PipeWire thread: the picture being written
     int lw_ = 0, lh_ = 0;
     bool fresh_ = false;
     bool failed_ = false;

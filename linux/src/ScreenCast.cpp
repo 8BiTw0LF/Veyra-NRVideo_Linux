@@ -276,11 +276,9 @@ void ScreenCastStream::onProcess() {
         const uint8_t* src = static_cast<const uint8_t*>(dd.data) + dd.chunk->offset;
         const size_t avail = dd.maxsize > dd.chunk->offset ? dd.maxsize - dd.chunk->offset : 0;
         if (w >= 2 && h >= 2 && size_t(y0 + h - 1) * stride + size_t(x0 + w) * 4 <= avail) {
-            std::vector<uint8_t> out;
-            {
-                std::lock_guard l(m_);
-                out.swap(latest_);       // reuse the old allocation
-            }
+            // written into a buffer of this thread's own; the newest finished picture (latest_) stays intact until
+            // it is swapped below, so the reader never gets a buffer that is being written
+            std::vector<uint8_t>& out = spare_;
             out.resize(size_t(w) * h * 4);
             for (int y = 0; y < h; ++y) {
                 const uint8_t* s = src + size_t(y0 + y) * stride + size_t(x0) * 4;
@@ -292,7 +290,7 @@ void ScreenCastStream::onProcess() {
                 }
             }
             std::lock_guard l(m_);
-            latest_.swap(out);
+            latest_.swap(out);           // spare_ now holds the previous picture (or the reader's old buffer)
             lw_ = w; lh_ = h;
             fresh_ = true;
             stamp_ = std::chrono::steady_clock::now();
@@ -307,6 +305,7 @@ ScreenCastStream::Result ScreenCastStream::readLatest(RawFrame& out, int timeout
     if (!cv_.wait_for(l, std::chrono::milliseconds(timeoutMs), [&] { return fresh_ || failed_; })) return Result::Timeout;
     if (failed_) { error = failMsg_; return Result::Error; }
     fresh_ = false;
+    if (latest_.size() < size_t(lw_) * lh_ * 4) return Result::Timeout;   // never hand out a short buffer
     out.fmt = RawFrame::RGBA;
     out.w = lw_; out.h = lh_; out.stride = lw_ * 4;
     out.repeat = false;
