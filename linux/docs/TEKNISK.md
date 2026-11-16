@@ -328,7 +328,7 @@ nyeste billede bruges; derefter går det samme live-spor som et capture-kort (Ra
 
 ## Genvejstaster
 Mellemrum afspil/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volumen · F fuldskærm · E forbedring til/fra · P panel · M lyd fra · O åbn ·
-C capture-kort · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
+C capture · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
 
 ## Arkitektur
 `VkContext` (Vulkan, ét universelt descriptor-layout t→0, u→16, b→32, s→48 via DXC `-fvk-*-shift`) → `EnhanceChain` →

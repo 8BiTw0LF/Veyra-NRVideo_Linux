@@ -5,287 +5,284 @@
 <h1 align="center">VeyAmux</h1>
 
 <p align="center">
-  A native <b>Linux</b> video player and capture-card viewer with GPU enhancement and Lossless Scaling frame generation,
-  shipped as a single <b>AppImage</b>.<br>
-  Zero-copy GPU path, <b>under 1 ms of CPU work per frame</b> at 4K; the menu shows the delay VeyAmux adds, measured live ·
-  GPL-3.0 ·
-  Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a> (Windows)
+  A <b>Linux</b> capture-card viewer and video player that enhances the picture on your graphics card,
+  <br>shipped as a single <b>AppImage</b>.
+</p>
+
+<p align="center">
+  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1) · noise reduction · frame generation (Lossless Scaling or free FSR&nbsp;3.1) ·
+  HDR · Retro TV (CRT) · replay, recording and live streaming · window or screen as a source
+  <br>
+  <a href="https://github.com/8BiTw0LF/VeyAmux/releases/latest"><b>Download the latest release</b></a> ·
+  GPL-3.0 · Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file and Capture buttons">
 </p>
 
 ---
 
 ## What is VeyAmux?
 
-VeyAmux is a Linux program, distributed as an AppImage that runs on most distributions without installation. It shows
-the picture from a capture card (a console or another PC) or plays a video file, and enhances it on the graphics card:
-upscaling, noise reduction, sharpening and colour. The frame rate can be doubled with **Lossless Scaling** frame
-generation.
+VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch or another PC), from a **window or a
+whole screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
-It is built for **low latency**. The capture card's frame is uploaded once and converted, enhanced and displayed
-entirely on the GPU, inside the UI's own Vulkan frame: no copy back to the CPU, no extra queue, and only the newest
-frame is ever shown.
+- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1 or Lanczos;
+- **remove noise**, grain and compression blocks;
+- **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1 frame generation;
+- **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
+- **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes);
+- **record, keep an instant replay and stream** to Twitch or YouTube, all encoded on the graphics card.
 
-What that means in numbers, measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (both) and
-FSR 1: **under 1 ms of CPU work** per frame and **about 7 ms of GPU work**. The menu shows one figure, *Delay in VeyAmux*:
-the time from the capture driver's timestamp until the picture is finished on the GPU. In that setup it reads
-**about 29–32 ms**; most of it is the picture waiting for the next display frame, not processing. Lighter settings
-(no noise reduction, no upscaling) lower it. The capture card, USB transfer, Lossless Scaling and the display add their
-own latency on top, as with any capture setup.
+It runs on most distributions without installing anything, and it is built for **low latency**. A captured frame is
+uploaded to the GPU once, and everything else happens there. VeyAmux needs well under 1 ms of CPU time per 4K frame.
 
-VeyAmux is a standalone Linux version (Qt 6 / QML, FFmpeg, Vulkan) based on Veyra-NRVideo by Likely7. Veyra's original
-HLSL shaders are reused, compiled to SPIR-V. NVIDIA- and Windows-specific parts (DLSS, NVOF, Reflex, AMD HIP-NR, etc.)
-are not included.
+Developed and tested on **Bazzite** (KDE Plasma) with an **AMD RX 9070 XT** and an **AVerMedia Live Gamer Ultra 2.1**.
 
-Developed and tested on **Bazzite** with an **AMD RX 9070 XT** and an **AVerMedia Live Gamer Ultra 2.1** (4K60 NV12).
+<p align="center">
+  <img src="docs/images/menu.png" width="628" alt="Part of VeyAmux's menu: upscaling with NIS, noise reduction, HDR, anti-aliasing, sound output with a live spectrum, Retro TV, Steam, OBS, instant replay and live streaming">
+  <br><sub>Part of the menu (P). The whole menu sits beside the picture, with everything visible at once and no scrolling.</sub>
+</p>
 
-## Does it need Lossless Scaling?
+## What do I need?
 
-**No — only frame generation does.**
+Only the AppImage and a graphics card with Vulkan (any recent AMD, Intel or NVIDIA driver). **Lossless Scaling is only
+needed for its own frame generation**, and everything else works without it:
 
-| Feature | Without Lossless Scaling | With Lossless Scaling + lsfg-vk |
+| Feature | VeyAmux alone | + Lossless Scaling and lsfg-vk |
 |---|:---:|:---:|
-| Capture card and video playback | ✅ | ✅ |
-| Upscaling (Lanczos / AMD FSR 1 / NVIDIA NIS / AMD FSR 3.1) | ✅ | ✅ |
-| Noise reduction, sharpening, FXAA, colour | ✅ | ✅ |
-| Repeated-frame removal (30 fps games in a 60 Hz signal) | ✅ | ✅ |
-| OBS browser source | ✅ | ✅ |
-| HDR capture (P010 → SDR), HDR video files, HDR output (experimental) and VRR mode | ✅ | ✅ (VRR only with frame generation off) |
-| Instant replay, recording and screenshots | ✅ | ✅ (recorded before Lossless Scaling, so at the game's frame rate) |
-| Profiles per source, audio delay | ✅ | ✅ |
-| **Frame generation 2× / 3×** | ❌ | ✅ |
-
-Frame generation (*Fixed 2×*) is selected by default. If Lossless Scaling or lsfg-vk is missing, everything else runs
-normally and the menu tells you what is missing. Frame generation can also be turned *Off*.
+| Capture cards, video files, windows and screens | ✅ | ✅ |
+| Upscaling: FSR 1, NIS, FSR 3.1, Lanczos | ✅ | ✅ |
+| Noise reduction, sharpness, anti-aliasing (FXAA), colour | ✅ | ✅ |
+| HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
+| Retro TV (CRT-Geom) | ✅ | ✅ |
+| Instant replay, recording, screenshots, live streaming, OBS | ✅ | ✅ |
+| Sound output choice, sound meter, audio delay, profiles | ✅ | ✅ |
+| **Frame generation 2×**: AMD FSR 3.1 (free, inside VeyAmux) | ✅ | ✅ |
+| **Frame generation 2× / 3×**: Lossless Scaling (best quality) | – | ✅ |
 
 > Lossless Scaling is a paid application on Steam (by THS). lsfg-vk (CC BY-NC-ND 4.0) is a separate open-source project
-> that runs Lossless Scaling's frame generation on Linux. Neither is included with VeyAmux — VeyAmux finds and uses
-> **your own** installation.
+> that runs its frame generation on Linux. Neither is included: VeyAmux finds and uses **your own** installation.
 
 ## Features
 
-**Sources**
-- **Capture cards** via V4L2 (YUYV, UYVY, NV12, P010, I420, RGB, MJPEG) with a choice of resolution, frame rate and audio
-  source. Zero-copy GPU path (see above). If the card drops out, or stalls when the console switches resolution,
-  refresh rate or HDR, VeyAmux reconnects by itself.
-- **A window or a whole screen** (Wayland: KDE Plasma, GNOME, ...): pick *Window or screen …* in the capture dialog and
-  your desktop asks what to share. The program's picture then gets the same upscaling, frame generation, recording and
-  streaming as a capture card. Uses the desktop's screen-share portal and PipeWire (the same route as OBS); the choice
-  is remembered for `--capture last`.
-- **Video files** via FFmpeg with VAAPI hardware decoding (AMD/Intel), audio through PipeWire/PulseAudio.
-- **HDR capture (P010)** and **HDR video files** (HDR10/PQ and HLG): BT.2020 HDR is tone-mapped properly to your SDR
-  display (BT.2390, using Veyra's own HDR functions) instead of looking washed out.
-- **HDR output (experimental)**: on a desktop with HDR turned on (KDE Plasma 6, GNOME 48 or newer), VeyAmux can draw
-  into an HDR swapchain (HDR10 or scRGB), so HDR sources keep their highlights up to the display's peak brightness and
-  their full BT.2020 colours. Turn it on under *HDR output* in the menu and restart. Recordings, screenshots and OBS
-  still get normal SDR.
-- **gamescope start** (experimental, only with `VEYAMUX_GAMESCOPE=1`): runs VeyAmux fullscreen inside gamescope. On some
-  systems gamescope's WSI layer rejects VeyAmux's window; HDR and VRR also work directly on Wayland.
-- **Start on plug-in**: VeyAmux can open by itself, fullscreen, when the capture card is plugged in.
-- **Frame-time overlay** (F3): a graph of the last two seconds with fps, 1%-low, jitter and the delay in VeyAmux.
-- **HDR display brightness** is read from the display's EDID automatically (*Auto*).
-- **Steam / Game Mode**: *Add to Steam* puts VeyAmux in your Steam library as a non-Steam game that starts fullscreen on
-  the last capture card, also from Big Picture and Bazzite's Game Mode.
-- **Sound output and levelling**: pick the output device (headset, speakers, TV) and turn on *Even out loudness* for a
-  steadier volume. A live **spectrum** of the source's sound shows whether sound is coming in at all.
-- **Mute for you, not for viewers**: mute (M) and the volume only change your speakers. Recordings, replays and the live
-  stream always get the source's sound.
-- **Low-latency audio**: the capture card's sound is passed through in 5 ms blocks (`VEYAMUX_AUDIO_MS` changes it).
-- **Audio delay** (−300 … +300 ms) to line up the sound with the processed picture, and **profiles**: save the picture
-  settings under a name, switch with keys 1–9, and bind a profile to a capture signal so it is applied automatically.
-- **VRR mode**: shows the game's own frames at an even pace (e.g. 45 fps) so a VRR display can follow the game.
-- **Free frame generation**: without Lossless Scaling, *AMD FSR 3.1 2× (free)* doubles the frame rate inside VeyAmux
-  (open source, any GPU, live capture). The motion is estimated from the pictures, so the quality is below Lossless
-  Scaling, and the real frame is shown half a frame later.
-- **120 Hz signals**: when the capture runs at about 120 fps, frame generation pauses automatically (2× would ask for
-  240 fps and only add latency) and resumes when it drops below 80 fps.
-- The info line shows what the game **actually** runs at, not just the signal, e.g.
-  `≈1920×1080 @ 30 fps → 60 fps (Lossless Scaling 2×) · signal 3840×2160 NV12 @ 60.00 fps`.
+### Sources
+- **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
+  one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
+  VeyAmux reconnects by itself.
+- **A window or a whole screen** (Wayland: KDE Plasma, GNOME, …): choose *Window or screen …* under **Capture**, and your
+  desktop asks what to share, the same way OBS and Discord do. The picture gets all of VeyAmux's processing.
+- **Video files** through FFmpeg, with hardware decoding (VA-API) on AMD and Intel.
+- **What the game really runs at**: the info line shows the measured frame rate and an estimate of the game's own
+  rendering resolution, not just the signal. Example: `≈1920×1080 @ 30 fps → 60 fps (Lossless Scaling 2×) · signal 3840×2160 NV12 @ 60 fps`.
 
-**Picture enhancement**
-- **Upscaling** 1.5× / 2× / 3× with Lanczos-3, **AMD FSR 1** (EASU edge-adaptive upscaling + RCAS sharpening, frame by
-  frame, no added latency), **NVIDIA Image Scaling** (NIS: 6-tap directional scaling + adaptive sharpening, runs on any
-  GPU, frame by frame) or **AMD FSR 3.1** (FidelityFX SDK 1.1.4, fed by VeyAmux's own motion estimation, since video
-  has no motion vectors).
-- **Noise reduction**: *Spatial* (non-local means), *Temporal* (motion-compensated average over several frames) or
-  *Both*, in three strengths. Removes grain, dithering and compression noise, so *Sharpness* can be raised without
-  sharpening the noise.
-- **Sharpness** (contrast-adaptive), **FXAA** (Veyra's original shaders), exposure, contrast and saturation.
-- **Retro TV**: makes the picture look like an old CRT television, with a curved screen, rounded corners, scanlines and an
-  aperture-grille phosphor mask. This is CRT-Geom as in ShaderGlass' `crt-geom` preset (cgwg, Themaister and DOLLS,
-  GPL-2.0+). Choose 240 or 480 scanlines, or the source's own. It replaces the upscaling method.
+### Picture
+- **Upscaling** 1.5× / 2× / 3×:
+  - **AMD FSR 1**: edge-aware upscaling with sharpening, frame by frame, no added latency.
+  - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
+  - **AMD FSR 3.1**: temporal upscaling, fed by VeyAmux's own motion estimation.
+  - **Lanczos**: sharp and classic.
+- **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
+  dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
+- **Sharpness**, **anti-aliasing** (FXAA from Veyra), **exposure**, **contrast** and **saturation**.
+- **Retro TV**: turns the picture into an old CRT television, with a slightly curved glass screen, rounded corners,
+  visible scanlines and red-green-blue phosphor stripes. This is CRT-Geom with the same settings as ShaderGlass'
+  `crt-geom` preset. Choose 240 lines (old consoles), 480 lines (PS2 / GameCube era) or the source's own lines.
 
-**Frame generation (Lossless Scaling)**
-- *Fixed 2×* (default) and *Fixed 3×* through lsfg-vk, for VeyAmux's own window only. VeyAmux finds Lossless Scaling
-  in all Steam libraries (Flatpak Steam included) and writes its own lsfg-vk profile; the rest of your lsfg-vk setup is
-  left untouched.
-- **Performance mode** (lighter model) and an automatic *flow scale* based on the screen resolution.
-- **Repeated frames are dropped**: a 30 fps game in a 60 Hz signal gives 30 distinct frames, which Lossless Scaling
-  then turns into smooth 60 fps instead of 60 fps with duplicated frames.
-- Status and the lsfg-vk log are shown in the menu. If VeyAmux crashes during start-up with lsfg-vk, it is turned off
-  automatically until you press *Try again*.
+<p align="center">
+  <img src="docs/images/retro-tv.png" width="800" alt="The same picture without and with Retro TV: curved glass, rounded corners and scanlines">
+</p>
 
-**Instant replay, recording and screenshots**
-- **Instant replay** keeps the last 30/60/120 seconds in memory; **F9** saves them as an MP4. **F10** starts/stops a
-  recording, **F12** saves a PNG screenshot. Files go to `~/Videos/VeyAmux` and `~/Pictures/VeyAmux`.
-- What is recorded is VeyAmux's finished picture (after upscaling, noise reduction and colour), with the sound, at
-  720p/1080p/1440p or the original size. Encoding runs on the graphics card through **VA-API** (HEVC, or H.264), with
-  libx264 as a fallback up to 1440p; the picture is converted to NV12 on the GPU, so the display path is not slowed down.
+### Frame generation
+- **Lossless Scaling** *Fixed 2×* and *Fixed 3×* through lsfg-vk, for VeyAmux's window only. VeyAmux finds Lossless
+  Scaling in all Steam libraries (Flatpak included), writes its own lsfg-vk profile and leaves your other lsfg-vk
+  settings alone. It has a *performance mode* and an automatic flow scale.
+- **AMD FSR 3.1 2× (free)**: frame generation inside VeyAmux for players without Lossless Scaling (open source, any GPU,
+  capture cards). The motion is estimated from the pictures, so the quality is below Lossless Scaling, and the real
+  frame is shown half a frame later.
+- **Smarter input**: a 30 fps game in a 60 Hz signal repeats every picture. VeyAmux drops the repeats, so frame
+  generation turns 30 distinct frames into smooth 60.
+- **120 Hz rule**: when the capture runs at about 120 fps, frame generation pauses (doubling would only add latency) and
+  resumes below 80 fps.
+- **VRR mode**: with frame generation off, VeyAmux shows the game's own frames at an even pace (e.g. 45 fps), so a VRR
+  display can follow the game.
 
-**Live streaming**
-- **Go live** straight to Twitch, YouTube or your own RTMP server: VeyAmux's finished picture and sound, H.264 encoded
-  on the GPU at 3500/6000/8000 kbps, without OBS. Recordings and the replay keep running at the same time.
+### HDR
+- **HDR capture (P010)** and **HDR video files** (HDR10 / PQ and HLG) are tone-mapped properly for an SDR screen (BT.2390,
+  Veyra's own HDR functions) instead of looking washed out. You set the source's peak brightness to match the game's
+  HDR calibration.
+- **HDR output** (experimental): on an HDR desktop (KDE Plasma 6, GNOME 48 or newer), VeyAmux sends real HDR10 or scRGB
+  to the screen, with the full BT.2020 colours and highlights up to the screen's peak brightness, which it reads
+  automatically from the screen (EDID). Recordings, screenshots and OBS still get normal SDR.
 
-**Streaming and UI**
-- **OBS browser source**: VeyAmux serves the finished picture (after all enhancements) as MJPEG on `127.0.0.1:47920`.
-  Save an HTML file wherever you like and add it in OBS as *Browser → Local file*.
-- Menu at half the screen width with every setting visible, no scrolling. English and Danish (chosen automatically).
+### Sound
+- **Sound output**: pick any output (TV, headset, speakers, virtual surround). It switches while playing.
+- **Sound from the source**: a live spectrum shows whether sound is coming in from the card or file at all.
+- **Mute for you, not for your viewers**: mute (**M**) and the volume only affect your speakers. Recordings, replays and
+  the live stream always get the sound.
+- **Even out loudness**, **audio delay** (−300 … +300 ms, to match the processed picture), and low-latency pass-through
+  of the capture card's sound (5 ms blocks).
+
+### Record, replay and stream
+- **Instant replay** keeps the last 30, 60 or 120 seconds. **F9** saves them, **F10** records, and **F12** takes a
+  screenshot.
+- **Live streaming** to **Twitch**, **YouTube** or your own RTMP server at 3500, 6000 or 8000 kbps, without OBS. The
+  replay and recordings keep running at the same time.
+- Everything is the finished, enhanced picture with the sound, encoded on the graphics card (VA-API HEVC / H.264), so
+  the display does not slow down.
+- **OBS browser source**: VeyAmux can also hand its finished picture to OBS.
+
+### Everyday use
+- **Profiles**: save the picture settings under a name and switch with **1–9**. Bind a profile to a capture signal, and
+  it is applied automatically.
+- **Frame-time overlay** (**F3**): a graph with fps, 1 % low, jitter and the delay inside VeyAmux.
+- **Add to Steam**: VeyAmux becomes a non-Steam game that starts fullscreen on the last source, also from Big Picture
+  and Bazzite's Game Mode.
+- **Start when the capture card is plugged in**: a small background helper opens VeyAmux fullscreen as soon as the card
+  appears.
+- **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
+- **English and Danish**, chosen automatically. The whole menu is visible at once, with no scrolling.
+
+## Latency
+
+Measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (*Both*) and FSR 1, VeyAmux needs:
+- **under 1 ms of CPU work** per frame,
+- **about 7 ms of GPU work** per frame.
+
+The menu shows *Delay in VeyAmux*, the time from the capture driver's timestamp until the picture is finished. In that
+setup it reads about 29–32 ms, and most of it is the picture waiting for the next display refresh, not processing.
+Lighter settings lower it. The capture card, USB, Lossless Scaling and the display add their own latency on top, as
+with any capture setup.
 
 ## Installation
 
-### 1. VeyAmux (AppImage)
+### 1. VeyAmux
 
-Download `VeyAmux-x86_64.AppImage` from **Releases** and make it executable:
+Download `VeyAmux-x86_64.AppImage` from **[Releases](https://github.com/8BiTw0LF/VeyAmux/releases/latest)**, make it
+executable and start it:
 
 ```sh
 chmod +x VeyAmux-x86_64.AppImage
 ./VeyAmux-x86_64.AppImage
 ```
 
-Or start straight on the capture card: `./VeyAmux-x86_64.AppImage --capture /dev/video0`.
+Or install it with **[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)**, which also keeps it up to date.
 
-**Updates:** the AppImage knows where its updates come from (GitHub Releases). In **Gear Lever** press *Check for
-updates*; with **AppImageUpdate** run `appimageupdatetool VeyAmux-x86_64.AppImage`. Only the changed parts are
-downloaded (zsync).
+The AppImage contains everything it needs (Qt, FFmpeg, shaders), and nothing is installed on the system. If FUSE is
+missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
 
-The AppImage contains everything it needs (Qt, FFmpeg, shaders); nothing is installed on the system. A Vulkan driver is
-required (Mesa RADV ships with Bazzite, Fedora, SteamOS and most distributions). Without FUSE:
-`APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
+Press **C** (or **Capture**) to choose a capture card, window or screen. Press **P** (or ✨) for the menu.
 
-### 2. Lossless Scaling (frame generation only)
+### 2. Lossless Scaling (only for its frame generation)
 
-1. Buy and install **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** on Steam.
-   It does not need to be started.
-2. Select the **lsfg-vk** branch: Steam → *Library* → right-click *Lossless Scaling* → *Properties* → *Betas* tab →
-   choose **lsfg-vk** in the list (not "beta" or "None"). Let Steam update. (lsfg-vk 2 uses the file `lsfg-vk.dll`
-   from this branch; the default branch only has `Lossless.dll`, and VeyAmux will tell you so.)
+1. Buy and install **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** on Steam. You
+   do not need to start it.
+2. Choose the **lsfg-vk** branch: Steam → *Library* → right-click *Lossless Scaling* → *Properties* → *Betas* →
+   **lsfg-vk**, and let Steam update. (lsfg-vk 2 needs `lsfg-vk.dll` from that branch. The default branch only has
+   `Lossless.dll`, and VeyAmux will tell you so.)
 
-### 3. lsfg-vk 2 (frame generation only)
+### 3. lsfg-vk 2 (only for Lossless Scaling)
 
-The official guide is at **[lsfg-vk.dev](https://lsfg-vk.dev/docs/installation/)**. In short:
+The official guide is at **[lsfg-vk.dev](https://lsfg-vk.dev/docs/installation/)**.
 
-**Bazzite, Fedora Atomic and other distributions without a package** — install into your home folder (the system is
-not touched):
+**Bazzite, SteamOS, Fedora Atomic and others without a package** (installs into your home folder):
 
-1. Download the latest build (`.tar.xz`) from **[builds.lsfg-vk.dev](https://builds.lsfg-vk.dev)**.
-2. Extract it into `~/.local`:
-   ```sh
-   tar -xvf lsfg-vk-*.tar.xz -C ~/.local
-   ```
-3. Check the installation (finds missing files and leftovers from lsfg-vk 1.x):
-   ```sh
-   ~/.local/bin/lsfg-vk-cli healthcheck
-   ```
-
-**Arch Linux** (AUR, not maintained by the lsfg-vk author):
 ```sh
-yay -S lsfg-vk        # or lsfg-vk-bin / lsfg-vk-git
+# download the latest .tar.xz from https://builds.lsfg-vk.dev, then:
+tar -xvf lsfg-vk-*.tar.xz -C ~/.local
+~/.local/bin/lsfg-vk-cli healthcheck
 ```
 
-**SteamOS**: same as Bazzite (tarball into `~/.local`).
+**Arch Linux** (AUR): `yay -S lsfg-vk`
 
-lsfg-vk's own UI (`lsfg-vk-ui`) and profiles are **not** needed for VeyAmux — VeyAmux writes its own profile
-(`~/.config/VeyAmux/lsfg-vk.toml`) and enables lsfg-vk for its own window. If you have an older lsfg-vk 1.x, remove it
-first (VeyAmux requires 2.0 or newer).
+You don't need lsfg-vk's own UI or profiles. VeyAmux writes its own profile (`~/.config/VeyAmux/lsfg-vk.toml`). Remove
+an old lsfg-vk 1.x first.
 
-### 4. Turn on frame generation in VeyAmux
+### 4. Turn on frame generation
 
-1. Start VeyAmux and press **P** (or the ✨ button) to open the menu.
-2. Under *Frame generation*, choose **Fixed 2× (doubles)** (the default). If the layer has to be loaded first, the menu
-   shows *Restart now* — press it.
-3. The status box should say **"Active through lsfg-vk"** and show a line from the lsfg-vk log, e.g.
-   `lsfg-vk is loaded: [INFO]: Using profile with name 'VeyAmux'`.
+Open the menu (**P**). Under *Frame generation*, choose **Fixed 2×** (Lossless Scaling) or **AMD FSR 3.1 2× (free)**. If
+the menu shows *Restart now*, press it. With Lossless Scaling, the status box should say **"Active through lsfg-vk"**.
 
-**Important — refresh rate:** lsfg-vk 2 has no frame pacing, so motion is only smooth when the display's refresh rate
-matches the result. 60 fps × 2 = 120 fps → set the display to **120 Hz** (or 240 Hz) and turn VRR/adaptive sync off for
-VeyAmux. A 30 fps game × 2 = 60 fps fits 60/120 Hz.
+**Refresh rate:** lsfg-vk has no frame pacing, so set the display to the result. 60 fps × 2 = 120 fps needs a 120 Hz
+display. Turn VRR / adaptive sync off for VeyAmux.
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---|---|
-| The menu says Lossless Scaling was not found | Install it through Steam (step 2). If it is in an unusual place, use *Choose folder…* in the menu. |
-| "Only Lossless.dll was found" | Select the **lsfg-vk** branch in Steam (step 2). |
-| "lsfg-vk is not installed" / older lsfg-vk (1.x) | Install lsfg-vk 2 (step 3) and run `lsfg-vk-cli healthcheck`. |
-| Frame generation turned off after a crash | Press *Try again* in the menu. Start without lsfg-vk: `VEYAMUX_LSFG=0 ./VeyAmux-x86_64.AppImage` |
-| Motion does not look smoother | The display's refresh rate must match (see above). Log: `~/.config/VeyAmux/lsfg-vk.log` |
-| "VIDIOC_S_FMT: Device or resource busy" | Another program (or a hung VeyAmux) is using the capture card. VeyAmux retries for 5 seconds and shows which program holds the card. |
-| HDR games look washed out | Choose a **P010 (HDR)** mode in the capture dialog (C) and set *HDR capture: source peak brightness* to match the game's HDR calibration. |
-| Stutter in games below 60 fps without Lossless Scaling | *Frame generation → Off → VRR* (restart), turn on *Adaptive sync* in the KDE display settings, run VeyAmux fullscreen. |
-| Recording says "no usable video encoder" | VA-API needs the Mesa VA driver: `vainfo` should list HEVC/H.264 *EncSlice*. On Bazzite/Fedora it is `mesa-va-drivers` (included in Bazzite). |
-| HDR output says "no HDR swapchain" | Turn on HDR for the display in the system settings (KDE: *Display & Monitor → High Dynamic Range*) and restart VeyAmux. |
-| Lossless Scaling's generated frames are missing in OBS | The browser source gets VeyAmux's picture *before* lsfg-vk. Use OBS's *Screen Capture (PipeWire)* of the VeyAmux window instead. |
+| Lossless Scaling was not found | Install it through Steam (step 2). If it is somewhere unusual, use *Choose folder…* in the menu. |
+| "Only Lossless.dll was found" | Choose the **lsfg-vk** branch in Steam (step 2). |
+| "lsfg-vk is not installed" or an old 1.x | Install lsfg-vk 2 (step 3) and run `lsfg-vk-cli healthcheck`. |
+| Frame generation turned off after a crash | Press *Try again* in the menu. To start without lsfg-vk: `VEYAMUX_LSFG=0 ./VeyAmux-x86_64.AppImage` |
+| Motion does not look smoother | The display's refresh rate must match (see step 4). Log: `~/.config/VeyAmux/lsfg-vk.log` |
+| "Device or resource busy" | Another program (or a hung VeyAmux) uses the capture card. VeyAmux retries for 5 seconds and shows which program holds it. |
+| No 4K @ 60 HDR mode | Many cards only send HDR (P010) at 4K30 or 1440p60 over USB. Use 4K60 NV12 (SDR), 1440p60 P010 with upscaling, or 4K30 P010 with frame generation. |
+| HDR games look washed out | Choose a **P010 (HDR)** mode under Capture (C), and set *HDR capture: source peak brightness* to the game's HDR calibration. |
+| HDR output says "no HDR swapchain" | Turn on HDR for the display (KDE: *Display & Monitor → High Dynamic Range*) and restart VeyAmux. On Bazzite, also set `ENABLE_HDR_WSI=1`. |
+| *Window or screen* is missing or does nothing | It needs a Wayland desktop with xdg-desktop-portal and PipeWire (standard on KDE Plasma and GNOME). |
+| "Sound from the source" says *No sound* | Choose the capture card's audio under Capture (C). With a window or screen, the program plays its own sound. |
+| Stutter in games below 60 fps (no frame generation) | *Frame generation → Off → VRR* (restart), turn on *Adaptive sync* in the display settings, and run fullscreen. |
+| Recording says "no usable video encoder" | VA-API needs the Mesa VA driver (`vainfo` should list HEVC / H.264 *EncSlice*). Bazzite has it. |
+| Lossless Scaling's extra frames are missing in OBS | The browser source gets the picture *before* lsfg-vk. Capture the VeyAmux window with OBS's *Screen Capture (PipeWire)* instead. |
 
 ## Keyboard shortcuts
 
-Space play/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volume · **F** fullscreen · **E** enhancement on/off ·
-**P** menu · **M** mute · **O** open file · **C** capture card · **F3** frame-time overlay · **1–9** profiles · **F9** save replay ·
-**F10** record · **F12** screenshot
+**Space** play/pause · **←/→** ±5 s (Shift ±30 s) · **↑/↓** volume · **F** fullscreen · **E** enhancement on/off ·
+**P** menu · **M** mute (your speakers only) · **O** open file · **C** capture · **F3** frame-time overlay ·
+**1–9** profiles · **F9** save replay · **F10** record · **F12** screenshot
 
-## What was done in the Linux port
+## Command line
 
-Besides porting Veyra-NRVideo from Windows (D3D12/C#) to Linux (Vulkan/Qt 6/FFmpeg) as a self-contained AppImage:
+| Option | What it does |
+|---|---|
+| `--capture /dev/video0` | Start on that capture card. |
+| `--capture last` | Start on the last source (the card, even under a new `/dev/videoN`, or the last shared window). |
+| `--capture screencast` | Open the desktop's share dialog for a window or screen. |
+| `--fullscreen` | Start fullscreen. |
+| `--panel` / `--dialog` | Start with the menu or the Capture dialog open. |
+| `--reset-ui` | Test the graphics path again (after a driver or desktop change). |
 
-- **Low-latency capture path**: V4L2 → Vulkan directly inside Qt's frame (NV12/YUYV/UYVY/P010 conversion on the GPU),
-  under 1 ms of CPU work per frame at 4K; retries, shows which program holds the card when it is "busy", and
-  reconnects when the card drops out or stalls on a signal change.
-- **Content measurement**: the real frame rate (new frames per second, with noise filtering) and an estimate of the
-  game's actual rendering resolution (FFT analysis of the mirrored spectrum that upscaling leaves behind).
-- **Repeated-frame removal** before processing, so frame generation interpolates between distinct frames.
-- **AMD FSR 3.1 upscaling** on Linux (FidelityFX SDK 1.1.4, shader generation rebuilt for Linux) with its own
-  sub-pixel motion estimation (Lucas-Kanade pyramid). Measured on video it is softer than Lanczos, which is therefore
-  the default.
-- **Noise reduction** (non-local means and motion-compensated temporal), measured on synthetic noise: from 31 dB up to
-  37–41 dB without losing fine detail.
-- **HDR capture (P010)** and HDR video files with BT.2390 tone mapping to SDR, experimental **HDR output** (HDR10 or
-  scRGB swapchain, BT.2020 colour), and a **VRR mode** that paces the game's own frames evenly.
-- **gamescope start** and **Add to Steam** (non-Steam game shortcut written to `shortcuts.vdf`).
-- **AMD FSR 1** upscaling (EASU + RCAS from the FidelityFX SDK headers).
-- **NVIDIA Image Scaling (NIS)** upscaling (NIS SDK, MIT, linear-HDR mode).
-- **GPU timing**: Vulkan timestamp queries per stage, shown live in the menu.
-- **Instant replay, recording and screenshots** with VA-API hardware encoding (NV12 conversion on the GPU).
-- **Profiles** per source with automatic switching, and an **audio delay** setting.
-- **Automatic updates**: the AppImage carries update information for GitHub Releases (Gear Lever / AppImageUpdate).
-- **Lossless Scaling integration** through lsfg-vk 2: detection in all Steam libraries, own profile, 2×/3×,
-  performance mode, flow scale from resolution, log in the menu, crash protection.
-- **OBS browser source** (local MJPEG server with GPU downscaling).
-- Renamed to **VeyAmux** with a new logo, Danish translation, menu without scrolling.
+Environment variables and technical details (in Danish): [docs/TEKNISK.md](docs/TEKNISK.md).
 
-Tried and removed again: AMD FSR 3.1 *frame generation* (fine detail flickered while panning), RIFE (neural frame
-generation — too slow in practice), an adaptive Lossless Scaling multiplier, and a RIFE + Lossless Scaling combination.
+## About the Linux port
 
-Not possible on Linux: FSR 4 (closed Windows DLLs only), DLSS and NVIDIA-specific features, and Veyra's "AMD NR" (runs
-NVIDIA's DLSS network on AMD through Windows HIP with weights taken from NVIDIA's DLL).
+VeyAmux is a standalone Linux version (Vulkan, Qt 6 / QML, FFmpeg) of Veyra-NRVideo by Likely7 (Windows, D3D12 / C#).
+Veyra's original HLSL shaders are reused, compiled to SPIR-V. Built for Linux:
+- **Capture:** the low-latency capture path (V4L2 straight into the UI's Vulkan frame, with format conversion on the
+  GPU), the content measurement (real frame rate and rendering resolution), and the window and screen source (portal
+  and PipeWire).
+- **Processing:** FSR 1, NIS and FSR 3.1 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1 frame
+  generation, HDR output and Retro TV.
+- **Output:** recording, replay and streaming, and the Lossless Scaling integration.
 
-Technical documentation, measurements and environment variables (in Danish): [docs/TEKNISK.md](docs/TEKNISK.md).
+Not possible on Linux: FSR 4 (closed Windows DLLs only), DLSS and other NVIDIA-only features, and Veyra's "AMD NR" (it
+runs NVIDIA's DLSS network through Windows HIP).
 
 ## Building from source
 
 ```sh
 sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-tools qt6-base-dev qt6-declarative-dev \
   qt6-svg-dev qt6-wayland libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
-  libpulse-dev libva-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts \
-  qt6-shader-baker zsync
+  libpulse-dev libva-dev libpipewire-0.3-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts \
+  qml6-module-qtqml-workerscript qt6-shader-baker zsync
 ./scripts/build-appimage.sh          # -> dist/VeyAmux-x86_64.AppImage
 ```
 
-`scripts/fetch-tools.sh` downloads DXC (HLSL → SPIR-V), linuxdeploy and appimagetool automatically (Ubuntu 24.04
-package names).
+`scripts/fetch-tools.sh` downloads DXC (HLSL → SPIR-V), linuxdeploy and appimagetool (Ubuntu 24.04 package names above).
 
 ## License and credits
 
-- VeyAmux: **GPL-3.0**, like the original [Veyra-NRVideo](https://github.com/Likely7/Veyra-NRVideo) by Likely7, which
-  VeyAmux is built on (shaders and processing design).
-- AMD FidelityFX SDK 1.1.4 (MIT), Qt 6 and FFmpeg (LGPL), SPIRV-Reflect (Apache-2.0) — see
-  [THIRD_PARTY_NOTICES_LINUX.md](THIRD_PARTY_NOTICES_LINUX.md).
+- VeyAmux is licensed under **GPL-3.0**, like [Veyra-NRVideo](https://github.com/Likely7/Veyra-NRVideo) by Likely7,
+  which it is built on (shaders and processing design).
+- **Third-party code:**
+  - AMD FidelityFX SDK 1.1.4 (MIT)
+  - NVIDIA Image Scaling SDK (MIT)
+  - CRT-Geom by cgwg, Themaister and DOLLS (GPL-2.0+), as used in [ShaderGlass](https://github.com/mausimus/ShaderGlass)
+  - Qt 6 and FFmpeg (LGPL)
+  - PipeWire headers (MIT)
+  - SPIRV-Reflect (Apache-2.0)
+
+  See [THIRD_PARTY_NOTICES_LINUX.md](THIRD_PARTY_NOTICES_LINUX.md).
 - [lsfg-vk](https://lsfg-vk.dev) and [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) are
-  **not** part of VeyAmux; no code, shaders or DLLs from them are copied or distributed.
+  **not** part of VeyAmux. No code, shaders or DLLs from them are copied or distributed.
