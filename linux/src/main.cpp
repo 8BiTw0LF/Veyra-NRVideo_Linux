@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux19");
+    QCoreApplication::setApplicationVersion("2.1.5-linux20");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -164,7 +164,9 @@ int main(int argc, char** argv) {
             qWarning("The last start inside gamescope did not come up; gamescope start switched off");
         }
     }
-    if (!probing && QSettings().value("ui/gamescope", false).toBool() && qEnvironmentVariable("VEYAMUX_GAMESCOPE") != "0"
+    // Experimental and opt-in only via VEYAMUX_GAMESCOPE=1: on some systems gamescope's WSI layer rejects the swapchain
+    // ("Creating swapchain for non-Gamescope swapchain") and pressing OK can freeze the desktop.
+    if (!probing && QSettings().value("ui/gamescope", false).toBool() && qEnvironmentVariable("VEYAMUX_GAMESCOPE") == "1"
         && !qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") && !qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE")) {
         const QString gs = QStandardPaths::findExecutable("gamescope");
         if (gs.isEmpty()) {

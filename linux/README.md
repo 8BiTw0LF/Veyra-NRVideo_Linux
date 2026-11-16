@@ -74,8 +74,8 @@ normally and the menu tells you what is missing. Frame generation can also be tu
   into an HDR swapchain (HDR10 or scRGB), so HDR sources keep their highlights up to the display's peak brightness and
   their full BT.2020 colours. Turn it on under *HDR output* in the menu and restart. Recordings, screenshots and OBS
   still get normal SDR.
-- **gamescope start** (optional): runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync (VRR)
-  even through XWayland.
+- **gamescope start** (experimental, only with `VEYAMUX_GAMESCOPE=1`): runs VeyAmux fullscreen inside gamescope. On some
+  systems gamescope's WSI layer rejects VeyAmux's window; HDR and VRR also work directly on Wayland.
 - **Start on plug-in**: VeyAmux can open by itself, fullscreen, when the capture card is plugged in.
 - **Frame-time overlay** (F3): a graph of the last two seconds with fps, 1%-low, jitter and the delay in VeyAmux.
 - **HDR display brightness** is read from the display's EDID automatically (*Auto*).

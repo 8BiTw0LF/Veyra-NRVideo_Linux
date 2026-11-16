@@ -163,7 +163,8 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
   ingen Vulkan-valideringsfejl. Ikke testet på en ægte HDR-skærm.
 
 ## gamescope og Steam
-- *Start i gamescope* (menu, HDR-afsnittet): VeyAmux genstarter sig selv som
+- *Start i gamescope* (kun med `VEYAMUX_GAMESCOPE=1`, eksperimentel – på Bazzite afviste gamescopes WSI-lag
+  VeyAmux' swapchain, og OK i fejldialogen kunne fryse skrivebordet; HDR og VRR fås i stedet direkte på Wayland): VeyAmux genstarter sig selv som
   `gamescope -f -W <skærm> -H <skærm> -r <Hz> --adaptive-sync [--hdr-enabled] -- VeyAmux` med `QT_QPA_PLATFORM=xcb`,
   uden `WAYLAND_DISPLAY` og med `ENABLE_GAMESCOPE_WSI=1`. Ikke inde i gamescope i forvejen (Game Mode).
   `VEYAMUX_GAMESCOPE=0` springer det over. Andre swapchain-lag ødelægger gamescopes WSI-lag ("Creating swapchain for

@@ -164,7 +164,7 @@ public:
     void setGamescope(bool v) { QSettings().setValue("ui/gamescope", v); emit enhanceChanged(); }
     bool gamescopeRestart() const { return gamescope() != gamescopeAtStart_; }
     bool gamescopeAtStart_ = QSettings().value("ui/gamescope", false).toBool();
-    bool gamescopeAvailable() const { return !QStandardPaths::findExecutable("gamescope").isEmpty(); }
+    bool gamescopeAvailable() const { return qEnvironmentVariable("VEYAMUX_GAMESCOPE") == "1" && !QStandardPaths::findExecutable("gamescope").isEmpty(); }
     bool inGamescope() const { return qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") || qEnvironmentVariableIsSet("VEYAMUX_IN_GAMESCOPE"); }
     void setHdrModeAtStart(int m) { hdrModeAtStart_ = m; emit enhanceChanged(); }
     // 0 = automatic (the display's own maximum from its EDID, 1000 nits if it does not say)
