@@ -20,5 +20,5 @@
   <url type="homepage">https://github.com/8BiTw0LF/VeyAmux</url>
   <launchable type="desktop-id">veyamux.desktop</launchable>
   <provides><binary>veyamux</binary></provides>
-  <releases><release version="2.1.5-linux16" date="2026-11-16"/></releases>
+  <releases><release version="2.1.5-linux17" date="2026-11-16"/></releases>
 </component>

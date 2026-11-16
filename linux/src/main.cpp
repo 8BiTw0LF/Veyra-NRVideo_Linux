@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux16");
+    QCoreApplication::setApplicationVersion("2.1.5-linux17");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
