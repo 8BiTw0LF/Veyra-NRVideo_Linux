@@ -16,9 +16,11 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
   Also sharpening, FXAA (Veyra's own shaders) and colour controls.
 - **HDR:** HDR capture and HDR10/HLG files, tone-mapped with Veyra's BT.2390 functions. Experimental HDR output on
   KDE Plasma 6 / GNOME 48. **VRR pacing** for games below the signal rate.
-- **Lossless Scaling frame generation** (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), with automatic detection.
-- **Instant replay, recording and screenshots**, encoded on the GPU (VA-API). **OBS browser source.** **Profiles**
-  per capture signal. **Automatic updates** through Gear Lever / AppImageUpdate.
+- **Frame generation**: Lossless Scaling (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), or AMD FSR 3.1 2× built in
+  for free when Lossless Scaling is not installed.
+- **Instant replay, recording, screenshots and live streaming** (Twitch/YouTube, RTMP), encoded on the GPU (VA-API).
+  **OBS browser source.** **Profiles** per capture signal. **Steam Game Mode** shortcut, start on capture-card
+  plug-in, frame-time overlay. **Automatic updates** through Gear Lever / AppImageUpdate.
 
 **[⬇ Download the latest VeyAmux AppImage](../../releases/latest)** · [Linux README and install guide](linux/README.md) ·
 [technical notes (Danish)](linux/docs/TEKNISK.md)
