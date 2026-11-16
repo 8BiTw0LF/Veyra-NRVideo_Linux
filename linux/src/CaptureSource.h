@@ -13,6 +13,8 @@ struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
 
+namespace veyamux { class ScreenCastStream; }
+
 namespace veyamux {
 
 struct CaptureDevice {
@@ -65,7 +67,10 @@ public:
     enum class Result { Frame, Timeout, Error };
     CaptureSource();
     ~CaptureSource();
+    // path: /dev/videoN, or "pipewire:<fd>:<node>" for a window/screen shared through the portal (see ScreenCast.h;
+    // mode is ignored then).
     bool open(const std::string& path, const CaptureMode& mode, std::string& error);
+    static bool isScreenCast(const std::string& path) { return path.rfind("pipewire:", 0) == 0; }
     void close();
     Result read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error);
     // Newest frame only; anything older that the driver queued is dropped immediately (lowest latency).
@@ -83,6 +88,7 @@ private:
     struct Buf { void* start = nullptr; size_t length = 0; };
     bool dequeueNewest(v4l2_buffer& held, std::string& error);
     int fd_ = -1;
+    std::unique_ptr<ScreenCastStream> sc_;   // window / screen source
     uint32_t fourcc_ = 0;
     int rawStride_ = 0;
     std::vector<Buf> bufs_;

@@ -67,6 +67,10 @@ normally and the menu tells you what is missing. Frame generation can also be tu
 - **Capture cards** via V4L2 (YUYV, UYVY, NV12, P010, I420, RGB, MJPEG) with a choice of resolution, frame rate and audio
   source. Zero-copy GPU path (see above). If the card drops out, or stalls when the console switches resolution,
   refresh rate or HDR, VeyAmux reconnects by itself.
+- **A window or a whole screen** (Wayland: KDE Plasma, GNOME, ...): pick *Window or screen …* in the capture dialog and
+  your desktop asks what to share. The program's picture then gets the same upscaling, frame generation, recording and
+  streaming as a capture card. Uses the desktop's screen-share portal and PipeWire (the same route as OBS); the choice
+  is remembered for `--capture last`.
 - **Video files** via FFmpeg with VAAPI hardware decoding (AMD/Intel), audio through PipeWire/PulseAudio.
 - **HDR capture (P010)** and **HDR video files** (HDR10/PQ and HLG): BT.2020 HDR is tone-mapped properly to your SDR
   display (BT.2390, using Veyra's own HDR functions) instead of looking washed out.

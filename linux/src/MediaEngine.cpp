@@ -242,7 +242,7 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     info_.width = cap_->width();
     info_.height = cap_->height();
     info_.fps = cap_->fps();
-    info_.videoCodec = fourccName(mode.fourcc);
+    info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : fourccName(mode.fourcc);
     info_.audioCodec = audioSource.empty() ? "" : "live";
     capAudioSource_ = audioSource;
     capPath_ = devicePath;
@@ -280,10 +280,17 @@ void MediaEngine::captureLoop() {
         return cap_->open(capPath_, capMode_, e);
     };
     clk::time_point lastReopen{};
+    // A shared window/screen only sends a picture when something changes, and cannot be reopened once it is gone.
+    const bool screenCast = CaptureSource::isScreenCast(capPath_);
     while (!quit_) {
         std::string err;
         const bool toGpu = rawLive_.load();
         const auto r = toGpu ? cap_->readLatest(raw, 100, err) : cap_->read(rgba, 100, err);
+        if (r == CaptureSource::Result::Error && screenCast) {
+            if (cb_.onError) cb_.onError(err.empty() ? "The shared window was closed" : err);
+            break;
+        }
+        if (r == CaptureSource::Result::Timeout && screenCast) continue;
         if (r == CaptureSource::Result::Error) {
             if (cb_.onError) cb_.onError("Capture card lost, reconnecting...");
             noSignal = true;

@@ -1,6 +1,7 @@
 import QtQuick
 
-// Modal for choosing a V4L2 capture card, its video mode and the audio source.
+// Modal for choosing a V4L2 capture card (or a window / screen through the compositor's share dialog), its video
+// mode and the audio source.
 Item {
     id: dlg
     property var tr: function (k) { return k }
@@ -14,8 +15,12 @@ Item {
 
     visible: false
     function openDialog() { refresh(); visible = true }
+    readonly property bool isShare: devices.length > 0 && devIdx < devices.length && devices[devIdx].path === "screencast"
+    readonly property int cardCount: devices.length - (player.screenCastAvailable() ? 1 : 0)
     function refresh() {
-        devices = player.captureDevices()
+        var dv = player.captureDevices()
+        if (player.screenCastAvailable()) dv.push({ path: "screencast", name: tr("screenShare") })
+        devices = dv
         var s = [{ name: "", desc: tr("noAudio") }]
         var list = player.audioSources()
         list.push({ name: "@default", desc: tr("defaultInput") })
@@ -28,8 +33,16 @@ Item {
     }
     function pickDevice(i) {
         devIdx = i
-        modes = devices.length > 0 ? player.captureModes(devices[i].path) : []
+        var share = devices.length > 0 && devices[i].path === "screencast"
+        modes = devices.length > 0 && !share ? player.captureModes(devices[i].path) : []
         modeIdx = 0
+        if (share) {
+            // the game plays its own sound: no audio unless one was chosen for a window/screen before
+            srcIdx = 0
+            if (player.lastCaptureDevice() === "screencast")
+                for (var a = 0; a < sources.length; ++a) if (sources[a].name !== "" && sources[a].name === player.lastCaptureAudio()) srcIdx = a
+            return
+        }
         // audio: remembered source, else best name match for this card, else none
         var want = player.lastCaptureAudio()
         var guess = devices.length > 0 ? player.guessAudioSource(devices[i].name) : ""
@@ -64,16 +77,18 @@ Item {
         Column {
             anchors { fill: parent; margins: 22 }
             spacing: 10
-            Text { text: tr("capture"); color: Theme.heading; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Text { text: tr("captureTitle"); color: Theme.heading; font.pixelSize: 20; font.weight: Font.DemiBold }
 
             Section { text: tr("device") }
             Column {
                 width: parent.width; spacing: 4
                 Repeater { model: dlg.devices
-                    Row_ { text: modelData.name + "  (" + modelData.path + ")"; sel: index === dlg.devIdx; onClicked: dlg.pickDevice(index) } }
-                Text { visible: dlg.devices.length === 0; text: tr("noDevices"); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
+                    Row_ { text: modelData.path === "screencast" ? modelData.name : modelData.name + "  (" + modelData.path + ")"
+                        sel: index === dlg.devIdx; onClicked: dlg.pickDevice(index) } }
+                Text { visible: dlg.cardCount <= 0; text: tr("noDevices"); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
             }
 
+            Text { visible: dlg.isShare; text: tr("screenShareHint"); color: Theme.muted; font.pixelSize: 12; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15 }
             Section { text: tr("mode"); visible: dlg.modes.length > 0 }
             Flickable {
                 visible: dlg.modes.length > 0
@@ -101,12 +116,13 @@ Item {
             Rectangle { width: 96; height: 38; radius: 10; color: m2.containsMouse ? Theme.surfaceHover : Theme.surface
                 Text { anchors.centerIn: parent; text: tr("cancel"); color: Theme.text; font.pixelSize: 13 }
                 MouseArea { id: m2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { dlg.visible = false; dlg.closed() } } }
-            Rectangle { width: 120; height: 38; radius: 10; opacity: dlg.devices.length > 0 && dlg.modes.length > 0 ? 1 : 0.4
+            Rectangle { width: 120; height: 38; radius: 10; opacity: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare) ? 1 : 0.4
                 color: m3.containsMouse ? Theme.accentHover : Theme.accent
                 Text { anchors.centerIn: parent; text: tr("start"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
                 MouseArea { id: m3; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    enabled: dlg.devices.length > 0 && dlg.modes.length > 0
+                    enabled: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare)
                     onClicked: {
+                        if (dlg.isShare) { player.openScreenCast(dlg.sources[dlg.srcIdx].name, false); dlg.visible = false; dlg.closed(); return }
                         if (player.openCapture(dlg.devices[dlg.devIdx].path, dlg.modeIdx, dlg.sources[dlg.srcIdx].name)) { dlg.visible = false; dlg.closed() }
                     } } }
         }

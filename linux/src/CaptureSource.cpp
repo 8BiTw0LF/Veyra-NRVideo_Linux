@@ -1,4 +1,6 @@
 #include "CaptureSource.h"
+#include "ScreenCast.h"
+#include <cstdio>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -280,6 +282,17 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     close();
     probe_.reset();
     delivered_.reset();
+    if (isScreenCast(path)) {
+        int pfd = -1; unsigned node = 0;
+        if (std::sscanf(path.c_str(), "pipewire:%d:%u", &pfd, &node) != 2) { error = "Bad screen share address"; return false; }
+        auto sc = std::make_unique<ScreenCastStream>();
+        if (!sc->open(pfd, node, error)) return false;
+        sc_ = std::move(sc);
+        w_ = sc_->width(); h_ = sc_->height(); fps_ = sc_->fps();
+        card_ = "Window / screen";
+        fourcc_ = 0;
+        return true;
+    }
     v4l2_format fmt{};
     // A device another process is still streaming from answers EBUSY. That is typically the previous VeyAmux still
     // shutting down after "Restart now" (the Vulkan layers can make that take a moment): wait up to 5 s for it.
@@ -341,6 +354,7 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
 }
 
 void CaptureSource::close() {
+    sc_.reset();
     if (fd_ < 0) return;
     if (streaming_) { int type = V4L2_BUF_TYPE_VIDEO_CAPTURE; xioctl(fd_, VIDIOC_STREAMOFF, &type); streaming_ = false; }
     for (auto& b : bufs_) if (b.start) munmap(b.start, b.length);
@@ -395,6 +409,16 @@ bool CaptureSource::dequeueNewest(v4l2_buffer& held, std::string& error) {
 }
 
 CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error) {
+    if (sc_) {
+        RawFrame f;
+        const auto r = sc_->readLatest(f, timeoutMs, error);
+        if (r != ScreenCastStream::Result::Frame) return r == ScreenCastStream::Result::Timeout ? Result::Timeout : Result::Error;
+        w_ = f.w; h_ = f.h;
+        lastRepeat_ = false;
+        probe_.feed(f.data.data() + 1, f.w, f.h, f.stride, 4, f.captured);   // green ~ luma: measured picture rate
+        rgba.swap(f.data);
+        return Result::Frame;
+    }
     if (fd_ < 0) { error = "Capture device is closed"; return Result::Error; }
     pollfd p{fd_, POLLIN, 0};
     const int r = poll(&p, 1, timeoutMs);
@@ -418,6 +442,14 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
 }
 
 CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    if (sc_) {
+        const auto r = sc_->readLatest(out, timeoutMs, error);
+        if (r == ScreenCastStream::Result::Frame) {
+            w_ = out.w; h_ = out.h;
+            probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);   // measured picture rate
+        }
+        return r == ScreenCastStream::Result::Frame ? Result::Frame : r == ScreenCastStream::Result::Timeout ? Result::Timeout : Result::Error;
+    }
     if (fd_ < 0) { error = "Capture device is closed"; return Result::Error; }
     pollfd p{fd_, POLLIN, 0};
     const int r = poll(&p, 1, timeoutMs);

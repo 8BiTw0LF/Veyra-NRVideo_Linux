@@ -558,7 +558,9 @@ void PlayerBridge::checkHighRate() {
     double rate = 0;
     if (live) {
         const auto c = engine_.liveContent();
-        rate = std::max(engine_.info().fps, c.staticPicture ? 0.0 : c.contentFps);
+        // a shared window/screen announces the display's maximum rate (144, 240 ...): only its measured rate counts
+        const bool share = engine_.info().videoCodec == "PipeWire";
+        rate = std::max(share ? 0.0 : engine_.info().fps, c.staticPicture ? 0.0 : c.contentFps);
     }
     const bool high = live && rate >= 95.0;
     const bool low = !live || rate < 80.0;
@@ -909,17 +911,43 @@ QString PlayerBridge::lastCaptureAudio() const { return QSettings().value("cap/a
 
 bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString& audioSource) {
     if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) { setStatus(L("No capture mode selected", "Ingen capture-tilstand valgt")); return false; }
+    return startCapture(path, lastModes_[size_t(modeIndex)], audioSource);
+}
+
+void PlayerBridge::openScreenCast(const QString& audioSource, bool useLast) {
+    std::string why;
+    if (!veyamux::ScreenCastStream::available(&why)) { setStatus(translateMessage(QString::fromStdString(why))); return; }
+    if (!portal_) {
+        portal_ = new veyamux::ScreenCastPortal(this);
+        connect(portal_, &veyamux::ScreenCastPortal::ready, this, [this](int fd, uint node, int, int, const QString& token) {
+            if (!token.isEmpty()) QSettings().setValue("cap/scToken", token);
+            startCapture(QStringLiteral("pipewire:%1:%2").arg(fd).arg(node), veyamux::CaptureMode{}, scAudio_);
+        });
+        connect(portal_, &veyamux::ScreenCastPortal::failed, this, [this](const QString& msg, bool cancelled) {
+            if (cancelled) { QSettings().remove("cap/scToken"); setStatus({}); }
+            else setStatus(translateMessage(msg));
+        });
+    }
+    scAudio_ = audioSource;
+    setStatus(L("Pick a window or screen in the share dialog", "Vælg et vindue eller en skærm i delings-dialogen"));
+    portal_->start(useLast ? QSettings().value("cap/scToken").toString() : QString());
+}
+
+bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource) {
+    const bool screenCast = veyamux::CaptureSource::isScreenCast(path.toStdString());
+    if (!screenCast && portal_) portal_->closeSession();   // a capture card replaces the shared window
     std::string err;
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     if (liveVk_) liveVk_->setActive(false);
     const bool zeroCopy = liveVk_ != nullptr;
-    if (!engine_.openCapture(path.toStdString(), lastModes_[size_t(modeIndex)], audioSource.toStdString(), err, zeroCopy)) {
+    if (!engine_.openCapture(path.toStdString(), mode, audioSource.toStdString(), err, zeroCopy)) {
         setStatus(translateMessage(QString::fromStdString(err)));
+        if (screenCast && portal_) portal_->closeSession();
         emit mediaChanged();
         return false;
     }
-    QSettings q; q.setValue("cap/device", path); q.setValue("cap/audio", audioSource);
-    if (const QString n = veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
+    QSettings q; q.setValue("cap/device", screenCast ? QStringLiteral("screencast") : path); q.setValue("cap/audio", audioSource);
+    if (const QString n = screenCast ? QString() : veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
     updateLsfgMultiplier();
     if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
     if (zeroCopy) { liveVk_->setSettings(s_); liveVk_->setActive(true); }
@@ -936,6 +964,7 @@ bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString
 }
 
 bool PlayerBridge::openCaptureAuto(const QString& path) {
+    if (path == "screencast") { openScreenCast(lastCaptureAudio(), true); return true; }
     QString card;
     for (const auto& d : veyamux::listCaptureDevices()) if (QString::fromStdString(d.path) == path) card = QString::fromStdString(d.name);
     captureModes(path);
@@ -1089,6 +1118,15 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         {"Out of GPU memory", "Ikke nok GPU-hukommelse"},
         {"The capture device is in use by another program", "Capture-kortet bruges af et andet program"},
         {"Live path unavailable", "GPU-direkte visning utilgængelig"},
+        {"The shared window was closed", "Det delte vindue blev lukket"},
+        {"The screen share sends no picture", "Skærmdelingen sender intet billede"},
+        {"The screen share portal (xdg-desktop-portal) is not running", "Skærmdelings-portalen (xdg-desktop-portal) kører ikke"},
+        {"Screen share portal: ", "Skærmdelings-portal: "},
+        {"Screen share error: ", "Skærmdelingsfejl: "},
+        {"Nothing was picked to share", "Der blev ikke valgt noget at dele"},
+        {"The screen share was not started", "Skærmdelingen blev ikke startet"},
+        {"PipeWire (libpipewire-0.3.so.0) was not found", "PipeWire (libpipewire-0.3.so.0) blev ikke fundet"},
+        {"PipeWire: ", "PipeWire: "},
     };
     for (const auto& [en, da] : table) {
         const QString e = QString::fromUtf8(en);

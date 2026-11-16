@@ -12,6 +12,8 @@
 #include "MediaEngine.h"
 #include "ObsStream.h"
 #include "Recorder.h"
+#include "ScreenCast.h"
+#include "ScreenCastPortal.h"
 #include <QImage>
 #include <QMutex>
 #include <QObject>
@@ -130,7 +132,10 @@ public:
     bool playing() const { return engine_.playing(); }
     double position() const { return engine_.isOpen() ? engine_.position() : 0.0; }
     double duration() const { return engine_.info().duration; }
-    QString title() const { return QString::fromStdString(engine_.info().title); }
+    QString title() const {
+        const QString t = QString::fromStdString(engine_.info().title);
+        return engine_.info().videoCodec == "PipeWire" ? L("Screen share: window / screen", "Skærmdeling: vindue / skærm") : t;
+    }
     QString mediaInfo() const;
     QString outputFpsText(double srcFps) const;
     double frameGenBaseFps() const;
@@ -327,6 +332,10 @@ public slots:
     QString lastCaptureAudio() const;
     bool openCapture(const QString& path, int modeIndex, const QString& audioSource);
     bool openCaptureAuto(const QString& path);
+    // A window or screen as the source: opens the compositor's share dialog; the capture starts when one is picked.
+    // useLast: let the compositor reuse the previous choice without asking (start-up / --capture last).
+    void openScreenCast(const QString& audioSource, bool useLast = false);
+    bool screenCastAvailable() const { return veyamux::ScreenCastStream::available(); }
     bool openUrl(const QUrl& url);
     bool openPath(const QString& path);
     void openDialog();
@@ -383,6 +392,9 @@ private:
     QString gpuName_, status_, perf_;
     bool lastPlaying_ = false;
     std::vector<veyamux::CaptureMode> lastModes_;
+    veyamux::ScreenCastPortal* portal_ = nullptr;
+    QString scAudio_;
+    bool startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource);
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
     lsfg::Detection lsfg_;

@@ -273,6 +273,22 @@ falder tilbage til software. `VEYAMUX_UI=software|vulkan` tvinger valg, `--reset
 Tryk **C** (eller kamera-ikonet). Vælg enhed, tilstand (★ = anbefalet, ≥50 fps foretrækkes) og lydkilde. Start direkte fra terminal:
 `./VeyAmux-x86_64.AppImage --capture /dev/video0`. Kilden antages at være limited-range (typisk for HDMI-capture).
 
+## Vindue eller skærm som kilde (skærmdeling)
+*Vindue eller skærm …* nederst i enhedslisten (`--capture screencast`) bruger skrivebordets skærmdelings-portal
+(xdg-desktop-portal ScreenCast over D-Bus, `src/ScreenCastPortal.cpp`): CreateSession → SelectSources (vindue eller
+skærm, markøren tegnet ind i billedet, `persist_mode` 2) → Start → OpenPipeWireRemote. Portalen giver en PipeWire-fd og
+et node-id, som `src/ScreenCast.cpp` læser som en PipeWire-videostrøm: delt hukommelse (memfd) i RGBA/RGBx (sendes
+uændret videre) eller BGRA/BGRx (byttes om til RGBA), beskæringsrektangel (VideoCrop) respekteres, lige mål. Kun det
+nyeste billede bruges; derefter går det samme live-spor som et capture-kort (RawFrame RGBA → GPU).
+- libpipewire-0.3 indlæses fra systemet ved kørsel (dlopen), så den altid passer til systemets PipeWire; AppImagen har
+  ingen egen kopi. Byggeriet bruger kun headerne (`libpipewire-0.3-dev`).
+- Billeder kommer kun, når noget ændrer sig, så stilhed er ikke "intet signal"; når vinduet lukkes, slutter strømmen
+  (`PW_STREAM_FLAG_DONT_RECONNECT`) og VeyAmux skriver "Det delte vindue blev lukket".
+- Billedfrekvensen måles (ContentProbe på grøn-kanalen); 120 Hz-reglen bruger kun den målte frekvens, ikke skærmens
+  maksimum, som portalen oplyser.
+- Valget gemmes som `restore_token` (`cap/scToken`), så `--capture last` kan genåbne samme vindue uden at spørge.
+  Afbrydes dialogen, slettes tokenet.
+
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
 `--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·

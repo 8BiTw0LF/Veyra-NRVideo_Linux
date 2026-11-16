@@ -104,8 +104,12 @@ add_dependencies(veyamux-selftest veyamux_shaders)
 # ---- Media engine (FFmpeg + PulseAudio/PipeWire), still Qt-free ----
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp)
 target_include_directories(veyamux_media PUBLIC src)
+# PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
+pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
+target_include_directories(veyamux_media PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+target_link_libraries(veyamux_media PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(veyamux_media PUBLIC veyamux_core PkgConfig::FFMPEG PkgConfig::PULSE Threads::Threads)
 find_package(Threads REQUIRED)
 add_executable(veyamux-play-test src/play_test.cpp)
@@ -113,9 +117,9 @@ target_link_libraries(veyamux-play-test PRIVATE veyamux_media)
 add_dependencies(veyamux-play-test veyamux_shaders)
 
 # ---- Application (Qt 6 / QML) ----
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -133,7 +137,7 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/qmldir qml/Theme.qml qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg)
-target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network)
+target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network Qt6::DBus)
 add_dependencies(veyamux veyamux_shaders)
 
 include(GNUInstallDirs)
