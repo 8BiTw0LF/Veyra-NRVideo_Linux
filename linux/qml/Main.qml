@@ -240,7 +240,7 @@ Window {
     Rectangle {
         visible: player.status !== ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18; color: Theme.toast
+        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.accentLine
         Text { id: toastText; anchors.centerIn: parent; text: player.status; color: Theme.warn; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
@@ -249,7 +249,7 @@ Window {
     Rectangle {
         visible: player.notice !== "" && player.status === ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18; color: Theme.toast
+        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.okLine
         Text { id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
@@ -261,7 +261,7 @@ Window {
         z: 6
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 16; bottomMargin: 90 }
         width: 440; height: ftCol.implicitHeight + 16; radius: 10
-        color: "#c80d0716"; border.color: Theme.border
+        color: player.hdrOutputActive ? "#0d0716" : "#c80d0716"; border.color: Theme.border
         Column {
             id: ftCol
             x: 8; y: 8; width: parent.width - 16; spacing: 6
@@ -390,7 +390,9 @@ Window {
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 160 } }
         radius: 18
-        color: Theme.panel
+        // HDR output: fully opaque. Bright HDR video behind a 95 % panel shines through several times stronger than in
+        // SDR (up to ~7x SDR white) and greys out the menu.
+        color: player.hdrOutputActive ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
         border.color: Theme.border
         // sunset line along the top edge
         Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1; gradient: Theme.sunset; opacity: 0.85 }
