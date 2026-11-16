@@ -12,6 +12,7 @@
 #include "MediaEngine.h"
 #include "ObsStream.h"
 #include "Recorder.h"
+#include "AudioMeter.h"
 #include "ScreenCast.h"
 #include "ScreenCastPortal.h"
 #include <QImage>
@@ -40,6 +41,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QString audioOutput READ audioOutput WRITE setAudioOutput NOTIFY audioChanged)
     Q_PROPERTY(bool normalize READ normalize WRITE setNormalize NOTIFY audioChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY audioChanged)
+    // spectrum of the source's sound (before volume and mute): 24 bands 0..1, ~30 updates per second
+    Q_PROPERTY(QVariantList audioBands READ audioBands NOTIFY audioMeterChanged)
+    Q_PROPERTY(bool audioActive READ audioActive NOTIFY audioMeterChanged)
     Q_PROPERTY(QString gpuName READ gpuName NOTIFY statsChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString perf READ perf NOTIFY statsChanged)
@@ -357,6 +361,7 @@ public slots:
     void chooseLsfgFolder();
 
 signals:
+    void audioMeterChanged();
     void noticeChanged();
     void profilesChanged();
     void mediaChanged();
@@ -398,6 +403,11 @@ private:
     QString gpuName_, status_, perf_;
     bool lastPlaying_ = false;
     std::vector<veyamux::CaptureMode> lastModes_;
+    veyamux::AudioMeter meter_;
+    QVariantList bands_;
+    bool audioActive_ = false;
+    QVariantList audioBands() const { return bands_; }
+    bool audioActive() const { return audioActive_; }
     veyamux::ScreenCastPortal* portal_ = nullptr;
     QString scAudio_;
     bool startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource);

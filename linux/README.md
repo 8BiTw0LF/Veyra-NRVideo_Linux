@@ -85,8 +85,10 @@ normally and the menu tells you what is missing. Frame generation can also be tu
 - **HDR display brightness** is read from the display's EDID automatically (*Auto*).
 - **Steam / Game Mode**: *Add to Steam* puts VeyAmux in your Steam library as a non-Steam game that starts fullscreen on
   the last capture card, also from Big Picture and Bazzite's Game Mode.
-- **Sound output and levelling**: pick the output device (headset, speakers) and turn on *Even out loudness* for a
-  steadier volume.
+- **Sound output and levelling**: pick the output device (headset, speakers, TV) and turn on *Even out loudness* for a
+  steadier volume. A live **spectrum** of the source's sound shows whether sound is coming in at all.
+- **Mute for you, not for viewers**: mute (M) and the volume only change your speakers. Recordings, replays and the live
+  stream always get the source's sound.
 - **Low-latency audio**: the capture card's sound is passed through in 5 ms blocks (`VEYAMUX_AUDIO_MS` changes it).
 - **Audio delay** (−300 … +300 ms) to line up the sound with the processed picture, and **profiles**: save the picture
   settings under a name, switch with keys 1–9, and bind a profile to a capture signal so it is applied automatically.

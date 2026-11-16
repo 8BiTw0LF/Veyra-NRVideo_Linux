@@ -236,7 +236,17 @@ graf over 2 s med fps, 1%-low (99. percentil), jitter (standardafvigelse), forsi
 (udvidet tag 6), maks. luminans = 50 · 2^(CV/32) nits. Stikket findes via `QScreen::name()`. Testet med en syntetisk EDID.
 
 ## Lydudgang og lydstyrkeudligning
-Udgang: PulseAudio/PipeWire-sink (`pactl list sinks`), skiftes mens der afspilles. Udligning: RMS over ~0,4 s trækkes mod
+Udgang: PulseAudio/PipeWire-sink, skiftes mens der afspilles. Listen over udgange (og capture-lydkilder) hentes med
+libpulse selv (`src/PulseDevices.cpp`). Tidligere blev `pactl` brugt, og når det program manglede, stod der kun "Systemets
+standard".
+
+**Lyd fra kilden**: spektrum-indikatoren (`src/AudioMeter.cpp`) får kildens lyd, før lydstyrke og slå-fra bliver lagt på:
+- Lyden mixes til mono, og der laves en 1024-punkts FFT med Hann-vindue for hver 512 samples.
+- Den viser 24 logaritmiske bånd fra 50 Hz til 16 kHz, med -66 til -6 dBFS som skala.
+- Søjlerne stiger hurtigt og falder over ca. 0,18 s, og "Der kommer lyd" vises, hvis der var lyd inden for 0,5 s.
+
+**Lyd i stream og optagelse**: lyden bliver taget fra til optagelse, replay og stream på samme sted, før lydstyrke og
+slå-fra. Slå lyd fra (M) og lydstyrken gælder derfor kun højttalerne. Udligning: RMS over ~0,4 s trækkes mod
 −20 dBFS (angreb 0,3 s, slip 3 s, ±12 dB) plus begrænser ved −1 dBFS. Kun det, man hører – optagelser får originalen.
 
 ## Start når capture-kortet tilsluttes

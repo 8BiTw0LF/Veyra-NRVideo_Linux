@@ -103,8 +103,8 @@ add_dependencies(veyamux-selftest veyamux_shaders)
 
 # ---- Media engine (FFmpeg + PulseAudio/PipeWire), still Qt-free ----
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
-pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)

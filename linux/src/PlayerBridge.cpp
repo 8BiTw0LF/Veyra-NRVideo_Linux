@@ -1,4 +1,5 @@
 #include "PlayerBridge.h"
+#include "PulseDevices.h"
 #include <QUrl>
 #include <QTimer>
 #include <QCoreApplication>
@@ -72,7 +73,31 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         }, Qt::QueuedConnection);
     };
     cb.onLiveFrame = [this](veyamux::RawFrame&& f) { if (liveVk_) liveVk_->submit(std::move(f)); };
-    cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) { rec_->pushAudio(pcm, frames, t); };
+    cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) {
+        meter_.push(pcm, frames);   // the source's sound, before volume and mute (also what recordings/streams get)
+        rec_->pushAudio(pcm, frames, t);
+    };
+    {   // spectrum meter for the menu, ~30 updates per second while something moves
+        auto* mt = new QTimer(this);
+        connect(mt, &QTimer::timeout, this, [this] {
+            const auto b = meter_.bands();
+            const bool act = meter_.active();
+            bool any = false;
+            for (float v : b) any = any || v > 0.001f;
+            if (!any && bands_.size() == int(b.size()) && !audioActive_ && !act) {
+                bool allZero = true;
+                for (const QVariant& v : bands_) allZero = allZero && v.toDouble() <= 0.001;
+                if (allZero) return;   // silent and already drawn as silent
+            }
+            QVariantList l;
+            l.reserve(int(b.size()));
+            for (float v : b) l << double(v);
+            bands_ = l;
+            audioActive_ = act;
+            emit audioMeterChanged();
+        });
+        mt->start(33);
+    }
     engine_.setCallbacks(cb);
     engine_.setAudioSink(audioOutput().toStdString());
     engine_.setNormalize(normalize());
@@ -834,46 +859,19 @@ QVariantList PlayerBridge::captureModes(const QString& path) {
 }
 
 QVariantList PlayerBridge::audioSources() {
-    // PulseAudio/PipeWire input sources (capture cards expose their HDMI audio as one). Uses pactl if present.
+    // PulseAudio/PipeWire input sources (capture cards expose their HDMI audio as one); the "monitors" of outputs are
+    // left out (they would record VeyAmux's own sound).
     QVariantList out;
-    QProcess p;
-    p.start("pactl", {"list", "sources"});
-    if (!p.waitForFinished(2500)) { p.kill(); return out; }
-    QString name, desc;
-    auto flush = [&] {
-        if (!name.isEmpty() && !name.endsWith(".monitor")) {
-            QVariantMap m; m["name"] = name; m["desc"] = desc.isEmpty() ? name : desc; out << m;
-        }
-        name.clear(); desc.clear();
-    };
-    const QStringList lines = QString::fromUtf8(p.readAllStandardOutput()).split('\n');
-    for (const QString& raw : lines) {
-        const QString l = raw.trimmed();
-        if (l.startsWith("Source #")) flush();
-        else if (l.startsWith("Name:")) name = l.mid(5).trimmed();
-        else if (l.startsWith("Description:")) desc = l.mid(12).trimmed();
-    }
-    flush();
+    for (const auto& d : veyamux::pulse::sources())
+        if (!d.monitor) { QVariantMap m; m["name"] = QString::fromStdString(d.name); m["desc"] = QString::fromStdString(d.description); out << m; }
     return out;
 }
 
 QVariantList PlayerBridge::audioSinks() {
     QVariantList out;
-    QProcess p;
-    p.start("pactl", {"list", "sinks"});
-    if (!p.waitForFinished(2500)) { p.kill(); return out; }
-    QString name, desc;
-    auto flush = [&] {
-        if (!name.isEmpty()) { QVariantMap m; m["name"] = name; m["desc"] = desc.isEmpty() ? name : desc; out << m; }
-        name.clear(); desc.clear();
-    };
-    for (const QString& raw : QString::fromUtf8(p.readAllStandardOutput()).split('\n')) {
-        const QString l = raw.trimmed();
-        if (l.startsWith("Sink #")) flush();
-        else if (l.startsWith("Name:")) name = l.mid(5).trimmed();
-        else if (l.startsWith("Description:")) desc = l.mid(12).trimmed();
+    for (const auto& d : veyamux::pulse::sinks()) {
+        QVariantMap m; m["name"] = QString::fromStdString(d.name); m["desc"] = QString::fromStdString(d.description); out << m;
     }
-    flush();
     return out;
 }
 

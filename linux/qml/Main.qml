@@ -29,13 +29,15 @@ Window {
               vrrRestart: "VeyAmux must restart to switch vsync for VRR.",
               profiles: "Profiles", profileName: "Name, e.g. PS5", saveProfile: "Save", bindSignal: "Use automatically for this signal (%1)", profilesHint: "Saves the picture settings and the audio delay. Keys 1-9 switch profile; ⚡ = applied automatically when that capture signal is opened.",
               normalize: "Even out loudness", audioOut: "Sound output", audioOutDefault: "System default",
+              audioIn: "Sound from the source", audioInOn: "● Sound is coming in", audioInNone: "No sound", audioInMuted: "● Coming in (muted)",
+              audioInHint: "Shows the source's own sound. Mute (M) and the volume only affect your speakers: recordings, replays and the live stream always get the sound.",
               audioDelay: "Audio delay (ms)", audioDelayHint: "Positive = sound later. Use it when the picture lags the sound (e.g. with Lossless Scaling). Capture cards can only delay the sound.",
               denoise: "Noise reduction", denoiseModes: ["Off", "Spatial", "Temporal", "Both"], denoiseLevels: ["Light", "Medium", "Strong"],
               denoiseHint0: "Removes grain, dither and compression noise before upscaling and sharpening, so Sharpness can be turned up without sharpening the noise.",
               denoiseHint1: "Non-local means: averages each pixel with similar-looking pixels nearby. Frame by frame, never smears motion; strong settings soften fine texture a little.",
               denoiseHint2: "Averages each pixel over several frames along the measured motion: keeps the most detail. Fast, unpredictable motion falls back to the current frame.",
               denoiseHint3: "Temporal first, then a gentle spatial pass: the cleanest picture. Pick the level after how noisy the source is.",
-              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture card",
+              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture",
               native: "Native",
               method: "Method", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Sharp classic scaling, frame by frame. No added latency.",
@@ -45,7 +47,7 @@ Window {
               fsr31Hint: "AMD FidelityFX (open source), builds the picture over several frames from motion VeyAmux measures in the video. Experimental: FSR is made for games, and in VeyAmux's tests on video it came out softer than Lanczos.",
               fsrNeedsScale: "Choose 1.5×, 2× or 3× to use it.",
               fsrFallback: "FSR 3.1 could not start, using Lanczos: ",
-              capture: "Capture card", captureTitle: "Capture card or window", device: "Device", mode: "Mode (resolution · rate · format)", audio: "Audio source", noAudio: "No audio", defaultInput: "Default input (system default microphone)",
+              capture: "Capture", captureTitle: "Capture card or window", device: "Device", mode: "Mode (resolution · rate · format)", audio: "Audio source", noAudio: "No audio", defaultInput: "Default input (system default microphone)",
               retroHint: "Makes the picture look like an old CRT television (CRT-Geom from ShaderGlass): a slightly curved glass screen with rounded corners, visible scanlines and the TV's red-green-blue phosphor stripes. Best for retro games. It replaces the upscaling method and the sharpness setting.",
               retroLines: "Scanlines",
               screenShare: "Window or screen …",
@@ -104,13 +106,15 @@ Window {
               vrrRestart: "VeyAmux skal genstarte for at skifte vsync til VRR.",
               profiles: "Profiler", profileName: "Navn, fx PS5", saveProfile: "Gem", bindSignal: "Brug automatisk til dette signal (%1)", profilesHint: "Gemmer billedindstillingerne og lydforsinkelsen. Tasterne 1-9 skifter profil; ⚡ = bruges automatisk, når det capture-signal åbnes.",
               normalize: "Udlign lydstyrke", audioOut: "Lydudgang", audioOutDefault: "Systemets standard",
+              audioIn: "Lyd fra kilden", audioInOn: "● Der kommer lyd", audioInNone: "Ingen lyd", audioInMuted: "● Kommer ind (slået fra)",
+              audioInHint: "Viser kildens egen lyd. Slå lyd fra (M) og lydstyrken gælder kun dine højttalere: optagelser, replays og livestreamen får altid lyden med.",
               audioDelay: "Lydforsinkelse (ms)", audioDelayHint: "Positiv = lyden senere. Brug den, når billedet halter efter lyden (fx med Lossless Scaling). Ved capture-kort kan lyden kun forsinkes.",
               denoise: "Støjfjerning", denoiseModes: ["Fra", "Rumlig", "Temporal", "Begge"], denoiseLevels: ["Let", "Middel", "Kraftig"],
               denoiseHint0: "Fjerner korn, dithering og komprimeringsstøj før opskalering og skarphed, så Skarphed kan skrues op uden at gøre støjen skarp.",
               denoiseHint1: "Non-local means: blander hver pixel med pixels i nærheden, der ligner den. Billede for billede, slører aldrig bevægelse; kraftig gør fin tekstur en anelse blødere.",
               denoiseHint2: "Midler hver pixel over flere billeder langs den målte bevægelse: bevarer flest detaljer. Ved hurtig, uforudsigelig bevægelse bruges det aktuelle billede.",
               denoiseHint3: "Først temporal, så en mild rumlig: det reneste billede. Vælg niveau efter hvor støjfyldt kilden er.",
-              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture-kort",
+              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture",
               native: "Original",
               method: "Metode", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Skarp klassisk skalering, billede for billede. Ingen ekstra forsinkelse.",
@@ -120,7 +124,7 @@ Window {
               fsr31Hint: "AMD FidelityFX (open source), opbygger billedet over flere billeder ud fra bevægelse, som VeyAmux måler i videoen. Eksperimentel: FSR er lavet til spil, og i VeyAmux' test på video blev den blødere end Lanczos.",
               fsrNeedsScale: "Vælg 1,5×, 2× eller 3× for at bruge den.",
               fsrFallback: "FSR 3.1 kunne ikke starte, bruger Lanczos: ",
-              capture: "Capture-kort", captureTitle: "Capture-kort eller vindue", device: "Enhed", mode: "Tilstand (opløsning · frekvens · format)", audio: "Lydkilde", noAudio: "Ingen lyd", defaultInput: "Standard-indgang (systemets standardmikrofon)",
+              capture: "Capture", captureTitle: "Capture-kort eller vindue", device: "Enhed", mode: "Tilstand (opløsning · frekvens · format)", audio: "Lydkilde", noAudio: "Ingen lyd", defaultInput: "Standard-indgang (systemets standardmikrofon)",
               retroHint: "Får billedet til at ligne et gammelt billedrørs-tv (CRT-Geom fra ShaderGlass): en let buet glasskærm med runde hjørner, synlige billedlinjer og tv'ets røde, grønne og blå fosforstriber. Bedst til retrospil. Den erstatter opskaleringsmetoden og skarphedsindstillingen.",
               retroLines: "Billedlinjer",
               screenShare: "Vindue eller skærm …",
@@ -560,6 +564,71 @@ Window {
                             current: player.fxaaQuality; onPicked: (i) => player.fxaaQuality = i
                         }
                     }
+                    // ---- sound output (the system default plus every output the sound server reports; refreshed when
+                    // the menu opens) and a spectrum of the source's sound, so you can see whether sound comes in
+                    Column {
+                        id: sinkCol
+                        width: parent.width; spacing: 4
+                        property var sinks: []
+                        function refresh() { sinks = player.audioSinks() }
+                        Component.onCompleted: refresh()
+                        Connections { target: win; function onPanelOpenChanged() { if (win.panelOpen) sinkCol.refresh() } }
+                        Text { text: t("audioOut"); color: Theme.label; font.pixelSize: 14 }
+                        Repeater {
+                            model: [{ name: "", desc: t("audioOutDefault") }].concat(sinkCol.sinks.slice(0, 8))
+                            delegate: Rectangle {
+                                required property var modelData
+                                readonly property bool sel: player.audioOutput === modelData.name
+                                width: sinkCol.width; height: 28; radius: 8
+                                color: sinkMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                                gradient: sel ? Theme.sunset : null
+                                Text { anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                    text: modelData.desc; elide: Text.ElideRight; font.pixelSize: 13
+                                    color: parent.sel ? Theme.accentInk : Theme.text }
+                                MouseArea { id: sinkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: player.audioOutput = modelData.name }
+                            }
+                        }
+                        Item { width: 1; height: 6 }
+                        Item {
+                            width: parent.width; height: 18
+                            Text { text: t("audioIn"); color: Theme.label; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                font.pixelSize: 12; font.weight: Font.Medium
+                                color: player.audioActive ? Theme.ok : Theme.muted
+                                text: player.audioActive ? (player.muted ? t("audioInMuted") : t("audioInOn")) : t("audioInNone")
+                            }
+                        }
+                        // spectrum: 24 bands from 50 Hz (left) to 16 kHz (right)
+                        Rectangle {
+                            id: spec
+                            width: parent.width; height: 46; radius: 8; color: Theme.surfaceDeep; border.color: Theme.border
+                            Row {
+                                id: specRow
+                                anchors { fill: parent; margins: 6 }
+                                spacing: 2
+                                readonly property int n: 24
+                                Repeater {
+                                    model: specRow.n
+                                    delegate: Item {
+                                        required property int index
+                                        width: (specRow.width - (specRow.n - 1) * specRow.spacing) / specRow.n
+                                        height: specRow.height
+                                        readonly property real level: player.audioBands.length > index ? player.audioBands[index] : 0
+                                        Rectangle {
+                                            anchors.bottom: parent.bottom
+                                            width: parent.width; radius: 2
+                                            height: Math.max(2, parent.height * parent.level)
+                                            gradient: Theme.sunset
+                                            opacity: player.muted ? 0.45 : 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 12; color: Theme.muted; text: t("audioInHint") }
+                    }
                 }
                 Column {
                     id: secB
@@ -582,32 +651,6 @@ Window {
                         ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: player.normalize; onToggled: (v) => player.normalize = v }
                     }
-                    // output device: the system default plus the sinks pactl reports (refreshed when the menu opens)
-                    Column {
-                        id: sinkCol
-                        width: parent.width; spacing: 4
-                        property var sinks: []
-                        function refresh() { sinks = player.audioSinks() }
-                        Component.onCompleted: refresh()
-                        Connections { target: win; function onPanelOpenChanged() { if (win.panelOpen) sinkCol.refresh() } }
-                        Text { text: t("audioOut"); color: Theme.label; font.pixelSize: 14 }
-                        Repeater {
-                            model: [{ name: "", desc: t("audioOutDefault") }].concat(sinkCol.sinks.slice(0, 5))
-                            delegate: Rectangle {
-                                required property var modelData
-                                readonly property bool sel: player.audioOutput === modelData.name
-                                width: sinkCol.width; height: 28; radius: 8
-                                color: sinkMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                                gradient: sel ? Theme.sunset : null
-                                Text { anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                                    text: modelData.desc; elide: Text.ElideRight; font.pixelSize: 13
-                                    color: parent.sel ? Theme.accentInk : Theme.text }
-                                MouseArea { id: sinkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: player.audioOutput = modelData.name }
-                            }
-                        }
-                    }
-
                     Rectangle {
                         width: parent.width; height: 34; radius: 10; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
                         Text { anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 15 }
