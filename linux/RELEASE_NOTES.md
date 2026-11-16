@@ -1,18 +1,23 @@
-## VeyAmux 2.1.5-linux17
+## VeyAmux 2.1.5-linux19
 
-What's new since **2.1.5-linux16**.
+What's new since **2.1.5-linux17**.
 
-### Retro TV
-- **Retro TV** is a new option in the right-hand menu. It makes the picture look like an old CRT television: a slightly curved glass screen with rounded corners, visible scanlines and the TV's red, green and blue phosphor stripes. It is best for retro games.
-- It uses **CRT-Geom**, the same shader as ShaderGlass' `crt-geom` preset (by cgwg, Themaister and DOLLS, GPL-2.0+), with ShaderGlass' default settings. VeyAmux runs it on the GPU through Vulkan.
-- **Scanlines:** you can choose 240 lines (old consoles), 480 lines (PS2 and GameCube era) or the source's own lines. A capture card sends 240p games scaled up to 1080p, so VeyAmux rebuilds the original lines from the capture.
-- While Retro TV is on, it replaces the upscaling method and skips the sharpness setting. Exposure, contrast and saturation still apply. It works whether or not *Enhance* is switched on.
+### Sound
+- **All your sound outputs are listed.** *Sound output* now shows every output device: TV, headset, speakers, virtual surround and so on. Before, it often only showed "System default", because the list came from the `pactl` tool, which isn't installed everywhere. VeyAmux now asks the sound server (PipeWire / PulseAudio) directly, and the audio sources in the capture dialog use the same route.
+- **Sound from the source** is a new live spectrum meter (50 Hz – 16 kHz) under *Sound output*. It shows whether sound is coming in from the capture card or file at all, and says "Sound is coming in" or "No sound".
+- **Mute for you, not for your viewers.** Mute (M) and the volume only affect your own speakers. Recordings, replays and the live stream to Twitch, YouTube or your own server always get the sound. This was already how it worked, and the menu now says so.
 
-### Window or screen as a source
-- **Window or screen …** is a new entry at the bottom of the device list in the capture dialog (C). After *Start*, your desktop asks which window or screen to share. VeyAmux then treats the picture like a capture card, so upscaling, Retro TV, frame generation, recording and streaming all work on it.
-- It uses the desktop's own screen-share dialog (xdg-desktop-portal) and PipeWire, the same route OBS uses, so it needs Wayland (KDE Plasma, GNOME, ...). VeyAmux uses your system's PipeWire, which the AppImage does not ship.
-- Your choice is remembered, so `--capture last` opens the same window again without asking. If the shared window is closed, VeyAmux says so.
-- Audio is off by default, because the shared program plays its own sound.
+### Menu
+- **Bigger text and controls.** Text and controls are bigger, and the menu now fills the panel instead of leaving empty space at the sides.
+- **New layout.** *Sound output* now sits under anti-aliasing, and *Retro TV* under the sound meter. *Steam* and *OBS* are in the right-hand column, and *Frame generation* is in the middle.
+- **Contrast centred.** The contrast slider now runs from 0.6 to 1.4, so the neutral 1.00 sits in the middle like the other sliders.
+- **"Capture" button.** The start screen button is now called **Capture**, because it opens windows and screens as well as capture cards.
+
+### Look
+- **New logo.** The V is laid over the A so the two letters form an X.
+
+### Fixes since the first linux17 build
+- **Sharing a whole screen** no longer makes VeyAmux crash. The current linux17 download already had this fix.
 
 ### Download
 Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. Once installed, it can update itself through the `.zsync` file (for example with Gear Lever).
