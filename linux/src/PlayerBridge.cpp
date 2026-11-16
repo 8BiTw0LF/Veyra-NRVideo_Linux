@@ -458,7 +458,7 @@ void PlayerBridge::loadSettings() {
     obsFile_ = q.value("obs/file").toString();
     s_.enabled = q.value("enh/enabled", true).toBool();
     s_.scale = float(q.value("enh/scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 2));
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 3));
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.denoise = veyamux::Denoise(std::clamp(q.value("enh/denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value("enh/denoiseStrength", 1).toInt(), 0, 2);
@@ -675,7 +675,7 @@ void PlayerBridge::applyEnhance() { engine_.setEnhance(s_); if (liveVk_) liveVk_
 void PlayerBridge::setEnhance(bool v) { s_.enabled = v; applyEnhance(); }
 void PlayerBridge::setScale(double v) { s_.scale = float(qBound(1.0, v, 4.0)); applyEnhance(); }
 void PlayerBridge::setUpscaler(int v) {
-    v = std::clamp(v, 0, 2);
+    v = std::clamp(v, 0, 3);
     if (int(s_.upscaler) == v) return;
     s_.upscaler = veyamux::Upscaler(v);
     applyEnhance();
@@ -769,7 +769,7 @@ bool PlayerBridge::loadProfile(const QString& name) {
     if (!q.contains(g + "scale")) return false;
     s_.enabled = q.value(g + "enabled", true).toBool();
     s_.scale = float(q.value(g + "scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 2));
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 3));
     s_.fxaa = q.value(g + "fxaa", false).toBool();
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
     s_.denoise = veyamux::Denoise(std::clamp(q.value(g + "denoise", 0).toInt(), 0, 3));

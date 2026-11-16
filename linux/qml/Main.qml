@@ -39,6 +39,8 @@ Window {
               native: "Native",
               method: "Method", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Sharp classic scaling, frame by frame. No added latency.",
+              peakEdid: "Auto: the display reports %1 nits.", peakNoEdid: "Auto: the display reports no peak, 1000 nits is used.",
+              nisHint: "NVIDIA Image Scaling (open source, runs on any GPU): 6-tap directional scaling with adaptive sharpening, frame by frame, no added latency.",
               fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): edge-adaptive upscaling (EASU) plus RCAS sharpening, frame by frame. Made for game pictures, no added latency.",
               fsr31Hint: "AMD FidelityFX (open source), builds the picture over several frames from motion VeyAmux measures in the video. Experimental: FSR is made for games, and in VeyAmux's tests on video it came out softer than Lanczos.",
               fsrNeedsScale: "Choose 1.5×, 2× or 3× to use it.",
@@ -108,6 +110,8 @@ Window {
               native: "Original",
               method: "Metode", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Skarp klassisk skalering, billede for billede. Ingen ekstra forsinkelse.",
+              peakEdid: "Auto: skærmen oplyser %1 nits.", peakNoEdid: "Auto: skærmen oplyser ingen top-lysstyrke, 1000 nits bruges.",
+              nisHint: "NVIDIA Image Scaling (open source, virker på alle grafikkort): 6-taps retningsbestemt skalering med adaptiv skarphed, billede for billede, ingen ekstra forsinkelse.",
               fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): kantfølsom opskalering (EASU) plus RCAS-skarphed, billede for billede. Lavet til spilbilleder, ingen ekstra forsinkelse.",
               fsr31Hint: "AMD FidelityFX (open source), opbygger billedet over flere billeder ud fra bevægelse, som VeyAmux måler i videoen. Eksperimentel: FSR er lavet til spil, og i VeyAmux' test på video blev den blødere end Lanczos.",
               fsrNeedsScale: "Vælg 1,5×, 2× eller 3× for at bruge den.",
@@ -449,9 +453,9 @@ Window {
                         Text { text: t("method"); color: Theme.label; font.pixelSize: 14; topPadding: 2 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
-                            // shown as Lanczos | FSR 1 | FSR 3.1; stored values 0 / 2 / 1
-                            readonly property var values: [0, 2, 1]
-                            model: [t("lanczos"), "AMD FSR 1", t("fsr31")]
+                            // shown as Lanczos | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
+                            readonly property var values: [0, 2, 1, 3]
+                            model: [t("lanczos"), "FSR 1", "FSR 3.1", "NIS"]
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
@@ -461,6 +465,7 @@ Window {
                             text: player.upscalerError !== "" ? t("fsrFallback") + player.upscalerError
                                   : (player.upscaler === 1 ? t("fsr31Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
                                      : player.upscaler === 2 ? t("fsr1Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
+                                     : player.upscaler === 3 ? t("nisHint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
                                                              : t("lanczosHint"))
                         }
                     }
@@ -501,7 +506,7 @@ Window {
                         Segmented {
                             visible: player.hdrOutput
                             width: parent.width
-                            model: [player.displayPeakEdid > 0 ? "Auto (" + player.displayPeakEdid + ")" : "Auto", "400", "600", "1000", "1500 nits"]
+                            model: ["Auto", "400", "600", "1000", "1500 nits"]
                             readonly property var peaks: [0, 400, 600, 1000, 1500]
                             current: Math.max(0, peaks.indexOf(player.displayPeak))
                             onPicked: (i) => player.displayPeak = peaks[i]
@@ -510,7 +515,7 @@ Window {
                             visible: player.hdrOutput
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13
                             color: player.hdrOutputActive ? Theme.ok : Theme.warn
-                            text: player.hdrOutputRestart ? t("hdrOutRestart") : player.hdrOutputActive ? t("hdrOutOn")
+                            text: player.hdrOutputRestart ? t("hdrOutRestart") : player.hdrOutputActive ? t("hdrOutOn") + (player.displayPeak === 0 ? " " + (player.displayPeakEdid > 0 ? t("peakEdid").replace("%1", player.displayPeakEdid) : t("peakNoEdid")) : "")
                                   : player.hdrOutputNoVulkan ? t("hdrOutSw") : player.hdrOutputXwayland ? t("hdrOutX11") : t("hdrOutNo")
                         }
                         Item {

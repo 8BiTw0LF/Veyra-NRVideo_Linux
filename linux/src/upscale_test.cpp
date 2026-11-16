@@ -1,4 +1,4 @@
-// Upscaling check: veyamux-upscale-test <shaderDir> <in.rgba> <w> <h> <frames> <out.rgba> <lanczos|fsr|fsr1> [scale] [motionSign]
+// Upscaling check: veyamux-upscale-test <shaderDir> <in.rgba> <w> <h> <frames> <out.rgba> <lanczos|fsr|fsr1|nis> [scale] [motionSign]
 // Runs the full enhancement chain (EnhanceChain::process) frame by frame and writes every upscaled frame.
 #include "EnhanceChain.h"
 #include <chrono>
@@ -8,7 +8,7 @@
 #include <vector>
 using namespace veyamux;
 int main(int argc, char** argv) {
-    if (argc < 8) { std::fprintf(stderr, "usage: %s <shaderDir> <in.rgba> <w> <h> <frames> <out.rgba> <lanczos|fsr|fsr1> [scale] [sign]\n", argv[0]); return 2; }
+    if (argc < 8) { std::fprintf(stderr, "usage: %s <shaderDir> <in.rgba> <w> <h> <frames> <out.rgba> <lanczos|fsr|fsr1|nis> [scale] [sign]\n", argv[0]); return 2; }
     const int W = atoi(argv[3]), H = atoi(argv[4]), N = atoi(argv[5]);
     const bool fsr = std::strcmp(argv[7], "fsr") == 0;
     if (argc > 9) setenv("VEYAMUX_FSR_UP_SIGN", argv[9], 1);   // read when the upscaler is created
@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     if (!chain.init(err)) { std::fprintf(stderr, "init: %s\n", err.c_str()); return 1; }
     EnhanceSettings s;
     s.scale = argc > 8 ? float(atof(argv[8])) : 2.0f;
-    s.upscaler = fsr ? Upscaler::AmdFsr3 : (std::strcmp(argv[7], "fsr1") == 0 ? Upscaler::AmdFsr1 : Upscaler::Lanczos);
+    s.upscaler = fsr ? Upscaler::AmdFsr3 : (std::strcmp(argv[7], "fsr1") == 0 ? Upscaler::AmdFsr1 : std::strcmp(argv[7], "nis") == 0 ? Upscaler::Nis : Upscaler::Lanczos);
     if (const char* nr = std::getenv("VEYAMUX_TEST_NR")) {   // "mode,strength": 1 spatial, 2 temporal, 3 both
         int m = 0, k = 1; std::sscanf(nr, "%d,%d", &m, &k);
         s.denoise = Denoise(m); s.denoiseStrength = k;

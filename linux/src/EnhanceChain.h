@@ -24,7 +24,7 @@ enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to Lanczos if FidelityFX cannot run.
-enum class Upscaler { Lanczos = 0, AmdFsr3 = 1, AmdFsr1 = 2 };   // FSR 1 = EASU + RCAS (spatial, one frame)
+enum class Upscaler { Lanczos = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3 };   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
 
 struct EnhanceSettings {
     bool enabled = true;
@@ -162,6 +162,9 @@ private:
     ImageRes src_, lin_, linB_, luma_, up_, fin_, out8_;
     std::unique_ptr<FsrUpscaler> fsrUp_;
     std::unique_ptr<FsrFrameGen> fg_;
+    ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)
+    BufferRes nisStaging_;
+    bool recordNis(const ImageRes& src, int w, int h, int ow, int oh);
     ImageRes fgOut_, disp_;
     bool fgActive_ = false, fgRealPending_ = false, fgReset_ = true;
     std::string fgError_;

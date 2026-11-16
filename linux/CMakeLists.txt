@@ -49,6 +49,8 @@ foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSe
 endforeach()
 # AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
 veyamux_spv(LxFsr1 "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxFsr1.hlsl" -I "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fidelityfx/include/FidelityFX/gpu")
+# NVIDIA Image Scaling (MIT)
+veyamux_spv(LxNis "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxNis.hlsl" -I "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nis")
 add_custom_target(veyamux_shaders ALL DEPENDS ${SPV_OUTPUTS})
 
 

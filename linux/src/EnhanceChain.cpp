@@ -1,4 +1,5 @@
 #include "EnhanceChain.h"
+#include "../third_party/nis/NIS_Config.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -41,6 +42,9 @@ EnhanceChain::~EnhanceChain() {
     releaseStream();
     fsrUp_.reset();
     fg_.reset();
+    ctx_.destroy(nisScale_);
+    ctx_.destroy(nisUsm_);
+    ctx_.destroy(nisStaging_);
     ctx_.destroy(fgOut_);
     ctx_.destroy(disp_);
     nrMotion_.reset();
@@ -66,7 +70,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -234,6 +238,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upError_.clear();
             upFailedKey_ = 0;
         }
+        if (!done && s.upscaler == Upscaler::Nis) done = recordNis(*cur, w, h, ow, oh);
         if (!done && s.upscaler == Upscaler::AmdFsr1) {
             // AMD FSR 1: EASU into fin_ (free until the finishing pass), RCAS back into up_
             struct { uint32_t iw, ih, ow, oh, mode; float sharp; uint32_t p0, p1; } fp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh), 0, 0, 0, 0};
@@ -461,6 +466,41 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     ob.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ob);
+    return true;
+}
+
+// ------------------------------------------------------------------ NVIDIA Image Scaling
+
+bool EnhanceChain::recordNis(const ImageRes& src, int w, int h, int ow, int oh) {
+    const VkCommandBuffer cb = ctx_.active();
+    if (!nisScale_.image) {   // coefficient tables, uploaded once
+        const VkImageUsageFlags u = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        nisScale_ = ctx_.createImage(uint32_t(kFilterSize / 4), uint32_t(kPhaseCount), VK_FORMAT_R32G32B32A32_SFLOAT, u);
+        nisUsm_ = ctx_.createImage(uint32_t(kFilterSize / 4), uint32_t(kPhaseCount), VK_FORMAT_R32G32B32A32_SFLOAT, u);
+        nisStaging_ = ctx_.createBuffer(sizeof coef_scale + sizeof coef_usm, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+        if (!nisScale_.image || !nisUsm_.image || !nisStaging_.buffer || !nisStaging_.mapped) return false;
+        ctx_.transitionToGeneral(nisScale_.image);
+        ctx_.transitionToGeneral(nisUsm_.image);
+        std::memcpy(nisStaging_.mapped, coef_scale, sizeof coef_scale);
+        std::memcpy(static_cast<char*>(nisStaging_.mapped) + sizeof coef_scale, coef_usm, sizeof coef_usm);
+        VkBufferImageCopy c{};
+        c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        c.imageExtent = {uint32_t(kFilterSize / 4), uint32_t(kPhaseCount), 1};
+        vkCmdCopyBufferToImage(cb, nisStaging_.buffer, nisScale_.image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+        c.bufferOffset = sizeof coef_scale;
+        vkCmdCopyBufferToImage(cb, nisStaging_.buffer, nisUsm_.image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+        ctx_.computeBarrier();
+    }
+    NISConfig cfg{};
+    // NIS sharpness 0..1 (NVIDIA's default 0.5); VeyAmux's own Sharpness slider still applies afterwards
+    static const float sharp = std::getenv("VEYAMUX_NIS_SHARP") ? float(std::atof(std::getenv("VEYAMUX_NIS_SHARP"))) : 0.4f;
+    if (!NVScalerUpdateConfig(cfg, sharp, 0, 0, uint32_t(w), uint32_t(h), uint32_t(w), uint32_t(h),
+                              0, 0, uint32_t(ow), uint32_t(oh), uint32_t(ow), uint32_t(oh), NISHDRMode::Linear))
+        return false;
+    const ImageRes* in[] = {&src, &nisScale_, &nisUsm_};
+    const ImageRes* out[] = {&up_};
+    ctx_.dispatch(kernel("LxNis"), in, 3, out, 1, &cfg, sizeof cfg, uint32_t((ow + 31) / 32), uint32_t((oh + 23) / 24));
+    ctx_.computeBarrier();
     return true;
 }
 

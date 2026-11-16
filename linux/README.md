@@ -45,7 +45,7 @@ Developed and tested on **Bazzite** with an **AMD RX 9070 XT** and an **AVerMedi
 | Feature | Without Lossless Scaling | With Lossless Scaling + lsfg-vk |
 |---|:---:|:---:|
 | Capture card and video playback | ✅ | ✅ |
-| Upscaling (Lanczos / AMD FSR 1 / AMD FSR 3.1) | ✅ | ✅ |
+| Upscaling (Lanczos / AMD FSR 1 / NVIDIA NIS / AMD FSR 3.1) | ✅ | ✅ |
 | Noise reduction, sharpening, FXAA, colour | ✅ | ✅ |
 | Repeated-frame removal (30 fps games in a 60 Hz signal) | ✅ | ✅ |
 | OBS browser source | ✅ | ✅ |
@@ -97,7 +97,8 @@ normally and the menu tells you what is missing. Frame generation can also be tu
 
 **Picture enhancement**
 - **Upscaling** 1.5× / 2× / 3× with Lanczos-3, **AMD FSR 1** (EASU edge-adaptive upscaling + RCAS sharpening, frame by
-  frame, no added latency) or **AMD FSR 3.1** (FidelityFX SDK 1.1.4, fed by VeyAmux's own motion estimation, since video
+  frame, no added latency), **NVIDIA Image Scaling** (NIS: 6-tap directional scaling + adaptive sharpening, runs on any
+  GPU, frame by frame) or **AMD FSR 3.1** (FidelityFX SDK 1.1.4, fed by VeyAmux's own motion estimation, since video
   has no motion vectors).
 - **Noise reduction**: *Spatial* (non-local means), *Temporal* (motion-compensated average over several frames) or
   *Both*, in three strengths. Removes grain, dithering and compression noise, so *Sharpness* can be raised without
@@ -240,6 +241,7 @@ Besides porting Veyra-NRVideo from Windows (D3D12/C#) to Linux (Vulkan/Qt 6/FFmp
   scRGB swapchain, BT.2020 colour), and a **VRR mode** that paces the game's own frames evenly.
 - **gamescope start** and **Add to Steam** (non-Steam game shortcut written to `shortcuts.vdf`).
 - **AMD FSR 1** upscaling (EASU + RCAS from the FidelityFX SDK headers).
+- **NVIDIA Image Scaling (NIS)** upscaling (NIS SDK, MIT, linear-HDR mode).
 - **GPU timing**: Vulkan timestamp queries per stage, shown live in the menu.
 - **Instant replay, recording and screenshots** with VA-API hardware encoding (NV12 conversion on the GPU).
 - **Profiles** per source with automatic switching, and an **audio delay** setting.

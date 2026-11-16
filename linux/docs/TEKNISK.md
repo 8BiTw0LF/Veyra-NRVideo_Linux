@@ -21,7 +21,7 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1 eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
+| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX SDK 1.1.4 FSR 3.1 upscaler på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -97,6 +97,10 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   SDK'ens `ffx_fsr1.h`, billede for billede (`shaders/LxFsr1.hlsl`), i gamma-2-domænet. Målt 2×: fine detaljer 32,2 dB /
   detaljegrad 0,93 (Lanczos 32,0 dB / 0,61), naturligt motiv 49,0 / 49,5 dB, vektorgrafik 35,6 / 37,3 dB – synligt
   skarpere uden ringning, men lidt lavere PSNR på skarpe kanter.
+- **NVIDIA Image Scaling (NIS)** – NVScaler fra NVIDIAs NIS SDK (MIT, `third_party/nis`), `shaders/LxNis.hlsl`:
+  6-taps retningsbestemt skalering med adaptiv skarphed, blok 32×24, 256 tråde, `NIS_HDR_MODE` lineær (kæden kører i
+  lineært lys, så også HDR-signaler skaleres korrekt). Koefficient-teksturerne (2×64 RGBA32F) uploades én gang.
+  Skarphed 0,4 som standard (`VEYAMUX_NIS_SHARP=0..1`). Virker på alle grafikkort (ren compute), ingen ekstra forsinkelse.
 - **AMD FSR 3.1** (eksperimentel) – AMD FidelityFX SDK 1.1.4 (open source). FSR 3.1 er en *temporal* opskalerer: den samler
   detaljer over flere billeder og skal vide, hvordan hver pixel har bevæget sig, ned til brøkdele af en pixel. Spil giver
   den præcise bevægelsesvektorer og rykker kameraet en brøkdel af en pixel hvert billede (jitter); video har ingen af delene.
@@ -283,5 +287,5 @@ C capture-kort · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbill
 `MediaEngine` (demux/video/lyd/render-tråde) → `PlayerBridge`/`VideoItem` (Qt/QML).
 Licens: GPL-3.0 (som det oprindelige Veyra-NRVideo, som VeyAmux bygger på). Tredjepart: se `THIRD_PARTY_NOTICES_LINUX.md`.
 
-Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> lanczos|fsr [skala]` (hele forbedringskæden, til
+Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> lanczos|fsr|fsr1|nis [skala]` (hele forbedringskæden, til
 PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjfjerning til).
