@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux18");
+    QCoreApplication::setApplicationVersion("2.1.5-linux19");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -188,11 +188,20 @@ int main(int argc, char** argv) {
             env.insert("DISABLE_HDR_WSI", "1");
             env.insert("VEYAMUX_LSFG", "0");
             env.insert("DISABLE_LSFGVK", "1");
+            // other common capture/overlay layers that wrap the swapchain (OBS can capture the gamescope window)
+            for (const char* v : {"OBS_VKCAPTURE", "MANGOHUD", "ENABLE_VKBASALT", "VK_INSTANCE_LAYERS"}) env.remove(v);
+            env.insert("DISABLE_MANGOHUD", "1");
+            env.insert("DISABLE_VKBASALT", "1");
+            env.insert("VK_LOADER_DEBUG", "layer");   // which layers load: written to the log below
+            const QString log = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/veyamux-gamescope.log";
+            QDir().mkpath(QFileInfo(log).absolutePath());
             QSettings().setValue("ui/gamescopeLaunching", true);
             QProcess p;
             p.setProgram(gs);
             p.setArguments(a);
             p.setProcessEnvironment(env);
+            p.setStandardOutputFile(log);
+            p.setStandardErrorFile(log);
             qInfo("Starting inside gamescope: %s %s", qPrintable(gs), qPrintable(a.join(' ')));
             if (p.startDetached()) return 0;
             qWarning("Could not start gamescope; starting normally");
