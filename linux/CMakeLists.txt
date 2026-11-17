@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(veyamux-linux VERSION 1.0 LANGUAGES C CXX)
+project(veyamux-linux VERSION 1.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,7 +54,7 @@ veyamux_spv(LxNis "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxNis.hlsl" -I "${CMAKE_C
 add_custom_target(veyamux_shaders ALL DEPENDS ${SPV_OUTPUTS})
 
 
-# ---- AMD FidelityFX SDK 1.1.4 (MIT): FSR 3.1 upscaling, Vulkan backend ----
+# ---- AMD FidelityFX SDK 1.1.4 framework + FSR 3.1.6 effect code from SDK 2.4.0 (MIT): FSR 3.1.6 upscaling + frame generation, Vulkan backend ----
 # FidelityFX_SC.exe is Windows-only; ffx_sc_linux.py + ffx_reflect generate the same permutation headers here.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(VEYAMUX_GLSLANG glslangValidator REQUIRED)

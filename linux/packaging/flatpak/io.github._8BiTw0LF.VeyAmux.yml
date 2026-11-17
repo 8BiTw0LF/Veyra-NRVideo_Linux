@@ -22,8 +22,7 @@ finish-args:
   - --socket=wayland
   - --socket=x11
   - --share=ipc
-  - --device=dri
-  # capture cards (V4L2, /dev/video*) and game controllers for the menu (/dev/input/event*)
+  # the GPU, capture cards (V4L2, /dev/video*) and game controllers for the menu (/dev/input/event*)
   - --device=all
   # sound from the capture card and to the speakers / the stream
   - --socket=pulseaudio

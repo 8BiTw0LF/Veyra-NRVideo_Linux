@@ -1,6 +1,6 @@
 // This file is part of the FidelityFX SDK.
 //
-// Copyright (C) 2024 Advanced Micro Devices, Inc.
+// Copyright (C) 2026 Advanced Micro Devices, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
@@ -38,12 +38,6 @@ void setupFrameinterpolationResources(FfxInt32x2 iPxPos)
     }
 
     // Reset resources
-    StoreGameMotionVectorFieldX(iPxPos, 0);
-    StoreGameMotionVectorFieldY(iPxPos, 0);
-
-    StoreOpticalflowMotionVectorFieldX(iPxPos, 0);
-    StoreOpticalflowMotionVectorFieldY(iPxPos, 0);
-
     StoreDisocclusionMask(iPxPos, FfxFloat32x2(0.0, 0.0));
 }
 

@@ -1,4 +1,4 @@
-// VeyAmux for Linux - AMD FidelityFX Super Resolution 3.1 upscaling (FidelityFX SDK 1.1.4, MIT) on Vulkan.
+// VeyAmux for Linux - AMD FidelityFX Super Resolution 3.1.6 upscaling (FidelityFX SDK 1.1.4 framework + SDK 2.4.0 effect code, MIT) on Vulkan.
 //
 // FSR 3.1 is a temporal upscaler: it accumulates detail over several frames and needs to know how every pixel moved,
 // to a fraction of a pixel. Games hand it engine motion vectors and depth; video has neither, so per frame we record,

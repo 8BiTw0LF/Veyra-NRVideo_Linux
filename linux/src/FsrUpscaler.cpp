@@ -80,7 +80,7 @@ FsrUpscaler::FsrUpscaler(VkContext& ctx, std::string shaderDir) : ctx_(ctx), sha
 }
 FsrUpscaler::~FsrUpscaler() = default;
 
-const char* FsrUpscaler::versionString() { return "AMD FSR 3.1 upscaling (FidelityFX SDK 1.1.4)"; }
+const char* FsrUpscaler::versionString() { return "AMD FSR 3.1.6 upscaling (FidelityFX SDK 2.4.0 effect code)"; }
 
 void FsrUpscaler::release() { p_.reset(); }
 

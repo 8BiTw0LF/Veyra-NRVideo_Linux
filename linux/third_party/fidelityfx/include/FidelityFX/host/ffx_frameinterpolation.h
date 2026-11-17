@@ -30,7 +30,7 @@
 /// FidelityFX Frameinterpolation major version.
 ///
 /// @ingroup FRAMEINTERPOLATIONFRAMEINTERPOLATION
-#define FFX_FRAMEINTERPOLATION_VERSION_MAJOR      (1)
+#define FFX_FRAMEINTERPOLATION_VERSION_MAJOR      (3)
 
 /// FidelityFX Frameinterpolation minor version.
 ///
@@ -40,7 +40,7 @@
 /// FidelityFX Frameinterpolation patch version.
 ///
 /// @ingroup FRAMEINTERPOLATIONFRAMEINTERPOLATION
-#define FFX_FRAMEINTERPOLATION_VERSION_PATCH      (3)
+#define FFX_FRAMEINTERPOLATION_VERSION_PATCH      (6)
 
 /// FidelityFX Frame Interpolation context count
 ///

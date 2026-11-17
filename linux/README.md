@@ -31,7 +31,7 @@ whole screen** on your desktop, or from a **video file**, and makes it look bett
 
 - **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1 or Lanczos;
 - **remove noise**, grain and compression blocks;
-- **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1 frame generation;
+- **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
 - **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes), or show retro games with
   **pixel-perfect** sharp, square pixels;
@@ -70,7 +70,7 @@ needed for its own frame generation**, and everything else works without it:
 | Built-in demo scene, controller in the menu | ✅ | ✅ |
 | Instant replay, recording, screenshots, live streaming, OBS | ✅ | ✅ |
 | Sound output choice, sound meter, audio delay, profiles | ✅ | ✅ |
-| **Frame generation 2×**: AMD FSR 3.1 (free, inside VeyAmux) | ✅ | ✅ |
+| **Frame generation 2×**: AMD FSR 3.1.6 (free, inside VeyAmux) | ✅ | ✅ |
 | **Frame generation 2× / 3×**: Lossless Scaling (best quality) | – | ✅ |
 
 > Lossless Scaling is a paid application on Steam (by THS). lsfg-vk (CC BY-NC-ND 4.0) is a separate open-source project
@@ -128,8 +128,8 @@ needed for its own frame generation**, and everything else works without it:
 - **Lossless Scaling** *Fixed 2×* and *Fixed 3×* through lsfg-vk, for VeyAmux's window only. VeyAmux finds Lossless
   Scaling in all Steam libraries (Flatpak included), writes its own lsfg-vk profile and leaves your other lsfg-vk
   settings alone. It has a *performance mode* and an automatic flow scale.
-- **AMD FSR 3.1 2× (free)**: frame generation inside VeyAmux for players without Lossless Scaling (open source, any GPU,
-  capture cards). The motion is estimated from the pictures, so the quality is below Lossless Scaling, and the real
+- **AMD FSR 3.1.6 2× (free)**: frame generation inside VeyAmux (open source, any GPU, capture cards). It sits next to
+  the Lossless Scaling modes, so you can switch between them. The motion is estimated from the pictures, so the quality is below Lossless Scaling, and the real
   frame is shown half a frame later.
 - **Smarter input**: a 30 fps game in a 60 Hz signal repeats every picture. VeyAmux drops the repeats, so frame
   generation turns 30 distinct frames into smooth 60.
@@ -214,8 +214,27 @@ missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
 
 Press **C** (or **Capture**) to choose a capture card, window or screen. Press **P** (or ✨) for the menu.
 
-**Flatpak:** VeyAmux is on its way to **Flathub**. In the Flatpak version, lsfg-vk (step 3) is installed as a Flatpak
-extension instead: `flatpak install flathub org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`.
+**Or as a Flatpak, with updates through Discover / GNOME Software** (VeyAmux' own Flatpak repository):
+
+```sh
+flatpak remote-add --user --if-not-exists veyamux https://8bitw0lf.github.io/VeyAmux/veyamux.flatpakrepo
+flatpak install --user veyamux io.github._8BiTw0LF.VeyAmux
+```
+
+See [8bitw0lf.github.io/VeyAmux](https://8bitw0lf.github.io/VeyAmux/) for a one-click install.
+
+**Or as a single Flatpak file** (no automatic updates):
+1. Download `VeyAmux-x86_64.flatpak` from the same release.
+2. Install and start it:
+
+   ```sh
+   flatpak install --user VeyAmux-x86_64.flatpak
+   flatpak run io.github._8BiTw0LF.VeyAmux
+   ```
+
+   The KDE runtime it needs comes from Flathub automatically.
+3. In the Flatpak version, lsfg-vk (step 3 below) is a Flatpak extension instead:
+   `flatpak install flathub org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`.
 
 ### 2. Lossless Scaling (only for its frame generation)
 
@@ -244,7 +263,7 @@ an old lsfg-vk 1.x first.
 
 ### 4. Turn on frame generation
 
-Open the menu (**P**). Under *Frame generation*, choose **Fixed 2×** (Lossless Scaling) or **AMD FSR 3.1 2× (free)**. If
+Open the menu (**P**). Under *Frame generation*, choose **Fixed 2×** (Lossless Scaling) or **2× (free)** under *AMD FSR 3.1.6*. If
 the menu shows *Restart now*, press it. With Lossless Scaling, the status box should say **"Active through lsfg-vk"**.
 
 **Refresh rate:** lsfg-vk has no frame pacing, so set the display to the result. 60 fps × 2 = 120 fps needs a 120 Hz
@@ -302,7 +321,7 @@ Veyra's original HLSL shaders are reused, compiled to SPIR-V. Built for Linux:
 - **Capture:** the low-latency capture path (V4L2 straight into the UI's Vulkan frame, with format conversion on the
   GPU), the content measurement (real frame rate and rendering resolution), and the window and screen source (portal
   and PipeWire).
-- **Processing:** FSR 1, NIS and FSR 3.1 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1 frame
+- **Processing:** FSR 1, NIS and FSR 3.1 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1.6 frame
   generation, HDR output and Retro TV.
 - **Output:** recording, replay and streaming, and the Lossless Scaling integration.
 
@@ -327,7 +346,7 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 - VeyAmux is licensed under **GPL-3.0**, like [Veyra-NRVideo](https://github.com/Likely7/Veyra-NRVideo) by Likely7,
   which it is built on (shaders and processing design).
 - **Third-party code:**
-  - AMD FidelityFX SDK 1.1.4 (MIT)
+  - AMD FidelityFX SDK 1.1.4 + FSR 3.1.6 effect code from SDK 2.4.0 (MIT)
   - NVIDIA Image Scaling SDK (MIT)
   - CRT-Geom by cgwg, Themaister and DOLLS (GPL-2.0+), as used in [ShaderGlass](https://github.com/mausimus/ShaderGlass)
   - Qt 6 and FFmpeg (LGPL)

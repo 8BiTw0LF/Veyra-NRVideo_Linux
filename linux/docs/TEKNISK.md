@@ -52,7 +52,7 @@ foran `8BiTw0LF`, fordi en del af et Flatpak-id ikke må starte med et tal.
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
 | GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
-| **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX SDK 1.1.4 FSR 3.1 upscaler på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
+| **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX FSR 3.1.6 upscaler (SDK 2.4.0-effektkode i SDK 1.1.4-rammen) på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
 | Capture-kort via V4L2 (UVC): YUYV/UYVY/NV12/I420/RGB/MJPEG, valg af opløsning/frekvens, lavlatens-visning, lyd fra PulseAudio/PipeWire-kilde | ✅ (testet uden hardware: konvertering verificeret, enheden selv ikke) |
@@ -131,7 +131,7 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   6-taps retningsbestemt skalering med adaptiv skarphed, blok 32×24, 256 tråde, `NIS_HDR_MODE` lineær (kæden kører i
   lineært lys, så også HDR-signaler skaleres korrekt). Koefficient-teksturerne (2×64 RGBA32F) uploades én gang.
   Skarphed 0,4 som standard (`VEYAMUX_NIS_SHARP=0..1`). Virker på alle grafikkort (ren compute), ingen ekstra forsinkelse.
-- **AMD FSR 3.1** (eksperimentel) – AMD FidelityFX SDK 1.1.4 (open source). FSR 3.1 er en *temporal* opskalerer: den samler
+- **AMD FSR 3.1** (eksperimentel) – AMD FidelityFX FSR 3.1.6 (SDK 2.4.0-effektkode i SDK 1.1.4-rammen, open source). FSR 3.1 er en *temporal* opskalerer: den samler
   detaljer over flere billeder og skal vide, hvordan hver pixel har bevæget sig, ned til brøkdele af en pixel. Spil giver
   den præcise bevægelsesvektorer og rykker kameraet en brøkdel af en pixel hvert billede (jitter); video har ingen af delene.
   VeyAmux måler derfor bevægelsen selv (luma-pyramide + regulariseret Lucas-Kanade fra groft til fint, med udfyldning af flade
@@ -324,9 +324,9 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
 Capture-lyden går igennem i blokke på 5 ms (før 20 ms) med ca. 20 ms kø ud (før 50 ms); pipewire-pulse sænker sin
 kvantum tilsvarende. `VEYAMUX_AUDIO_MS=<ms>` (2–40) giver større blokke på travle systemer.
 
-## Gratis frame generation (AMD FSR 3.1)
-Tilstand 5 (`enh/frameGenMode=5`, vises når Lossless Scaling ikke er fundet): `src/FsrFrameGen.cpp` – FidelityFX optical
-flow + frame interpolation (SDK 1.1.4, MIT) på det færdige billede, med VeyAmux' egen bevægelsesestimering som
+## Gratis frame generation (AMD FSR 3.1.6)
+Tilstand 5 (`enh/frameGenMode=5`, vises altid ved siden af Lossless Scaling; med lsfg-vk indlæst sættes dets multiplier til 1): `src/FsrFrameGen.cpp` – FidelityFX optical
+flow + frame interpolation (FSR 3.1.6-effektkode fra SDK 2.4.0 i SDK 1.1.4-rammen, MIT; se `third_party/fidelityfx/VEYAMUX_README.md`) på det færdige billede, med VeyAmux' egen bevægelsesestimering som
 "spil-bevægelsesvektorer", konstant uendelig dybde, beskyttelse af statiske elementer (`LxStatic`) og skarphed i fine
 detaljer (`LxDetail`). Kun capture-vejen: det genererede billede kopieres til et visningsbillede med det samme, det
 rigtige et halvt capture-interval senere (`EnhanceChain::recordShowReal`, `QTimer` → `update()`). Testet: et objekt der

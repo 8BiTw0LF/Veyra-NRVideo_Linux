@@ -74,6 +74,11 @@
   </supports>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1" date="2026-11-17">
+      <description>
+        <p>AMD FSR 3.1.6 upscaling and frame generation (from FidelityFX SDK 2.4.0). FSR frame generation can now be chosen next to Lossless Scaling, so you can switch between them.</p>
+      </description>
+    </release>
     <release version="1.0" date="2026-11-17">
       <description>
         <p>First release under the new version numbers: built-in demo scene (Abyssal Garden), game controller for the menu and the start screen, pixel-perfect scaling, eight languages and four themes.</p>

@@ -438,6 +438,10 @@ static FfxErrorCode frameinterpolationCreate(FfxFrameInterpolationContext_Privat
     context->constants.interpolationRectBase[1] = 0;
     context->constants.interpolationRectSize[0] = contextDescription->displaySize.width;
     context->constants.interpolationRectSize[1] = contextDescription->displaySize.height;
+    context->constants.colorRectBase[0]    = 0;
+    context->constants.colorRectBase[1]    = 0;
+    context->constants.colorRectSize[0]    = contextDescription->displaySize.width;
+    context->constants.colorRectSize[1]    = contextDescription->displaySize.height;
 
     // generate the data for the LUT.
     const uint32_t lanczos2LutWidth = 128;
@@ -946,8 +950,6 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
     contextPrivate->constants.displaySize[1]        = params->displaySize.height;
     contextPrivate->constants.displaySizeRcp[0]     = 1.0f / params->displaySize.width;
     contextPrivate->constants.displaySizeRcp[1]     = 1.0f / params->displaySize.height;
-    contextPrivate->constants.upscalerTargetSize[0] = params->interpolationRect.width;
-    contextPrivate->constants.upscalerTargetSize[1] = params->interpolationRect.height;
     contextPrivate->constants.Mode                  = 0;
     contextPrivate->constants.Reset                 = bReset || bDisjointFrameID;
     contextPrivate->constants.deltaTime             = params->frameTimeDelta;
@@ -965,6 +967,11 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
     contextPrivate->constants.interpolationRectBase[1] = params->interpolationRect.top;
     contextPrivate->constants.interpolationRectSize[0] = params->interpolationRect.width;
     contextPrivate->constants.interpolationRectSize[1] = params->interpolationRect.height;
+
+    contextPrivate->constants.colorRectBase[0] = params->interpolationRect.left;
+    contextPrivate->constants.colorRectBase[1] = params->interpolationRect.top;
+    contextPrivate->constants.colorRectSize[0] = params->interpolationRect.width;
+    contextPrivate->constants.colorRectSize[1] = params->interpolationRect.height;
 
     // Debug bar
     static size_t dbgIdx = 0;
@@ -1101,6 +1108,14 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
         };
         for (int i = 0; i < _countof(aliasableResources); ++i)
         {
+            FfxGpuJobDescription barrierJob        = {FFX_GPU_JOB_BARRIER};
+            barrierJob.barrierDescriptor.barrierType = FFX_BARRIER_TYPE_TRANSITION;
+            barrierJob.barrierDescriptor.resource = aliasableResources[i];
+            barrierJob.barrierDescriptor.newState = FFX_RESOURCE_STATE_UNORDERED_ACCESS;
+            contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &barrierJob);
+        }
+        for (int i = 0; i < _countof(aliasableResources); ++i)
+        {
             FfxGpuJobDescription discardJob        = {FFX_GPU_JOB_DISCARD};
             discardJob.discardJobDescriptor.target = aliasableResources[i];
             contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &discardJob);
@@ -1136,6 +1151,22 @@ FFX_API FfxErrorCode ffxFrameInterpolationDispatch(FfxFrameInterpolationContext*
         // only execute FG data preparation passes when reset wasnt triggered
         if (bExecutePreparationPasses)
         {
+            // FSR 3.1.6: the vector fields are cleared here instead of in the setup pass
+            FfxResourceInternal integerTypedResources[] = {
+            contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_GAME_MOTION_VECTOR_FIELD_X],
+            contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_GAME_MOTION_VECTOR_FIELD_Y],
+            contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_MOTION_VECTOR_FIELD_X],
+            contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_MOTION_VECTOR_FIELD_Y]
+            };
+            for (int i = 0; i < _countof(integerTypedResources); ++i)
+            {
+                FfxGpuJobDescription clearJob = { FFX_GPU_JOB_CLEAR_FLOAT };
+                uint32_t clearUintalue[]{ 0,0,0,0 };
+                memcpy(clearJob.clearJobDescriptor.color, clearUintalue, 4 * sizeof(uint32_t));
+                clearJob.clearJobDescriptor.target = integerTypedResources[i];
+                contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &clearJob);
+            }
+
             // clear estimated depth resources
             {
                 FfxGpuJobDescription clearJob = {FFX_GPU_JOB_CLEAR_FLOAT};

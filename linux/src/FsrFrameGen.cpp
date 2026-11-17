@@ -86,7 +86,7 @@ struct FsrFrameGen::Impl {
 FsrFrameGen::FsrFrameGen(VkContext& ctx, std::string shaderDir) : ctx_(ctx), shaderDir_(std::move(shaderDir)) {}
 FsrFrameGen::~FsrFrameGen() = default;
 
-const char* FsrFrameGen::versionString() { return "AMD FSR 3.1 frame generation (FidelityFX SDK 1.1.4)"; }
+const char* FsrFrameGen::versionString() { return "AMD FSR 3.1.6 frame generation (FidelityFX SDK 2.4.0 effect code)"; }
 
 void FsrFrameGen::release() { p_.reset(); }
 

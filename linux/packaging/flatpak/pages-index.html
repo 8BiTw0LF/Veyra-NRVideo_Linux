@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VeyAmux Flatpak</title>
+<link rel="icon" href="icon.svg">
+<style>
+  :root { color-scheme: light dark; --bg: #faf7fc; --fg: #1d1324; --muted: #6b5a77; --card: #ffffff; --line: #e4dbea; --accent: #e0457b; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #140b1a; --fg: #f3ecf7; --muted: #a897b4; --card: #1f1228; --line: #33223f; --accent: #ff7aa8; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 16px 64px; }
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  header img { width: 64px; height: 64px; }
+  h1 { margin: 0; font-size: 2rem; }
+  p.lead { color: var(--muted); margin-top: 4px; }
+  h2 { font-size: 1.1rem; margin: 32px 0 8px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: .9rem; }
+  a { color: var(--accent); }
+  .button { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 999px; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header><img src="icon.svg" alt=""><div><h1>VeyAmux</h1></div></header>
+  <p class="lead">Capture-card viewer and video player for Linux with GPU upscaling, frame generation, HDR, recording and streaming.</p>
+
+  <h2>Install</h2>
+  <p><a class="button" href="veyamux.flatpakref">Install with your software centre</a></p>
+  <p>Or in a terminal: add the repository once, then install. Updates come with <code>flatpak update</code> or through Discover / GNOME Software.</p>
+<pre>flatpak remote-add --user --if-not-exists veyamux @BASE@/veyamux.flatpakrepo
+flatpak install --user veyamux io.github._8BiTw0LF.VeyAmux</pre>
+  <p>The KDE runtime VeyAmux needs comes from Flathub. For Lossless Scaling frame generation, also install the lsfg-vk extension:</p>
+<pre>flatpak install --user flathub org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08</pre>
+
+  <h2>More</h2>
+  <p>Source code, AppImage and release notes: <a href="@REPO@">@REPO@</a></p>
+</main>
+</body>
+</html>

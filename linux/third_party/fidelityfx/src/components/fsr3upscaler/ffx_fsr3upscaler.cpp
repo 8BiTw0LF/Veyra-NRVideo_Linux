@@ -1122,6 +1122,14 @@ static FfxErrorCode fsr3upscalerDispatch(FfxFsr3UpscalerContext_Private* context
             context->uavResources[FFX_FSR3UPSCALER_RESOURCE_IDENTIFIER_FARTHEST_DEPTH_MIP1],
             context->uavResources[FFX_FSR3UPSCALER_RESOURCE_IDENTIFIER_DILATED_REACTIVE_MASKS],
         };
+        for (int i = 0; i < _countof(aliasableResources); ++i)
+        {
+            FfxGpuJobDescription barrierJob          = {FFX_GPU_JOB_BARRIER};
+            barrierJob.barrierDescriptor.barrierType = FFX_BARRIER_TYPE_TRANSITION;
+            barrierJob.barrierDescriptor.resource    = aliasableResources[i];
+            barrierJob.barrierDescriptor.newState    = FFX_RESOURCE_STATE_UNORDERED_ACCESS;
+            context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &barrierJob);
+        }
         for(int i = 0; i<_countof(aliasableResources); ++i)
         {
             FfxGpuJobDescription discardJob = { FFX_GPU_JOB_DISCARD };

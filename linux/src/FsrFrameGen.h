@@ -1,4 +1,4 @@
-// VeyAmux for Linux - AMD FidelityFX Super Resolution 3.1 frame generation (FidelityFX SDK 1.1.4, MIT) on Vulkan.
+// VeyAmux for Linux - AMD FidelityFX Super Resolution 3.1.6 frame generation (FidelityFX SDK 1.1.4 framework + SDK 2.4.0 effect code, MIT) on Vulkan.
 //
 // Same structure as the Windows build's FsrFgPresenter ("frame interpolation into application-owned GPU textures"):
 // no swapchain replacement, no presentation thread. Per real frame we record, into the caller's command buffer:
