@@ -15,6 +15,15 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 ```
 `scripts/fetch-tools.sh` henter DXC, linuxdeploy og appimagetool automatisk. Kør AppImage uden FUSE: `APPIMAGE_EXTRACT_AND_RUN=1`.
 
+## Versionsnumre
+VeyAmux har sine egne versionsnumre: **1.0, 1.1 … 1.9, 2.0, 2.1** og så videre, ét trin for hver opdatering på GitHub
+og Flathub.
+- **Tagget** hedder `VeyAmux-V.<version>` (fx `VeyAmux-V.1.0`), både i VeyAmux-repoet og i fork'en. Udgivelsen får
+  samme navn.
+- **Ved hver udgivelse ændres nummeret fire steder:** `setApplicationVersion` i `src/main.cpp`, `project(... VERSION)`
+  i `CMakeLists.txt` og `<releases>` i begge metainfo-filer.
+- **Ældre udgaver** hed `2.1.5-linuxNN` efter Veyra-NRVideo 2.1.5, sidst `2.1.5-linux21`.
+
 ## Flatpak (Flathub)
 Manifest: `packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml` (KDE-runtime 6.11 = freedesktop 25.08). App-id'et har `_`
 foran `8BiTw0LF`, fordi en del af et Flatpak-id ikke må starte med et tal.

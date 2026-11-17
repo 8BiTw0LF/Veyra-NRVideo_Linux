@@ -7,6 +7,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 GPU="$SDK/include/FidelityFX/gpu"
 API=(-e CS --target-env vulkan1.2 -S comp -Os -DFFX_GLSL=1)
 mkdir -p "$OUT"
+# some glslang builds (the Flatpak SDK's) have no SPIR-V optimizer: compile without -Os there
+probe="$OUT/.probe.comp"
+printf '#version 450\nlayout(local_size_x=1) in;\nvoid main() {}\n' > "$probe"
+if ! "$GLSLANG" -V --target-env vulkan1.2 -S comp -Os -o "$OUT/.probe.spv" "$probe" >/dev/null 2>&1; then
+  echo "glslang has no optimizer: FidelityFX shaders are built without -Os" >&2
+  API=(-e CS --target-env vulkan1.2 -S comp -DFFX_GLSL=1)
+fi
+rm -f "$probe" "$OUT/.probe.spv"
 
 gen() {  # gen <component> <shader.glsl> <base-args...> -- <perm-args...>
   local comp="$1" src="$2"; shift 2

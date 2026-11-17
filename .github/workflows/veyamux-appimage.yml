@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths: ['linux/**', '.github/workflows/veyamux-appimage.yml']
-    tags: ['veyamux-v*']
+    tags: ['VeyAmux-V.*', 'veyamux-v*']
   pull_request:
     paths: ['linux/**']
   workflow_dispatch:
@@ -54,7 +54,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: VeyAmux ${{ github.ref_name }}
+          name: ${{ startsWith(github.ref_name, 'VeyAmux-') && github.ref_name || format('VeyAmux {0}', github.ref_name) }}
           make_latest: true
           # the description: RELEASE_NOTES.md (what is new), then GitHub's generated changelog link
           body_path: ${{ env.SRC }}/RELEASE_NOTES.md

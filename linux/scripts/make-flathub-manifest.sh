@@ -3,12 +3,12 @@
 # the Flatpak manifest with VeyAmux taken from a released git tag (Flathub builds only from fixed sources) and
 # flathub.json (x86_64 only: the HLSL compiler used while building exists only for x86_64).
 #
-#   scripts/make-flathub-manifest.sh v2.1.5-linux20
+#   scripts/make-flathub-manifest.sh VeyAmux-V.1.0
 #
 # The tag must already be pushed to github.com/8BiTw0LF/VeyAmux.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TAG="${1:?usage: $0 <tag, e.g. v2.1.5-linux20>}"
+TAG="${1:?usage: $0 <tag, e.g. VeyAmux-V.1.0>}"
 COMMIT="$(git -C "$ROOT" rev-parse "$TAG^{commit}")"
 ID=io.github._8BiTw0LF.VeyAmux
 OUT="$ROOT/dist/flathub"
@@ -24,7 +24,7 @@ git = ("      - type: git\n"
        f"        commit: {commit}\n"
        "        x-checker-data:\n"
        "          type: git\n"
-       "          tag-pattern: ^(v[\\d.]+-linux\\d+)$\n")
+       "          tag-pattern: ^VeyAmux-V\\.([\\d.]+)$\n")
 # the header comment describes the local build; Flathub's copy starts at the id
 text = text[text.index("id: "):].replace(local, git)
 open(dst, "w").write(text)

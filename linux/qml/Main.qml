@@ -58,6 +58,7 @@ Window {
 
     // Empty state
     Column {
+        id: startCol
         visible: !player.hasMedia
         anchors.centerIn: parent
         spacing: 18
@@ -342,15 +343,20 @@ Window {
     // Select + Start (or Guide held) opens / closes the menu; while it is open the controllers are kept from the game.
     // The D-pad / left stick moves between the menu's controls (the nearest one in that direction), A presses,
     // left/right change a slider, LB/RB jump between the columns, B closes the menu.
-    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen }
+    // The controller also steers the start screen and the capture dialog (no game is running there).
+    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen || capDlg.visible || !player.hasMedia }
     Connections {
         target: gamepad
         function onMenuCombo() {
+            if (capDlg.visible) return
             win.panelOpen = !win.panelOpen
-            if (win.panelOpen) { padNav.active = true; padNav.current = null; padOpenTimer.restart() }
+            padNav.active = true; padNav.current = null
+            if (win.panelOpen) padOpenTimer.restart(); else Qt.callLater(padNav.reset)
         }
-        function onButton(name) { if (win.panelOpen) { padNav.active = true; padNav.press(name) } }
+        function onButton(name) { if (padNav.scope()) { padNav.active = true; padNav.press(name) } }
     }
+    // a newly shown dialog starts on its first control
+    Connections { target: capDlg; function onVisibleChanged() { if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
     // the panel fades in (160 ms) and is invisible until then, so the first control is picked once it shows
     Timer { id: padOpenTimer; interval: 200; onTriggered: if (win.panelOpen && !padNav.current) padNav.reset() }
     QtObject {
@@ -367,7 +373,9 @@ Window {
                     && item.width < panel.width * 0.6) out.push(item)
             for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
         }
-        function targets() { var o = []; collect(area, o); return o }
+        // what the controller steers: the capture dialog, else the menu, else the start screen
+        function scope() { return capDlg.visible ? capDlg : win.panelOpen ? area : !player.hasMedia ? startCol : null }
+        function targets() { var o = []; collect(scope(), o); return o }
         function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
         function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
         function reset() {
@@ -390,6 +398,7 @@ Window {
             if (best) current = best
         }
         function column(step) {
+            if (scope() !== area) return
             var cols = [secA, secB, secC], c = current ? centre(current) : null, idx = 0
             for (var i = 0; i < cols.length; ++i) { var r = cols[i].mapToItem(win.contentItem, 0, 0); if (c && c.x >= r.x - 10) idx = i }
             var want = Math.max(0, Math.min(cols.length - 1, idx + step)), o = []
@@ -404,7 +413,7 @@ Window {
             else if (name === "right") { if (isSlider(current)) current.moved(Math.min(current.to, current.value + (current.to - current.from) / 40)); else move(1, 0) }
             else if (name === "lb") column(-1)
             else if (name === "rb") column(1)
-            else if (name === "b") win.panelOpen = false
+            else if (name === "b") { if (capDlg.visible) { capDlg.visible = false; capDlg.closed() } else win.panelOpen = false }
             else if (name === "a" && current && !isSlider(current)) current.clicked(null)
             Qt.callLater(function () { padRing.place() })
         }
@@ -413,7 +422,7 @@ Window {
     Rectangle {
         id: padRing
         z: 1000
-        visible: padNav.active && win.panelOpen && padNav.current !== null
+        visible: padNav.active && padNav.scope() !== null && padNav.current !== null && padNav.targets().indexOf(padNav.current) >= 0
         color: "transparent"; border.width: 3; border.color: Theme.accent; radius: 8 * Theme.round
         function place() {
             var t = padNav.current; if (!t) return
