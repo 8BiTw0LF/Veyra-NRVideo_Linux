@@ -15,6 +15,12 @@
 
 namespace veyamux {
 
+namespace remoteplay_bits {   // = remoteplay::Button (RemotePlay.h), kept here so the menu code needs no chiaki
+constexpr quint32 kCross = 1u << 0, kCircle = 1u << 1, kSquare = 1u << 2, kTriangle = 1u << 3, kLeft = 1u << 4,
+                  kRight = 1u << 5, kUp = 1u << 6, kDown = 1u << 7, kL1 = 1u << 8, kR1 = 1u << 9, kL3 = 1u << 10,
+                  kR3 = 1u << 11, kOptions = 1u << 12, kShare = 1u << 13, kTouchpad = 1u << 14, kPs = 1u << 15;
+}
+
 namespace {
 constexpr int kRepeatDelay = 380, kRepeatRate = 110;   // ms
 constexpr int kGuideHold = 500;                         // ms
@@ -52,7 +58,7 @@ GamepadInput::~GamepadInput() {
 
 QStringList GamepadInput::controllers() const {
     QStringList n;
-    for (const Pad* p : pads_) n << p->name;
+    for (const Pad* p : pads_) if (!p->touchpad) n << p->name;
     n.sort();
     return n;
 }
@@ -79,15 +85,19 @@ void GamepadInput::addPad(const QString& path, bool test) {
     if (!test) {
         // a controller has the gamepad buttons (BTN_SOUTH = BTN_GAMEPAD); keyboards and mice do not
         unsigned long keys[(KEY_MAX + 1) / (8 * sizeof(long)) + 1]{};
-        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys) < 0 || !testBit(keys, BTN_SOUTH)) {
+        char name[128]{};
+        const bool keysOk = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys) >= 0;
+        ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
+        p->name = QString::fromUtf8(name).trimmed();
+        // a PlayStation controller's touchpad is its own device; its click is the touchpad button (Remote Play)
+        p->touchpad = keysOk && !testBit(keys, BTN_SOUTH) && testBit(keys, BTN_LEFT) && p->name.contains("Touchpad", Qt::CaseInsensitive)
+                      && (p->name.contains("DualSense", Qt::CaseInsensitive) || p->name.contains("Wireless Controller", Qt::CaseInsensitive));
+        if (!keysOk || (!testBit(keys, BTN_SOUTH) && !p->touchpad)) {
             ::close(fd);
             delete p;
             ignored_.insert(path);   // remembered as "not a controller" until it disappears
             return;
         }
-        char name[128]{};
-        ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
-        p->name = QString::fromUtf8(name).trimmed();
         const int axes[6] = {ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ};
         for (int i = 0; i < 6; i++) {
             input_absinfo info{};
@@ -106,12 +116,13 @@ void GamepadInput::addPad(const QString& path, bool test) {
     });
     pads_.insert(path, p);
     if (wantGrab_) applyGrab();
-    emit controllersChanged();
+    if (!p->touchpad) emit controllersChanged();
 }
 
 void GamepadInput::removePad(const QString& path) {
     Pad* p = pads_.take(path);
     if (!p) return;
+    if (p->ffFd >= 0) ::close(p->ffFd);
     ::close(p->fd);
     delete p;
     emit controllersChanged();
@@ -128,12 +139,24 @@ void GamepadInput::readPad(Pad& p) {
         }
         for (size_t i = 0; i < size_t(n) / sizeof(input_event); ++i) {
             const input_event& e = ev[i];
+            if (p.touchpad) {   // only the click
+                if (e.type == EV_KEY && e.code == BTN_LEFT && e.value != 2) psKey(BTN_LEFT, e.value != 0);
+                continue;
+            }
             if (e.type == EV_KEY) {
                 if (e.value == 2) continue;   // kernel auto-repeat: VeyAmux repeats itself
+                psKey(e.code, e.value != 0);   // (the Steam Input copy sends the same state: harmless here)
                 if (duplicate(p, e.code, e.value != 0)) continue;
                 onKey(e.code, e.value != 0);
             } else if (e.type == EV_ABS) {
                 if (e.code == ABS_HAT0X || e.code == ABS_HAT0Y) {
+                    {   // Remote Play: the D-pad as buttons
+                        using namespace remoteplay_bits;
+                        const quint32 neg = e.code == ABS_HAT0X ? kLeft : kUp, pos = e.code == ABS_HAT0X ? kRight : kDown;
+                        const quint32 before = psButtons_;
+                        psButtons_ = (psButtons_ & ~(neg | pos)) | (e.value < 0 ? neg : 0) | (e.value > 0 ? pos : 0);
+                        if (psButtons_ != before) emitPad();
+                    }
                     if (duplicate(p, e.code, e.value < 0 ? -1 : e.value > 0 ? 1 : 0)) continue;
                     const bool x = e.code == ABS_HAT0X;
                     const bool neg = e.value < 0, pos = e.value > 0;
@@ -205,7 +228,70 @@ void GamepadInput::onKey(int code, bool down) {
     }
 }
 
+void GamepadInput::psKey(int code, bool down) {
+    using namespace remoteplay_bits;
+    quint32 bit = 0;
+    switch (code) {
+    case BTN_SOUTH: bit = kCross; break;
+    case BTN_EAST: bit = kCircle; break;
+    case BTN_WEST: bit = kSquare; break;
+    case BTN_NORTH: bit = kTriangle; break;
+    case BTN_TL: bit = kL1; break;
+    case BTN_TR: bit = kR1; break;
+    case BTN_THUMBL: bit = kL3; break;
+    case BTN_THUMBR: bit = kR3; break;
+    case BTN_SELECT: bit = kShare; break;
+    case BTN_START: bit = kOptions; break;
+    case BTN_MODE: bit = kPs; break;
+    case BTN_DPAD_UP: bit = kUp; break;
+    case BTN_DPAD_DOWN: bit = kDown; break;
+    case BTN_DPAD_LEFT: bit = kLeft; break;
+    case BTN_DPAD_RIGHT: bit = kRight; break;
+    case BTN_LEFT: bit = kTouchpad; break;   // the touchpad device's click
+    case BTN_TL2: case BTN_TR2: return;   // digital triggers: onKey -> emitAnalog -> emitPad
+    default: return;
+    }
+    const quint32 before = psButtons_;
+    psButtons_ = down ? (psButtons_ | bit) : (psButtons_ & ~bit);
+    if (psButtons_ != before) emitPad();
+}
+
+void GamepadInput::emitPad() {
+    if (wantGrab_) return;
+    const double l2 = std::max(axis_[4], trigBtn_[0] ? 1.0 : 0.0);
+    const double r2 = std::max(axis_[5], trigBtn_[1] ? 1.0 : 0.0);
+    emit padState(psButtons_, axis_[0], axis_[1], axis_[2], axis_[3], l2, r2);
+}
+
+void GamepadInput::rumble(int low, int high) {
+    for (Pad* p : pads_) {
+        if (p->test || p->touchpad) continue;
+        if (p->ffFd == -2) {
+            p->ffFd = ::open(p->path.toLocal8Bit().constData(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
+            if (p->ffFd >= 0) {
+                unsigned long ff[(FF_MAX + 1) / (8 * sizeof(long)) + 1]{};
+                if (ioctl(p->ffFd, EVIOCGBIT(EV_FF, sizeof ff), ff) < 0 || !testBit(ff, FF_RUMBLE)) { ::close(p->ffFd); p->ffFd = -1; }
+            }
+        }
+        if (p->ffFd < 0) continue;
+        ff_effect fx{};
+        fx.type = FF_RUMBLE;
+        fx.id = int16_t(p->ffId);
+        fx.u.rumble.strong_magnitude = uint16_t(std::clamp(low, 0, 255) * 257);
+        fx.u.rumble.weak_magnitude = uint16_t(std::clamp(high, 0, 255) * 257);
+        fx.replay.length = 3000;   // the game sends a new value when it changes; stops by itself if it does not
+        if (ioctl(p->ffFd, EVIOCSFF, &fx) < 0) continue;
+        p->ffId = fx.id;
+        input_event play{};
+        play.type = EV_FF;
+        play.code = uint16_t(fx.id);
+        play.value = (low > 0 || high > 0) ? 1 : 0;
+        if (::write(p->ffFd, &play, sizeof play) < 0) {}
+    }
+}
+
 void GamepadInput::emitAnalog() {
+    emitPad();
     if (wantGrab_) return;   // the menu has the controller
     const double lt = std::max({axis_[4], trigBtn_[0] ? 1.0 : 0.0, trigBtn_[2] ? 1.0 : 0.0});
     const double rt = std::max({axis_[5], trigBtn_[1] ? 1.0 : 0.0, trigBtn_[3] ? 1.0 : 0.0});
@@ -229,6 +315,8 @@ void GamepadInput::setGrabbed(bool g) {
     wantGrab_ = g;
     if (!g) { heldDir_.clear(); repeat_.stop(); }
     if (g) emit analog(0, 0, 0, 0, 0, 0, false);   // the demo stops swimming while the menu is open
+    if (g) emit padState(0, 0, 0, 0, 0, 0, 0);       // and Remote Play gets an idle controller
+    else emitPad();
     applyGrab();
     emit grabbedChanged();
 }

@@ -33,6 +33,8 @@ public:
     QStringList controllers() const;
     bool grabbed() const { return wantGrab_; }
     void setGrabbed(bool g);
+    // the game's rumble (PlayStation Remote Play): low / high frequency motor 0..255, on every controller
+    void rumble(int low, int high);
 
 signals:
     void controllersChanged();
@@ -45,6 +47,9 @@ signals:
     // left stick click; and "y" pressed
     void analog(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
     void freeButton(const QString& name);
+    // while the menu is closed: the whole controller in PlayStation layout (for Remote Play): buttons as
+    // remoteplay::Button bits, sticks -1..1, triggers 0..1. All zero when the menu opens.
+    void padState(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
 
 private:
     struct Pad {
@@ -55,6 +60,9 @@ private:
         // ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ
         int absMin[6]{-32768, -32768, -32768, -32768, 0, 0}, absMax[6]{32767, 32767, 32767, 32767, 255, 255};
         bool grabbedNow = false;
+        bool touchpad = false;           // a DualSense / DualShock 4 touchpad: only its click is used
+        int ffFd = -2;                   // for rumble (-2: not opened yet, -1: not possible)
+        int ffId = -1;
     };
     void scan();
     void addPad(const QString& path, bool test);
@@ -84,6 +92,9 @@ private:
     bool trigBtn_[4]{};                  // BTN_TL2, BTN_TR2, BTN_TL, BTN_TR
     bool thumbL_ = false;
     void emitAnalog();
+    quint32 psButtons_ = 0;              // remoteplay::Button bits
+    void psKey(int code, bool down);
+    void emitPad();
 };
 
 } // namespace veyamux

@@ -84,6 +84,14 @@ Window {
                     font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
                 MouseArea { id: capMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: capDlg.openDialog() }
             }
+            Rectangle {
+                width: 160; height: 44; radius: 22 * Theme.round; color: psMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
+                border.width: Math.max(1, Theme.edge)
+                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: "PlayStation"; color: Theme.text
+                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
+                MouseArea { id: psMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: psDlg.openDialog() }
+            }
         }
         Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
         // demo scene: try every feature without a capture card
@@ -344,11 +352,11 @@ Window {
     // The D-pad / left stick moves between the menu's controls (the nearest one in that direction), A presses,
     // left/right change a slider, LB/RB jump between the columns, B closes the menu.
     // The controller also steers the start screen and the capture dialog (no game is running there).
-    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen || capDlg.visible || !player.hasMedia }
+    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen || capDlg.visible || psDlg.visible || !player.hasMedia }
     Connections {
         target: gamepad
         function onMenuCombo() {
-            if (capDlg.visible) return
+            if (capDlg.visible || psDlg.visible) return
             win.panelOpen = !win.panelOpen
             padNav.active = true; padNav.current = null
             if (win.panelOpen) padOpenTimer.restart(); else Qt.callLater(padNav.reset)
@@ -357,6 +365,7 @@ Window {
     }
     // a newly shown dialog starts on its first control
     Connections { target: capDlg; function onVisibleChanged() { if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
+    Connections { target: psDlg; function onVisibleChanged() { if (!psDlg.visible) keyRoot.forceActiveFocus(); if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
     // the panel fades in (160 ms) and is invisible until then, so the first control is picked once it shows
     Timer { id: padOpenTimer; interval: 200; onTriggered: if (win.panelOpen && !padNav.current) padNav.reset() }
     QtObject {
@@ -374,7 +383,7 @@ Window {
             for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
         }
         // what the controller steers: the capture dialog, else the menu, else the start screen
-        function scope() { return capDlg.visible ? capDlg : win.panelOpen ? area : !player.hasMedia ? startCol : null }
+        function scope() { return psDlg.visible ? psDlg : capDlg.visible ? capDlg : win.panelOpen ? area : !player.hasMedia ? startCol : null }
         function targets() { var o = []; collect(scope(), o); return o }
         function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
         function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
@@ -413,7 +422,7 @@ Window {
             else if (name === "right") { if (isSlider(current)) current.moved(Math.min(current.to, current.value + (current.to - current.from) / 40)); else move(1, 0) }
             else if (name === "lb") column(-1)
             else if (name === "rb") column(1)
-            else if (name === "b") { if (capDlg.visible) { capDlg.visible = false; capDlg.closed() } else win.panelOpen = false }
+            else if (name === "b") { if (psDlg.visible) psDlg.close(); else if (capDlg.visible) { capDlg.visible = false; capDlg.closed() } else win.panelOpen = false }
             else if (name === "a" && current && !isSlider(current)) current.clicked(null)
             Qt.callLater(function () { padRing.place() })
         }
@@ -857,7 +866,8 @@ Window {
         }
     }
 
-    CaptureDialog { id: capDlg; anchors.fill: parent; z: 100; tr: win.t }
+    CaptureDialog { id: capDlg; anchors.fill: parent; z: 100; tr: win.t; onRemotePlay: psDlg.openDialog() }
+    RemotePlayDialog { id: psDlg; anchors.fill: parent; z: 101; tr: win.t }
 
     // ------------------------------------------------------------- keyboard
     Item {
@@ -874,6 +884,7 @@ Window {
         }
         Keys.onReleased: (e) => { const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true } }
         Keys.onPressed: (e) => {
+            if (psDlg.visible) { if (e.key === Qt.Key_Escape) { psDlg.close(); e.accepted = true } return }
             if (player.demoActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                 const k = demoKeyName(e.key)
                 if (k !== "") { if (!e.isAutoRepeat) player.demoKey(k, true); e.accepted = true; return }

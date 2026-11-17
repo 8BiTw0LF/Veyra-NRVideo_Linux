@@ -1,6 +1,7 @@
 #include "PlayerBridge.h"
 #include "Sandbox.h"
 #include "DemoSource.h"
+#include "RemotePlay.h"
 #include "PulseDevices.h"
 #include <cstring>
 #include <QLocale>
@@ -34,6 +35,10 @@ using veyamux::MediaEngine;
 PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     : QObject(parent), engine_(shaderDir.toStdString()), rec_(std::make_unique<veyamux::Recorder>()) {
     setTheme(QSettings().value("ui/theme", "vice").toString());
+    // the game's rumble (Remote Play) goes to the controller (main.cpp: psRumble -> GamepadInput::rumble)
+    veyamux::remoteplay::setRumbleCallback([this](int low, int high) {
+        QMetaObject::invokeMethod(this, [this, low, high] { emit psRumble(low, high); }, Qt::QueuedConnection);
+    });
     setLanguageChoice(QSettings().value("ui/lang", "auto").toString());
     rec_->onMessage = [this](const std::string& m, bool error) {
         const QString q = QString::fromStdString(m);
@@ -166,6 +171,11 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
 
 PlayerBridge::~PlayerBridge() {
     saveSettings();
+    veyamux::remoteplay::setRumbleCallback({});
+    // a running Remote Play task (registration, wake-up: up to ~40 s) is not waited for
+    psQuit_->store(true);
+    if (psWorker_.joinable()) psWorker_.detach();
+    veyamux::remoteplay::stopDiscovery();
     if (liveVk_) { liveVk_->setStream(-1, nullptr); liveVk_->setRecord(-1, nullptr); }
     obs_.stop();
     engine_.close();
@@ -1067,6 +1077,7 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
 bool PlayerBridge::openCaptureAuto(const QString& path) {
     if (path == "screencast") { openScreenCast(lastCaptureAudio(), true); return true; }
     if (veyamux::CaptureSource::isDemo(path.toStdString())) { openDemo(path.mid(5).toInt()); return true; }
+    if (veyamux::CaptureSource::isRemotePlay(path.toStdString())) { psConnect(path.mid(3)); return true; }
     QString card;
     for (const auto& d : veyamux::listCaptureDevices()) if (QString::fromStdString(d.path) == path) card = QString::fromStdString(d.name);
     captureModes(path);
@@ -1264,6 +1275,18 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         "No Vulkan graphics card for the demo",
         "The graphics card refused the demo's device",
         "The demo's graphics device was lost",
+        // PlayStation Remote Play (RemotePlay.cpp)
+        "Remote Play stopped", "Remote Play is already in use on the console",
+        "The console refused the connection (is Remote Play enabled?)", "The console was turned off", "Remote Play ended: ",
+        "The console asks for its login passcode: enter it in the Remote Play window", "The console's login passcode is wrong",
+        "Choose the PlayStation in the Remote Play window first", "The console's key is damaged: register it again",
+        "Could not start Remote Play", "Could not connect to the console",
+        "Registration failed: check the PIN (it changes every few minutes) and that the console shows the \"Link Device\" screen",
+        "The PSN account ID is not valid", "Could not start the registration", "Could not send the wake-up",
+        "The console did not wake up (is \"Stay connected to the Internet\" in its rest mode settings on?)",
+        "That address has no login code (it should contain \"code=\")",
+        "No access token from PlayStation Network (the code is used once: log in again)",
+        "PlayStation Network sent no account number", "PlayStation Network answered ",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

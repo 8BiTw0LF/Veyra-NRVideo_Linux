@@ -15,6 +15,7 @@ struct AVPacket;
 
 namespace veyamux { class ScreenCastStream; }
 namespace veyamux::demo { class Stream; }
+namespace veyamux::remoteplay { class Stream; }
 
 namespace veyamux {
 
@@ -74,6 +75,8 @@ public:
     static bool isScreenCast(const std::string& path) { return path.rfind("pipewire:", 0) == 0; }
     // "demo:30" / "demo:60": the built-in demo scene (DemoSource.h)
     static bool isDemo(const std::string& path) { return path.rfind("demo:", 0) == 0; }
+    // "ps:<console id>": PlayStation Remote Play (RemotePlay.h)
+    static bool isRemotePlay(const std::string& path) { return path.rfind("ps:", 0) == 0; }
     void close();
     Result read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error);
     // Newest frame only; anything older that the driver queued is dropped immediately (lowest latency).
@@ -93,6 +96,9 @@ private:
     int fd_ = -1;
     std::unique_ptr<ScreenCastStream> sc_;   // window / screen source
     std::unique_ptr<demo::Stream> demo_;     // demo scene
+    std::unique_ptr<remoteplay::Stream> ps_; // PlayStation Remote Play
+    FrameConverter psConv_;                  // its picture as RGBA (software path)
+    int psConvW_ = 0, psConvH_ = 0, psConvFmt_ = -1;
     uint32_t fourcc_ = 0;
     int rawStride_ = 0;
     std::vector<Buf> bufs_;

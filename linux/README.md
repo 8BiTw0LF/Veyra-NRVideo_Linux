@@ -94,6 +94,19 @@ needed for its own frame generation**, and everything else works without it:
   <p align="center">
     <img src="docs/images/demo.jpg" width="720" alt="Abyssal Garden in VeyAmux: a stone whale fluke between kelp, with the swimming controls shown at the bottom">
   </p>
+- **PlayStation Remote Play** (PS5 and PS4, over your home network, no capture card): press **PlayStation** on the
+  start screen (or *PlayStation Remote Play* in the capture window).
+  - **Once:** log in to PlayStation Network. VeyAmux opens Sony's login page in your browser; afterwards you paste the
+    address the browser ends on, and VeyAmux reads your account ID from it.
+  - **Once per console:** on the console open *Settings → System → Remote Play → Link Device* (PS5) or *Settings →
+    Remote Play Connection Settings → Add Device* (PS4), and type the 8-digit number into VeyAmux.
+  - **Then:** press **Play**. A console in rest mode is woken up. The picture (720p or 1080p, 30 or 60 fps, HDR on the
+    PS5) and the sound come straight into VeyAmux, with all its processing.
+  - **Controller:** your controller plays the game while the menu is closed (any controller; a DualSense or DualShock 4
+    touchpad click counts as the touchpad button). **Select + Start** still opens the VeyAmux menu. Rumble from the
+    game reaches the controller.
+  - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
+    now (not over the internet).
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
   one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
@@ -322,7 +335,10 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 ## License and credits
 
 - VeyAmux is licensed under **GPL-3.0**, like [Veyra-NRVideo](https://github.com/Likely7/Veyra-NRVideo) by Likely7,
-  which it is built on (shaders and processing design).
+  which it is built on (shaders and processing design). Because the program includes chiaki-ng's library
+  (AGPL-3.0), the VeyAmux program as distributed is covered by the **AGPL-3.0**.
+- **PlayStation Remote Play:** [chiaki-ng](https://github.com/streetpea/chiaki-ng) v1.10.1 protocol library (AGPL-3.0
+  with OpenSSL exception), with nanopb (zlib) and jerasure / gf-complete (BSD).
 - **Third-party code:**
   - AMD FidelityFX SDK 1.1.4 + FSR 3.1.6 effect code from SDK 2.4.0 (MIT)
   - NVIDIA Image Scaling SDK (MIT)

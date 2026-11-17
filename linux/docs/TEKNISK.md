@@ -303,6 +303,26 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
 Capture-lyden går igennem i blokke på 5 ms (før 20 ms) med ca. 20 ms kø ud (før 50 ms); pipewire-pulse sænker sin
 kvantum tilsvarende. `VEYAMUX_AUDIO_MS=<ms>` (2–40) giver større blokke på travle systemer.
 
+## PlayStation Remote Play (chiaki-ng)
+Kilde `ps:<konsol-id>` + lydkilde `@ps` (`src/RemotePlay.{h,cpp}`, Qt-delen i `src/PlayerBridgeRemotePlay.cpp`,
+vinduet `qml/RemotePlayDialog.qml`). Protokollen er chiaki-ng v1.10.1's `lib/` (AGPL-3.0, `third_party/chiaki-ng`,
+bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, libevent og Opus).
+- **Find:** chiakis discovery-service (UDP-broadcast hvert halve sekund på alle netkort) mens vinduet er åbent.
+- **PSN-konto-ID:** Sonys login-side åbnes i browseren; brugeren indsætter adressen med `code=`. VeyAmux henter token og
+  `user_id` (libcurl) og gemmer de 8 byte little endian som base64 i `ps/accountId`. Et konto-ID kan også indsættes direkte.
+- **Registrering:** `chiaki_regist` med PIN-koden fra konsollen; `rp_regist_key` og `rp_key` (morning) gemmes hex i
+  `ps/consoles/<id>/` sammen med navn, adresse og target. Login-adgangskoden (4 cifre) gemmes der også.
+- **Vækning:** `chiaki_discovery_wakeup` med regist-nøglen som hex-tal, gentaget hvert 5. sekund, op til 40 s, indtil
+  konsollen svarer "ready".
+- **Stream:** PS5 H.265 (HDR: H.265 10-bit → P010, som HDR-capture), PS4 H.264, 720p/1080p, 30/60 fps. Afkodes med
+  FFmpeg (software, slice-tråde, `LOW_DELAY`) og leveres som NV12/P010 til den samme GPU-vej som capture-kort. Lyd: Opus
+  → 48 kHz stereo i en kø på højst 120 ms, som lydtråden læser i stedet for PulseAudio-optagelse.
+- **Controller:** `GamepadInput::padState` (PlayStation-layout: evdev-knapper, D-pad, sticks, analoge triggere,
+  DualSense/DS4-touchpadens klik fra dens egen evdev-enhed) → `chiaki_session_set_controller_state`, kun når menuen er
+  lukket (ellers en tom tilstand). Rumble fra spillet → `EVIOCSFF`/`FF_RUMBLE` på controllerne.
+- **Ikke med endnu:** forbindelse over internettet (PSN holepunch), mikrofon, gyro og touchpad-bevægelser.
+- Fejlsøgning: `VEYAMUX_PS_LOG=1` viser hele chiakis log.
+
 ## Gratis frame generation (AMD FSR 3.1.6)
 Tilstand 5 (`enh/frameGenMode=5`, vises altid ved siden af Lossless Scaling; med lsfg-vk indlæst sættes dets multiplier til 1): `src/FsrFrameGen.cpp` – FidelityFX optical
 flow + frame interpolation (FSR 3.1.6-effektkode fra SDK 2.4.0 i SDK 1.1.4-rammen, MIT; se `third_party/fidelityfx/VEYAMUX_README.md`) på det færdige billede, med VeyAmux' egen bevægelsesestimering som

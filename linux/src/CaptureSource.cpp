@@ -1,5 +1,6 @@
 #include "CaptureSource.h"
 #include "DemoSource.h"
+#include "RemotePlay.h"
 #include "ScreenCast.h"
 #include <cstdio>
 
@@ -283,6 +284,15 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     close();
     probe_.reset();
     delivered_.reset();
+    if (isRemotePlay(path)) {
+        auto s = std::make_unique<remoteplay::Stream>();
+        if (!s->open(path, error)) return false;
+        w_ = s->width(); h_ = s->height(); fps_ = s->fps();
+        card_ = s->name();
+        fourcc_ = 0;
+        ps_ = std::move(s);
+        return true;
+    }
     if (isDemo(path)) {
         auto d = std::make_unique<demo::Stream>();
         if (!d->open(std::atoi(path.c_str() + 5), error)) return false;
@@ -366,6 +376,7 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
 void CaptureSource::close() {
     sc_.reset();
     demo_.reset();
+    ps_.reset();
     if (fd_ < 0) return;
     if (streaming_) { int type = V4L2_BUF_TYPE_VIDEO_CAPTURE; xioctl(fd_, VIDIOC_STREAMOFF, &type); streaming_ = false; }
     for (auto& b : bufs_) if (b.start) munmap(b.start, b.length);
@@ -420,6 +431,21 @@ bool CaptureSource::dequeueNewest(v4l2_buffer& held, std::string& error) {
 }
 
 CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error) {
+    if (ps_) {
+        RawFrame f;
+        const auto r = ps_->readLatest(f, timeoutMs, error);
+        if (r != remoteplay::Stream::Result::Frame) return r == remoteplay::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+        const int fmt = int(f.fmt);
+        if (f.w != psConvW_ || f.h != psConvH_ || fmt != psConvFmt_) {
+            if (!psConv_.init(f.fmt == RawFrame::P010 ? V4L2_PIX_FMT_P010 : V4L2_PIX_FMT_NV12, f.w, f.h, f.stride, error)) return Result::Error;
+            psConvW_ = f.w; psConvH_ = f.h; psConvFmt_ = fmt;
+        }
+        w_ = f.w; h_ = f.h;
+        if (!psConv_.convert(f.data.data(), f.data.size(), rgba, error)) return Result::Timeout;
+        lastRepeat_ = false;
+        probeRgba(rgba);
+        return Result::Frame;
+    }
     if (demo_) {
         RawFrame f;
         const auto r = demo_->readLatest(f, timeoutMs, error);
@@ -462,6 +488,15 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
 }
 
 CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    if (ps_) {
+        const auto r = ps_->readLatest(out, timeoutMs, error);
+        if (r == remoteplay::Stream::Result::Frame) {
+            w_ = out.w; h_ = out.h;
+            if (out.fmt == RawFrame::NV12) probe_.feed(out.data.data(), out.w, out.h, out.stride, 1, out.captured);   // luma plane
+            else probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 2, out.captured);   // P010: high byte of luma
+        }
+        return r == remoteplay::Stream::Result::Frame ? Result::Frame : r == remoteplay::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+    }
     if (demo_) {
         const auto r = demo_->readLatest(out, timeoutMs, error);
         if (r == demo::Stream::Result::Frame) probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);

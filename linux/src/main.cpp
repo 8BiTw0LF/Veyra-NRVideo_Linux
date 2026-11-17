@@ -296,6 +296,9 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("gamepad", &gamepad);
     // the demo scene swims with the controller while the menu is closed; Y jumps to the next viewpoint
     QObject::connect(&gamepad, &veyamux::GamepadInput::analog, &player, &PlayerBridge::demoPad);
+    // PlayStation Remote Play: the controller to the console, the game's rumble back
+    QObject::connect(&gamepad, &veyamux::GamepadInput::padState, &player, &PlayerBridge::psPad);
+    QObject::connect(&player, &PlayerBridge::psRumble, &gamepad, &veyamux::GamepadInput::rumble);
     QObject::connect(&gamepad, &veyamux::GamepadInput::freeButton, &player, [&player](const QString& b) {
         if (b == "y" && player.demoActive()) player.demoPose(-1);
     });

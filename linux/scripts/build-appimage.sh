@@ -3,6 +3,7 @@
 # Needs (Ubuntu 24.04 names): cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-svg-dev
 #   qt6-wayland libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
 #   libpulse-dev libva-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts patchelf file
+#   libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev  (PlayStation Remote Play)
 #   python3 glslang-tools  (AMD FidelityFX shader generation)  qt6-shader-baker (qsb, HDR output shaders)  zsync (zsyncmake)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

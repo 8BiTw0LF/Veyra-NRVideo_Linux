@@ -1,5 +1,6 @@
 #include "MediaEngine.h"
 #include "DemoSource.h"
+#include "RemotePlay.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -243,7 +244,8 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     info_.width = cap_->width();
     info_.height = cap_->height();
     info_.fps = cap_->fps();
-    info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : CaptureSource::isDemo(devicePath) ? "Demo" : fourccName(mode.fourcc);
+    info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : CaptureSource::isDemo(devicePath) ? "Demo"
+                    : CaptureSource::isRemotePlay(devicePath) ? "Remote Play" : fourccName(mode.fourcc);
     info_.audioCodec = audioSource.empty() ? "" : "live";
     capAudioSource_ = audioSource;
     capPath_ = devicePath;
@@ -283,7 +285,8 @@ void MediaEngine::captureLoop() {
     clk::time_point lastReopen{};
     // A shared window/screen only sends a picture when something changes, and cannot be reopened once it is gone.
     // (the demo scene behaves the same way: no reopening, and nothing to wait for while its world is built)
-    const bool screenCast = CaptureSource::isScreenCast(capPath_) || CaptureSource::isDemo(capPath_);
+    // (Remote Play too: its errors are the console's own reasons, and reconnecting is the user's choice)
+    const bool screenCast = CaptureSource::isScreenCast(capPath_) || CaptureSource::isDemo(capPath_) || CaptureSource::isRemotePlay(capPath_);
     while (!quit_) {
         std::string err;
         const bool toGpu = rawLive_.load();
@@ -397,7 +400,9 @@ void MediaEngine::captureAudioLoop() {
     pattr.minreq = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 1000, &ss));
     int err = 0;
     // "@demo": the demo scene's own sound, made here instead of recorded (paced by the playback stream)
-    const bool demoSound = capAudioSource_ == "@demo";
+    // ("@ps": PlayStation Remote Play's sound, received over the network)
+    const bool psSound = capAudioSource_ == "@ps";
+    const bool demoSound = capAudioSource_ == "@demo" || psSound;
     const char* dev = capAudioSource_ == "@default" ? nullptr : capAudioSource_.c_str();
     pa_simple* rec = demoSound ? nullptr : pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
     if (!rec && !demoSound) { if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Capture audio unavailable: ") + pa_strerror(err)); return; }
@@ -418,7 +423,8 @@ void MediaEngine::captureAudioLoop() {
     size_t lineHead = 0, lineFill = 0;
     int tick = 0;
     while (!quit_) {
-        if (demoSound) demo::audio(buf.data(), int(buf.size() / 2));
+        if (psSound) remoteplay::audio(buf.data(), int(buf.size() / 2));
+        else if (demoSound) demo::audio(buf.data(), int(buf.size() / 2));
         else if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
         if (!playing_.load()) { if (demoSound) std::this_thread::sleep_for(std::chrono::milliseconds(blockMs)); continue; }
         if (cb_.onAudio)   // the block started one block ago and is heard after the audio delay

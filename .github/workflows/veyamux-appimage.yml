@@ -33,7 +33,8 @@ jobs:
             qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-svg-dev qt6-wayland qt6-shader-baker \
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
-            libpulse-dev libva-dev libpipewire-0.3-dev
+            libpulse-dev libva-dev libpipewire-0.3-dev \
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
 
       - name: Build AppImage
         working-directory: ${{ env.SRC }}

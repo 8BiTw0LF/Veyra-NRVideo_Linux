@@ -6,6 +6,9 @@
 #include <QSettings>
 #include <mutex>
 #include <deque>
+#include <functional>
+#include <thread>
+#include <atomic>
 #include <QStandardPaths>
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
@@ -142,6 +145,17 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double exposure READ exposure WRITE setExposure NOTIFY enhanceChanged)
     Q_PROPERTY(double contrast READ contrast WRITE setContrast NOTIFY enhanceChanged)
     Q_PROPERTY(double saturation READ saturation WRITE setSaturation NOTIFY enhanceChanged)
+    // PlayStation Remote Play (RemotePlay.h): consoles found on the network merged with the registered ones,
+    // [{id, name, host, ps5, ready, registered, app, passcode}]
+    Q_PROPERTY(QVariantList psConsoles READ psConsoles NOTIFY psChanged)
+    Q_PROPERTY(bool psHasAccount READ psHasAccount NOTIFY psChanged)
+    Q_PROPERTY(QString psBusy READ psBusy NOTIFY psChanged)          // what is running ("" = nothing)
+    Q_PROPERTY(QString psMessage READ psMessage NOTIFY psChanged)    // the last error / result
+    Q_PROPERTY(bool psMessageError READ psMessageError NOTIFY psChanged)
+    Q_PROPERTY(int psHeight READ psHeight WRITE setPsHeight NOTIFY psChanged)   // 720 / 1080
+    Q_PROPERTY(int psFps READ psFps WRITE setPsFps NOTIFY psChanged)            // 30 / 60
+    Q_PROPERTY(bool psHdr READ psHdr WRITE setPsHdr NOTIFY psChanged)           // PS5: HDR picture
+    Q_PROPERTY(bool psActive READ psActive NOTIFY mediaChanged)
 public:
     explicit PlayerBridge(const QString& shaderDir, QObject* parent = nullptr);
     ~PlayerBridge() override;
@@ -395,7 +409,33 @@ public slots:
     void demoRelease();
     void demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
 
+    // ---- PlayStation Remote Play
+    QVariantList psConsoles() const;
+    bool psHasAccount() const;
+    QString psBusy() const { return psBusy_; }
+    QString psMessage() const { return psMessage_; }
+    bool psMessageError() const { return psMessageError_; }
+    int psHeight() const;
+    void setPsHeight(int h);
+    int psFps() const;
+    void setPsFps(int f);
+    bool psHdr() const;
+    void setPsHdr(bool v);
+    bool psActive() const;
+    Q_INVOKABLE void psStartSearch();       // while the Remote Play window is open
+    Q_INVOKABLE void psStopSearch();
+    Q_INVOKABLE void psOpenLogin();         // the PlayStation Network login page in the browser
+    Q_INVOKABLE void psSetLogin(const QString& addressOrAccountId);   // the address the browser ended on, or the ID
+    Q_INVOKABLE void psRegister(const QString& id, const QString& pin);
+    Q_INVOKABLE void psSetPasscode(const QString& id, const QString& passcode);
+    Q_INVOKABLE void psForget(const QString& id);
+    Q_INVOKABLE void psConnect(const QString& id);   // wakes the console if needed, then starts Remote Play
+    // the controller, PlayStation layout (Gamepad -> RemotePlay); idle while the menu is open
+    void psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
+
 signals:
+    void psChanged();
+    void psRumble(int low, int high);
     void demoChanged();
     void languageChanged();
     void themeChanged();
@@ -456,6 +496,16 @@ private:
     veyamux::ScreenCastPortal* portal_ = nullptr;
     QString scAudio_;
     bool startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource);
+    // Remote Play: one background task at a time (network, registration, wake-up)
+    QString psBusy_, psMessage_;
+    bool psMessageError_ = false;
+    std::thread psWorker_;
+    std::shared_ptr<std::atomic<bool>> psQuit_ = std::make_shared<std::atomic<bool>>(false);   // VeyAmux is closing
+    QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
+    QVariantList psSeen_;           // last discovery result
+    void psRun(const QString& busy, std::function<void(QString& message, bool& error)> work, std::function<void()> done = {});
+    void psSay(const QString& message, bool error);
+    bool psStart(const QString& id, QString& error);
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
     lsfg::Detection lsfg_;
