@@ -58,26 +58,26 @@ Item {
         property string text
         property bool sel: false
         signal clicked()
-        width: parent ? parent.width : 100; height: 34; radius: 8
+        width: parent ? parent.width : 100; height: 34; radius: 8 * Theme.round
         color: sel ? Theme.accentSoft : (ma.containsMouse ? Theme.border : Theme.surface)
         border.color: sel ? Theme.accent : "transparent"
-        Text { anchors { verticalCenter: parent.verticalCenter; left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12 }
+        Text { font.family: Theme.font; anchors { verticalCenter: parent.verticalCenter; left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12 }
             text: row.text; color: row.sel ? Theme.heading : Theme.text; font.pixelSize: 13; elide: Text.ElideRight }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: row.clicked() }
     }
-    component Section: Text { color: Theme.label; font.pixelSize: 12; font.weight: Font.Medium }
+    component Section: Text { font.family: Theme.font; color: Theme.label; font.pixelSize: 12; font.weight: Font.Medium }
 
     Rectangle {
         id: card
         anchors.centerIn: parent
         width: Math.min(620, parent.width - 40); height: Math.min(640, parent.height - 40)
-        radius: 16; color: Theme.surfaceDeep; border.color: Theme.border
+        radius: 16 * Theme.round; color: Theme.surfaceDeep; border.color: Theme.border
         MouseArea { anchors.fill: parent }   // swallow clicks
 
         Column {
             anchors { fill: parent; margins: 22 }
             spacing: 10
-            Text { text: tr("captureTitle"); color: Theme.heading; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: tr("captureTitle"); color: Theme.heading; font.pixelSize: 20 * Theme.headScale; font.weight: Font.DemiBold }
 
             Section { text: tr("device") }
             Column {
@@ -85,10 +85,10 @@ Item {
                 Repeater { model: dlg.devices
                     Row_ { text: modelData.path === "screencast" ? modelData.name : modelData.name + "  (" + modelData.path + ")"
                         sel: index === dlg.devIdx; onClicked: dlg.pickDevice(index) } }
-                Text { visible: dlg.cardCount <= 0; text: tr("noDevices"); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
+                Text { font.family: Theme.font; visible: dlg.cardCount <= 0; text: tr("noDevices"); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
             }
 
-            Text { visible: dlg.isShare; text: tr("screenShareHint"); color: Theme.muted; font.pixelSize: 12; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15 }
+            Text { font.family: Theme.font; visible: dlg.isShare; text: tr("screenShareHint"); color: Theme.muted; font.pixelSize: 12; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15 }
             Section { text: tr("mode"); visible: dlg.modes.length > 0 }
             Flickable {
                 visible: dlg.modes.length > 0
@@ -110,15 +110,15 @@ Item {
         Row {
             anchors { right: parent.right; bottom: parent.bottom; margins: 22 }
             spacing: 8
-            Rectangle { width: 96; height: 38; radius: 10; color: m1.containsMouse ? Theme.surfaceHover : Theme.surface
-                Text { anchors.centerIn: parent; text: tr("refresh"); color: Theme.text; font.pixelSize: 13 }
+            Rectangle { width: 96; height: 38; radius: 10 * Theme.round; color: m1.containsMouse ? Theme.surfaceHover : Theme.surface
+                Text { font.family: Theme.font; anchors.centerIn: parent; text: tr("refresh"); color: Theme.text; font.pixelSize: 13 }
                 MouseArea { id: m1; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: dlg.refresh() } }
-            Rectangle { width: 96; height: 38; radius: 10; color: m2.containsMouse ? Theme.surfaceHover : Theme.surface
-                Text { anchors.centerIn: parent; text: tr("cancel"); color: Theme.text; font.pixelSize: 13 }
+            Rectangle { width: 96; height: 38; radius: 10 * Theme.round; color: m2.containsMouse ? Theme.surfaceHover : Theme.surface
+                Text { font.family: Theme.font; anchors.centerIn: parent; text: tr("cancel"); color: Theme.text; font.pixelSize: 13 }
                 MouseArea { id: m2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { dlg.visible = false; dlg.closed() } } }
-            Rectangle { width: 120; height: 38; radius: 10; opacity: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare) ? 1 : 0.4
+            Rectangle { width: 120; height: 38; radius: 10 * Theme.round; opacity: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare) ? 1 : 0.4
                 color: m3.containsMouse ? Theme.accentHover : Theme.accent
-                Text { anchors.centerIn: parent; text: tr("start"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
+                Text { font.family: Theme.font; anchors.centerIn: parent; text: tr("start"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
                 MouseArea { id: m3; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     enabled: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare)
                     onClicked: {

@@ -1,0 +1,126 @@
+# VeyAmux as a Flatpak (Flathub).
+#
+# Local test build from the repository root (on Bazzite / SteamOS, where flatpak-builder is not installed, through
+# the Flatpak build of it):
+#   flatpak install flathub org.flatpak.Builder
+#   flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub --force-clean \
+#       build-flatpak packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml
+#   flatpak run io.github._8BiTw0LF.VeyAmux
+#
+# For Flathub, scripts/make-flathub-manifest.sh writes a copy of this file whose VeyAmux source is a released git tag
+# instead of the local folder (Flathub builds only from fixed, downloadable sources).
+id: io.github._8BiTw0LF.VeyAmux
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: veyamux
+rename-desktop-file: veyamux.desktop
+rename-icon: veyamux
+
+finish-args:
+  # the window: native Wayland, or XWayland (VeyAmux moves itself there when the Wayland Vulkan path fails)
+  - --socket=wayland
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+  # capture cards (V4L2, /dev/video*) and game controllers for the menu (/dev/input/event*)
+  - --device=all
+  # sound from the capture card and to the speakers / the stream
+  - --socket=pulseaudio
+  # streaming to Twitch / YouTube (RTMP) and the OBS browser source (a local web server)
+  - --share=network
+  # recordings, instant replays and screenshots
+  - --filesystem=xdg-videos
+  - --filesystem=xdg-pictures
+  # "Add to Steam" writes a non-Steam shortcut; Lossless Scaling's files are read from the Steam library
+  - --filesystem=~/.local/share/Steam/userdata
+  - --filesystem=~/.local/share/Steam/steamapps/common/Lossless Scaling:ro
+  # "Start when the capture card is plugged in": an entry in ~/.config/autostart
+  - --filesystem=xdg-config/autostart:create
+  # Vulkan layers from Flatpak extensions (lsfg-vk: org.freedesktop.Platform.VulkanLayer.lsfgvk)
+  - --env=XDG_DATA_DIRS=/app/share:/usr/lib/extensions/vulkan/share:/usr/share:/usr/share/runtime/share:/run/host/user-share:/run/host/share
+
+modules:
+  # AMD VCE/VCN and Intel hardware encoding go through VAAPI; x264 is the fallback without it
+  - name: x264
+    config-opts:
+      - --disable-cli
+      - --enable-shared
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/x264.git
+        commit: b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+
+  - name: ffmpeg
+    config-opts:
+      - --disable-doc
+      - --disable-programs
+      - --disable-static
+      - --enable-shared
+      - --enable-gpl
+      - --enable-libx264
+      - --enable-vaapi
+      - --enable-gnutls
+      - --enable-libpulse
+    cleanup:
+      - /share/ffmpeg
+    sources:
+      - type: archive
+        url: https://www.ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+        sha256: 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+        x-checker-data:
+          type: anitya
+          project-id: 5405
+          stable-only: true
+          url-template: https://www.ffmpeg.org/releases/ffmpeg-$version.tar.xz
+
+  # Microsoft's HLSL compiler, only used while building (the shaders are compiled to SPIR-V); not installed
+  - name: dxc
+    buildsystem: simple
+    only-arches:
+      - x86_64
+    build-commands:
+      - mkdir -p /app/lib/dxc
+      - cp -a bin lib /app/lib/dxc/
+    cleanup:
+      - /lib/dxc
+    sources:
+      - type: archive
+        url: https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505/linux_dxc_2025_05_24.x86_64.tar.gz
+        sha256: b99655f65215287825fcdd49102b17e2a1608eff79ffaf9457514c2676892aa5
+        strip-components: 0
+
+  # wgpu-native: WebGPU on Vulkan for the demo scene (linked statically; only used while building)
+  - name: wgpu-native
+    buildsystem: simple
+    only-arches:
+      - x86_64
+    build-commands:
+      - mkdir -p /app/lib/wgpu
+      - cp -a include lib /app/lib/wgpu/
+    cleanup:
+      - /lib/wgpu
+    sources:
+      - type: archive
+        url: https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.0.0/wgpu-linux-x86_64-release.zip
+        sha256: cf614af80f23c6364a13f6569e7ae4ca7367ebf6062e3d3d6e80e205264636b4
+        strip-components: 0
+
+  - name: veyamux
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DVEYAMUX_DXC_ROOT=/app/lib/dxc
+      - -DVEYAMUX_WGPU_ROOT=/app/lib/wgpu
+    post-install:
+      # Flathub's metadata (id, screenshots, content rating) replaces the generic one
+      - rm -f /app/share/metainfo/veyamux.metainfo.xml
+      - install -Dm644 packaging/flatpak/io.github._8BiTw0LF.VeyAmux.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - build-flatpak
+          - .flatpak-builder
+          - .tools
+          - dist

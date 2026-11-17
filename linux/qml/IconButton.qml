@@ -7,7 +7,7 @@ Item {
     signal clicked()
     width: size; height: size
     Rectangle {
-        anchors.fill: parent; radius: width / 2
+        anchors.fill: parent; radius: width / 2 * Theme.round
         color: root.active ? Theme.accentSoft : (ma.containsMouse ? Theme.border : "transparent")
         Behavior on color { ColorAnimation { duration: 120 } }
     }

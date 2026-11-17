@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github._8BiTw0LF.VeyAmux</id>
+  <name>VeyAmux</name>
+  <summary>Low-latency capture-card viewer with GPU upscaling</summary>
+  <developer id="io.github._8bitw0lf">
+    <name>8BiTw0LF</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>VeyAmux shows the picture from a capture card - a console, a second PC or a camera - or plays a video file, and
+      enhances it on the GPU with very low latency. The capture frame is converted, enhanced and displayed entirely in
+      Vulkan.</p>
+    <ul>
+      <li>Upscaling with Lanczos, AMD FSR 1, NVIDIA NIS or AMD FSR 3.1</li>
+      <li>Retro TV (CRT-Geom) and pixel-perfect scaling for retro consoles</li>
+      <li>Noise reduction, sharpening, FXAA and colour controls</li>
+      <li>HDR capture, tone-mapped to SDR or shown on an HDR display (experimental), and VRR pacing</li>
+      <li>Frame generation with AMD FSR 3.1, or Lossless Scaling through lsfg-vk (optional, requires Lossless Scaling)</li>
+      <li>Instant replay, recording, screenshots and live streaming to Twitch or YouTube with hardware encoding</li>
+      <li>OBS browser source, window and screen capture</li>
+      <li>Menu control with a game controller, without the game reacting to it</li>
+      <li>A built-in demo scene (Abyssal Garden, an underwater world rendered live in 1080p) to try everything without a capture card</li>
+      <li>Themes and eight languages</li>
+    </ul>
+    <p>Based on Veyra-NRVideo by Likely7.</p>
+  </description>
+  <launchable type="desktop-id">io.github._8BiTw0LF.VeyAmux.desktop</launchable>
+  <provides>
+    <binary>veyamux</binary>
+  </provides>
+  <url type="homepage">https://github.com/8BiTw0LF/VeyAmux</url>
+  <url type="bugtracker">https://github.com/8BiTw0LF/VeyAmux/issues</url>
+  <url type="vcs-browser">https://github.com/8BiTw0LF/VeyAmux</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Start screen with the capture-card and source choice</caption>
+      <image>https://raw.githubusercontent.com/8BiTw0LF/VeyAmux/main/docs/images/start.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The enhancement menu</caption>
+      <image>https://raw.githubusercontent.com/8BiTw0LF/VeyAmux/main/docs/images/menu.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Retro TV</caption>
+      <image>https://raw.githubusercontent.com/8BiTw0LF/VeyAmux/main/docs/images/retro-tv.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#ff8a5c</color>
+    <color type="primary" scheme_preference="dark">#2a1238</color>
+  </branding>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+  <keywords>
+    <keyword>capture card</keyword>
+    <keyword>upscaling</keyword>
+    <keyword>FSR</keyword>
+    <keyword>HDR</keyword>
+    <keyword>frame generation</keyword>
+    <keyword>CRT</keyword>
+  </keywords>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>gamepad</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.1.5-linux21" date="2026-11-17">
+      <description>
+        <p>Built-in demo scene (Abyssal Garden), game controller in the menu, pixel-perfect scaling, eight languages and four themes.</p>
+      </description>
+    </release>
+    <release version="2.1.5-linux19" date="2026-11-16">
+      <description>
+        <p>Window and screen capture, several sound sources, mute while streaming, audio meter, Retro TV, 4K modes.</p>
+      </description>
+    </release>
+  </releases>
+</component>

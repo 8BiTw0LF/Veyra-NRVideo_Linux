@@ -13,19 +13,19 @@ Column {
         property string text
         property bool primary: true
         signal clicked()
-        width: lbText.implicitWidth + 22; height: 32; radius: 10
+        width: lbText.implicitWidth + 22; height: 32; radius: 10 * Theme.round
         color: lbMa.containsMouse ? Theme.surfaceHover : Theme.surface; gradient: primary ? (lbMa.containsMouse ? Theme.sunsetHover : Theme.sunset) : null
-        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: lb.primary ? Theme.accentInk : Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+        Text { font.family: Theme.font; id: lbText; anchors.centerIn: parent; text: lb.text; color: lb.primary ? Theme.accentInk : Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
         MouseArea { id: lbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lb.clicked() }
     }
 
     Item {
         width: root.width; height: 28
-        Text { text: tr("obs"); color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
+        Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: tr("obs"); color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
         ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
             checked: player.obsEnabled; onToggled: (v) => player.obsEnabled = v }
     }
-    Text {
+    Text { font.family: Theme.font;
         width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
         color: player.obsError !== "" ? Theme.warn : (player.obsViewers > 0 ? Theme.ok : Theme.muted)
         text: player.obsError !== "" ? player.obsError
@@ -33,7 +33,7 @@ Column {
               : player.obsViewers > 0 ? tr("obsLive").replace("%1", player.obsViewers)
               : tr("obsWaiting").replace("%1", player.obsUrl)
     }
-    Text { text: tr("obsRes"); color: Theme.label; font.pixelSize: 16 }
+    Text { font.family: Theme.font; text: tr("obsRes"); color: Theme.label; font.pixelSize: 16 }
     Segmented {
         width: root.width
         model: ["720p", "1080p", "1440p", tr("native")]
@@ -45,10 +45,10 @@ Column {
         LinkButton { text: tr("obsSave"); onClicked: player.saveObsFile() }
         LinkButton { text: tr("obsCopy"); primary: false; onClicked: player.copyObsUrl() }
     }
-    Text {
+    Text { font.family: Theme.font;
         width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.text
         visible: player.obsFile !== ""
         text: tr("obsSaved").replace("%1", player.obsFile)
     }
-    Text { width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: tr("obsHelp") }
+    Text { font.family: Theme.font; width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: tr("obsHelp") }
 }

@@ -1,5 +1,6 @@
 // VeyAmux for Linux: non-Steam game shortcut (see SteamShortcut.h).
 #include "SteamShortcut.h"
+#include "Sandbox.h"
 
 #include <QDir>
 #include <QFile>
@@ -119,7 +120,8 @@ Result addShortcut(const QString& exe, const QString& icon, const QString& launc
     Result r;
     const QStringList roots = steamRoots();
     if (roots.isEmpty()) { r.message = "Steam was not found"; return r; }
-    if (steamRunning()) { r.message = "Close Steam first"; return r; }
+    // (a Flatpak sees only its own processes: there the caller asks the user to restart Steam instead)
+    if (!sandbox::flatpak() && steamRunning()) { r.message = "Close Steam first"; return r; }
     const QByteArray exeQ = "\"" + exe.toUtf8() + "\"";
     const QByteArray dirQ = "\"" + QFileInfo(exe).absolutePath().toUtf8() + "/\"";
     const QByteArray name = "VeyAmux";

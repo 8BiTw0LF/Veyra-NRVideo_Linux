@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import VeyAmux 1.0
+import "Strings.js" as S
 
 Window {
     id: win
@@ -12,169 +13,18 @@ Window {
     color: Theme.bg
     title: player.hasMedia ? player.title + " — VeyAmux" : "VeyAmux"
 
+    // the theme (Theme.qml) follows the saved choice
+    Binding { target: Theme; property: "name"; value: player.theme }
+
     readonly property bool fs: visibility === Window.FullScreen
     property bool panelOpen: startPanel
+    onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
     property bool controlsShown: true
     property bool scrubbing: false
     property real scrubValue: 0
 
-    readonly property var strings: ({
-        en: { open: "Open file", drop: "Drop a video here, or open a file", enhance: "Enhance",
-              upscale: "Upscale", off: "Off", aa: "Anti-aliasing", aaq: ["Medium", "High", "Ultra"],
-              sharpen: "Sharpness", exposure: "Exposure", contrast: "Contrast", saturation: "Saturation",
-              hdr: "HDR capture (P010): source peak brightness",
-              hdrHint: "Used when the capture card sends HDR (pick a P010 (HDR) mode under Capture card). The HDR picture is tone-mapped to your SDR display (BT.2390, as in Veyra); match the peak to the game's HDR calibration - lower = brighter.",
-              vrr: "VRR: the game's own frame rate, evenly paced",
-              vrrHint: "Shows only the game's new pictures, spaced evenly at its own rate (e.g. 45 fps), for a display with VRR/adaptive sync. Turn on Adaptive sync in the display settings and run VeyAmux fullscreen. Adds up to about half a frame of latency.",
-              vrrRestart: "VeyAmux must restart to switch vsync for VRR.",
-              profiles: "Profiles", profileName: "Name, e.g. PS5", saveProfile: "Save", bindSignal: "Use automatically for this signal (%1)", profilesHint: "Saves the picture settings and the audio delay. Keys 1-9 switch profile; ⚡ = applied automatically when that capture signal is opened.",
-              normalize: "Even out loudness", audioOut: "Sound output", audioOutDefault: "System default",
-              audioIn: "Sound from the source", audioInOn: "● Sound is coming in", audioInNone: "No sound", audioInMuted: "● Coming in (muted)",
-              audioInHint: "Shows the source's own sound. Mute (M) and the volume only affect your speakers: recordings, replays and the live stream always get the sound.",
-              audioDelay: "Audio delay (ms)", audioDelayHint: "Positive = sound later. Use it when the picture lags the sound (e.g. with Lossless Scaling). Capture cards can only delay the sound.",
-              denoise: "Noise reduction", denoiseModes: ["Off", "Spatial", "Temporal", "Both"], denoiseLevels: ["Light", "Medium", "Strong"],
-              denoiseHint0: "Removes grain, dither and compression noise before upscaling and sharpening, so Sharpness can be turned up without sharpening the noise.",
-              denoiseHint1: "Non-local means: averages each pixel with similar-looking pixels nearby. Frame by frame, never smears motion; strong settings soften fine texture a little.",
-              denoiseHint2: "Averages each pixel over several frames along the measured motion: keeps the most detail. Fast, unpredictable motion falls back to the current frame.",
-              denoiseHint3: "Temporal first, then a gentle spatial pass: the cleanest picture. Pick the level after how noisy the source is.",
-              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture",
-              native: "Native",
-              method: "Method", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
-              lanczosHint: "Sharp classic scaling, frame by frame. No added latency.",
-              peakEdid: "Auto: the display reports %1 nits.", peakNoEdid: "Auto: the display reports no peak, 1000 nits is used.",
-              nisHint: "NVIDIA Image Scaling (open source, runs on any GPU): 6-tap directional scaling with adaptive sharpening, frame by frame, no added latency.",
-              fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): edge-adaptive upscaling (EASU) plus RCAS sharpening, frame by frame. Made for game pictures, no added latency.",
-              fsr31Hint: "AMD FidelityFX (open source), builds the picture over several frames from motion VeyAmux measures in the video. Experimental: FSR is made for games, and in VeyAmux's tests on video it came out softer than Lanczos.",
-              fsrNeedsScale: "Choose 1.5×, 2× or 3× to use it.",
-              fsrFallback: "FSR 3.1 could not start, using Lanczos: ",
-              capture: "Capture", captureTitle: "Capture card or window", device: "Device", mode: "Mode (resolution · rate · format)", audio: "Audio source", noAudio: "No audio", defaultInput: "Default input (system default microphone)",
-              retroHint: "Makes the picture look like an old CRT television (CRT-Geom from ShaderGlass): a slightly curved glass screen with rounded corners, visible scanlines and the TV's red-green-blue phosphor stripes. Best for retro games. It replaces the upscaling method and the sharpness setting.",
-              retroLines: "Scanlines",
-              screenShare: "Window or screen …",
-              screenShareHint: "Share a program's window or a whole screen, and VeyAmux treats it like a capture card (upscaling, frame generation, recording). After Start, your desktop asks what to share. Choose no audio if the program plays its own sound.",
-              noDevices: "No capture devices found. Check that the card is connected (it must appear as /dev/video*).",
-              refresh: "Refresh", cancel: "Cancel", start: "Start", live: "LIVE",
-              fg: "Frame generation", fgOff: "Off",
-              obs: "OBS (browser source)",
-              obsOff: "Off. Turn on to stream the picture to OBS while you use VeyAmux.",
-              obsWaiting: "Ready - waiting for OBS (%1).",
-              obsLive: "OBS is receiving the picture (%1 connected).",
-              obsRes: "Resolution sent to OBS",
-              obsSave: "Save browser file…", obsCopy: "Copy address",
-              obsSaved: "Browser file: %1",
-              autostart: "Start when the capture card is plugged in", autostartHint: "A small background helper (started with your desktop) opens VeyAmux fullscreen as soon as the card you used last appears.",
-              steamAdd: "Add to Steam", steamHint: "Adds VeyAmux to your Steam library as a non-Steam game: it starts fullscreen on the last capture card, also from Big Picture and Game Mode. Close Steam first.",
-              hdrOut: "HDR output (experimental)",
-              gamescope: "Start in gamescope (HDR + VRR)",
-              gamescopeHint: "Runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync even through XWayland. Lossless Scaling is not used inside gamescope (its layer clashes with gamescope's); AMD FSR 3.1 2× works. Takes effect at the next start.",
-              gamescopeOn: "Running inside gamescope.",
-              hdrOutOn: "HDR display active: HDR sources are shown up to the display peak above, the rest at 203 nits SDR white.",
-              hdrOutNo: "No HDR swapchain: turn on HDR in the system's display settings (KDE Plasma 6 / GNOME 48 or newer) and restart VeyAmux.",
-              hdrOutRestart: "Takes effect when VeyAmux restarts.",
-              hdrOutSw: "VeyAmux is running with the software renderer (Vulkan could not start), so there is no HDR output.",
-              hdrOutX11: "VeyAmux runs through XWayland on this system, and XWayland has no HDR. Start it natively on Wayland (VEYAMUX_UI=vulkan with QT_QPA_PLATFORM=wayland) to use HDR output.",
-              overlayHint: "F3 hides · line = frame time (2 s), turquoise = average",
-              streamTitle: "Live stream", streamOwn: "Own server", streamKey: "Stream key", streamStart: "Go live", streamStop: "Stop stream",
-              streamHint: "Streams VeyAmux's picture and sound straight to Twitch, YouTube or your own RTMP server (H.264, encoded on the GPU), without OBS. Lossless Scaling's generated frames are not included. The key is stored in VeyAmux's settings file.",
-              recTitle: "Instant replay & recording", recOff: "Instant replay is off. F10 records, F12 takes a screenshot.",
-              recReplayOn: "the last %1 s are kept (F9 saves)", recLength: "Replay length", recRes: "Recording resolution",
-              recSave: "Save replay (F9)", recStart: "Record (F10)", recStop: "Stop (F10)", recShot: "Screenshot (F12)", recFolder: "Folder",
-              obsHelp: "In OBS: Sources → + → Browser → tick \"Local file\" → pick the saved file, and set width/height to your canvas (e.g. 1920 × 1080). Only the video is sent: add the sound with Application Audio Capture (VeyAmux) or straight from the capture card.",
-              lsPerf: "Performance mode",
-              fsrFgTitle: "Free (without Lossless Scaling)", fsrFg: "AMD FSR 3.1 2× (free)",
-              fsrFgHint: "Open-source frame generation inside VeyAmux, for capture cards: doubles the frame rate (60 → 120 fps). Motion is estimated from the pictures, so quality is below Lossless Scaling, and the real frame is shown half a frame later.",
-              fgPaused: "Paused automatically: the capture runs at about 120 Hz, so no frames are generated. Resumes when it drops below 80 fps.",
-              lsPerfHint: "Lighter Lossless Scaling model: faster, slightly lower quality. Flow scale is set automatically for your resolution (now %1 %).",
-              lsFixed: "Fixed 2× (doubles)", lsFixedHint: "Always doubles the frame rate (60 → 120 fps).",
-              ls3x: "Fixed 3× (triples)", ls3xHint: "Always triples the frame rate (60 → 180 fps, 40 → 120 fps). Needs a display fast enough for the result.",
-              lsActive: "Active through lsfg-vk. Lossless Scaling: %1", lsReady: "Lossless Scaling found: %1",
-              lsRestart: "VeyAmux must restart to turn Lossless Scaling on.",
-              lsNoInstall: "Lossless Scaling was not found in your Steam libraries. It has to be bought and installed through Steam.",
-              lsNoDll: "Only Lossless.dll was found. lsfg-vk 2 needs lsfg-vk.dll: in Steam open Lossless Scaling → Properties → Betas and choose the lsfg-vk branch.",
-              lsNoLayer: "lsfg-vk is not installed. Install it from lsfg-vk.dev; VeyAmux uses it to run Lossless Scaling on Linux.",
-              lsOldLayer: "An older lsfg-vk (1.x) was found. VeyAmux needs lsfg-vk 2.0 or newer.",
-              lsNoVulkan: "Needs the Vulkan display mode; VeyAmux is running in software mode.",
-              lsCrashed: "VeyAmux closed unexpectedly the last time it started with Lossless Scaling, so it has been turned off.",
-              restartNow: "Restart now", tryAgain: "Try again", chooseFolder: "Choose folder…", checkAgain: "Check again" },
-        da: { open: "Åbn fil", drop: "Træk en video hertil, eller åbn en fil", enhance: "Forbedring",
-              upscale: "Opskalering", off: "Fra", aa: "Anti-aliasing", aaq: ["Medium", "Høj", "Ultra"],
-              sharpen: "Skarphed", exposure: "Eksponering", contrast: "Kontrast", saturation: "Farvemætning",
-              hdr: "HDR-capture (P010): kildens maks. lysstyrke",
-              hdrHint: "Bruges når capture-kortet sender HDR (vælg en P010 (HDR)-tilstand under Capture-kort). HDR-billedet tonemappes til din SDR-skærm (BT.2390, som i Veyra); vælg værdien efter spillets HDR-kalibrering – lavere = lysere.",
-              vrr: "VRR: spillets egen billedfrekvens i jævn takt",
-              vrrHint: "Viser kun spillets nye billeder, jævnt fordelt i dets egen takt (fx 45 fps), til en skærm med VRR/adaptiv synkronisering. Slå Adaptiv synkronisering til i skærmindstillingerne, og kør VeyAmux i fuldskærm. Giver op til ca. et halvt billedes ekstra forsinkelse.",
-              vrrRestart: "VeyAmux skal genstarte for at skifte vsync til VRR.",
-              profiles: "Profiler", profileName: "Navn, fx PS5", saveProfile: "Gem", bindSignal: "Brug automatisk til dette signal (%1)", profilesHint: "Gemmer billedindstillingerne og lydforsinkelsen. Tasterne 1-9 skifter profil; ⚡ = bruges automatisk, når det capture-signal åbnes.",
-              normalize: "Udlign lydstyrke", audioOut: "Lydudgang", audioOutDefault: "Systemets standard",
-              audioIn: "Lyd fra kilden", audioInOn: "● Der kommer lyd", audioInNone: "Ingen lyd", audioInMuted: "● Kommer ind (slået fra)",
-              audioInHint: "Viser kildens egen lyd. Slå lyd fra (M) og lydstyrken gælder kun dine højttalere: optagelser, replays og livestreamen får altid lyden med.",
-              audioDelay: "Lydforsinkelse (ms)", audioDelayHint: "Positiv = lyden senere. Brug den, når billedet halter efter lyden (fx med Lossless Scaling). Ved capture-kort kan lyden kun forsinkes.",
-              denoise: "Støjfjerning", denoiseModes: ["Fra", "Rumlig", "Temporal", "Begge"], denoiseLevels: ["Let", "Middel", "Kraftig"],
-              denoiseHint0: "Fjerner korn, dithering og komprimeringsstøj før opskalering og skarphed, så Skarphed kan skrues op uden at gøre støjen skarp.",
-              denoiseHint1: "Non-local means: blander hver pixel med pixels i nærheden, der ligner den. Billede for billede, slører aldrig bevægelse; kraftig gør fin tekstur en anelse blødere.",
-              denoiseHint2: "Midler hver pixel over flere billeder langs den målte bevægelse: bevarer flest detaljer. Ved hurtig, uforudsigelig bevægelse bruges det aktuelle billede.",
-              denoiseHint3: "Først temporal, så en mild rumlig: det reneste billede. Vælg niveau efter hvor støjfyldt kilden er.",
-              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture",
-              native: "Original",
-              method: "Metode", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
-              lanczosHint: "Skarp klassisk skalering, billede for billede. Ingen ekstra forsinkelse.",
-              peakEdid: "Auto: skærmen oplyser %1 nits.", peakNoEdid: "Auto: skærmen oplyser ingen top-lysstyrke, 1000 nits bruges.",
-              nisHint: "NVIDIA Image Scaling (open source, virker på alle grafikkort): 6-taps retningsbestemt skalering med adaptiv skarphed, billede for billede, ingen ekstra forsinkelse.",
-              fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): kantfølsom opskalering (EASU) plus RCAS-skarphed, billede for billede. Lavet til spilbilleder, ingen ekstra forsinkelse.",
-              fsr31Hint: "AMD FidelityFX (open source), opbygger billedet over flere billeder ud fra bevægelse, som VeyAmux måler i videoen. Eksperimentel: FSR er lavet til spil, og i VeyAmux' test på video blev den blødere end Lanczos.",
-              fsrNeedsScale: "Vælg 1,5×, 2× eller 3× for at bruge den.",
-              fsrFallback: "FSR 3.1 kunne ikke starte, bruger Lanczos: ",
-              capture: "Capture", captureTitle: "Capture-kort eller vindue", device: "Enhed", mode: "Tilstand (opløsning · frekvens · format)", audio: "Lydkilde", noAudio: "Ingen lyd", defaultInput: "Standard-indgang (systemets standardmikrofon)",
-              retroHint: "Får billedet til at ligne et gammelt billedrørs-tv (CRT-Geom fra ShaderGlass): en let buet glasskærm med runde hjørner, synlige billedlinjer og tv'ets røde, grønne og blå fosforstriber. Bedst til retrospil. Den erstatter opskaleringsmetoden og skarphedsindstillingen.",
-              retroLines: "Billedlinjer",
-              screenShare: "Vindue eller skærm …",
-              screenShareHint: "Del et programs vindue eller en hel skærm, så behandler VeyAmux det som et capture-kort (opskalering, frame generation, optagelse). Efter Start spørger skrivebordet, hvad der skal deles. Vælg ingen lyd, hvis programmet selv spiller lyden.",
-              noDevices: "Ingen capture-enheder fundet. Tjek at kortet er tilsluttet (det skal vises som /dev/video*).",
-              refresh: "Opdater", cancel: "Annuller", start: "Start", live: "LIVE",
-              fg: "Frame generation", fgOff: "Fra",
-              obs: "OBS (browserkilde)",
-              obsOff: "Fra. Slå til for at sende billedet til OBS, mens du bruger VeyAmux.",
-              obsWaiting: "Klar - venter på OBS (%1).",
-              obsLive: "OBS modtager billedet (%1 tilsluttet).",
-              obsRes: "Opløsning til OBS",
-              obsSave: "Gem browserfil…", obsCopy: "Kopiér adresse",
-              obsSaved: "Browserfil: %1",
-              autostart: "Start når capture-kortet tilsluttes", autostartHint: "En lille hjælper i baggrunden (starter med skrivebordet) åbner VeyAmux i fuldskærm, så snart det kort, du brugte sidst, dukker op.",
-              steamAdd: "Tilføj til Steam", steamHint: "Lægger VeyAmux i dit Steam-bibliotek som non-Steam-spil: det starter i fuldskærm på det sidste capture-kort, også fra Big Picture og Game Mode. Luk Steam først.",
-              hdrOut: "HDR-output (eksperimentel)",
-              gamescope: "Start i gamescope (HDR + VRR)",
-              gamescopeHint: "Kører VeyAmux i fuldskærm inde i gamescope, som giver HDR og adaptiv synkronisering selv gennem XWayland. Lossless Scaling bruges ikke inde i gamescope (dets lag støder sammen med gamescopes); AMD FSR 3.1 2× virker. Træder i kraft ved næste start.",
-              gamescopeOn: "Kører inde i gamescope.",
-              hdrOutOn: "HDR-skærm aktiv: HDR-kilder vises op til skærmens top-lysstyrke ovenfor, resten med 203 nits SDR-hvid.",
-              hdrOutNo: "Ingen HDR-swapchain: slå HDR til i systemets skærmindstillinger (KDE Plasma 6 / GNOME 48 eller nyere), og genstart VeyAmux.",
-              hdrOutRestart: "Træder i kraft, når VeyAmux genstartes.",
-              hdrOutSw: "VeyAmux kører med software-tegning (Vulkan kunne ikke starte), så der er ingen HDR-output.",
-              hdrOutX11: "VeyAmux kører gennem XWayland på dette system, og XWayland har ikke HDR. Start det direkte på Wayland (VEYAMUX_UI=vulkan med QT_QPA_PLATFORM=wayland) for at bruge HDR-output.",
-              overlayHint: "F3 skjuler · linje = billedtid (2 s), turkis = gennemsnit",
-              streamTitle: "Livestream", streamOwn: "Egen server", streamKey: "Stream-nøgle", streamStart: "Gå live", streamStop: "Stop stream",
-              streamHint: "Sender VeyAmux' billede og lyd direkte til Twitch, YouTube eller din egen RTMP-server (H.264, kodet på grafikkortet), uden OBS. Lossless Scalings mellembilleder kommer ikke med. Nøglen gemmes i VeyAmux' indstillingsfil.",
-              recTitle: "Instant replay og optagelse", recOff: "Instant replay er slået fra. F10 optager, F12 tager et skærmbillede.",
-              recReplayOn: "de sidste %1 s gemmes (F9 gemmer)", recLength: "Replay-længde", recRes: "Opløsning på optagelsen",
-              recSave: "Gem replay (F9)", recStart: "Optag (F10)", recStop: "Stop (F10)", recShot: "Skærmbillede (F12)", recFolder: "Mappe",
-              obsHelp: "I OBS: Kilder → + → Browser → sæt flueben i \"Lokal fil\" → vælg den gemte fil, og sæt bredde/højde til dit lærred (fx 1920 × 1080). Kun billedet sendes: tilføj lyden med programlyd-optagelse (Application Audio Capture → VeyAmux) eller direkte fra capture-kortet.",
-              lsPerf: "Ydelsestilstand (performance mode)",
-              fsrFgTitle: "Gratis (uden Lossless Scaling)", fsrFg: "AMD FSR 3.1 2× (gratis)",
-              fsrFgHint: "Open source frame generation inde i VeyAmux, til capture-kort: fordobler billedfrekvensen (60 → 120 fps). Bevægelsen beregnes ud fra billederne, så kvaliteten er under Lossless Scaling, og det rigtige billede vises et halvt billede senere.",
-              fgPaused: "Sat på pause automatisk: capture kører med ca. 120 Hz, så der laves ingen ekstra billeder. Starter igen under 80 fps.",
-              lsPerfHint: "Lettere Lossless Scaling-model: hurtigere, lidt lavere kvalitet. Flow scale sættes automatisk efter din opløsning (nu %1 %).",
-              lsFixed: "Fast 2× (fordobler)", lsFixedHint: "Fordobler altid billedfrekvensen (60 → 120 fps).",
-              ls3x: "Fast 3× (tredobler)", ls3xHint: "Tredobler altid billedfrekvensen (60 → 180 fps, 40 → 120 fps). Kræver en skærm, der er hurtig nok til resultatet.",
-              lsActive: "Aktiv via lsfg-vk. Lossless Scaling: %1", lsReady: "Lossless Scaling fundet: %1",
-              lsRestart: "VeyAmux skal genstartes for at slå Lossless Scaling til.",
-              lsNoInstall: "Lossless Scaling blev ikke fundet i dine Steam-biblioteker. Det skal købes og installeres via Steam.",
-              lsNoDll: "Kun Lossless.dll blev fundet. lsfg-vk 2 kræver lsfg-vk.dll: åbn Lossless Scaling i Steam → Egenskaber → Betaer, og vælg lsfg-vk-grenen.",
-              lsNoLayer: "lsfg-vk er ikke installeret. Installér det fra lsfg-vk.dev; VeyAmux bruger det til at køre Lossless Scaling på Linux.",
-              lsOldLayer: "Der blev fundet en ældre lsfg-vk (1.x). VeyAmux kræver lsfg-vk 2.0 eller nyere.",
-              lsNoVulkan: "Kræver Vulkan-visning; VeyAmux kører i software-tilstand.",
-              lsCrashed: "VeyAmux lukkede uventet, sidste gang det startede med Lossless Scaling, så det er slået fra.",
-              restartNow: "Genstart nu", tryAgain: "Prøv igen", chooseFolder: "Vælg mappe…", checkAgain: "Tjek igen" }
-    })
-    function t(k) { var s = strings[uiLanguage] || strings.en; return s[k] !== undefined ? s[k] : k }
+    // texts: Strings.js; player.language is the chosen language (follows the system unless one is picked)
+    function t(k) { var s = S.strings[player.language] || S.strings.en; if (s[k] !== undefined) return s[k]; return S.strings.en[k] !== undefined ? S.strings.en[k] : k }
     function fmt(sec) {
         sec = Math.max(0, Math.floor(sec))
         var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60
@@ -211,36 +61,136 @@ Window {
         visible: !player.hasMedia
         anchors.centerIn: parent
         spacing: 18
-        Image { anchors.horizontalCenter: parent.horizontalCenter; source: "icons/logo.svg"; sourceSize: Qt.size(112, 112); width: 112; height: 112; smooth: true }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "VeyAmux"; color: Theme.heading; font.pixelSize: 54; font.weight: Font.DemiBold; font.letterSpacing: 2 }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: t("drop"); color: Theme.label; font.pixelSize: 16 }
+        Image { anchors.horizontalCenter: parent.horizontalCenter; source: Theme.logo; sourceSize: Qt.size(112, 112); width: 112; height: 112; smooth: true }
+        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; anchors.horizontalCenter: parent.horizontalCenter; text: "VeyAmux"; color: Theme.heading; font.pixelSize: 54 * Theme.headScale; font.weight: Font.DemiBold; font.letterSpacing: 2 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("drop"); color: Theme.label; font.pixelSize: 16 }
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
             Rectangle {
-                width: 170; height: 46; radius: 23; gradient: openMa.containsMouse ? Theme.sunsetHover : Theme.sunset
-                Text { anchors.centerIn: parent; text: t("open"); color: Theme.accentInk; font.pixelSize: 15; font.weight: Font.DemiBold }
+                width: 170; height: 46; radius: 23 * Theme.round; gradient: openMa.containsMouse ? Theme.sunsetHover : Theme.sunset
+                border.width: Theme.edge; border.color: "#000000"
+                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("open"); color: Theme.accentInk
+                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
                 MouseArea { id: openMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDialog() }
             }
             Rectangle {
-                width: 160; height: 44; radius: 22; color: capMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
-                Text { anchors.centerIn: parent; text: t("capture"); color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                width: 160; height: 44; radius: 22 * Theme.round; color: capMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
+                border.width: Math.max(1, Theme.edge)
+                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("capture"); color: Theme.text
+                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
                 MouseArea { id: capMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: capDlg.openDialog() }
             }
         }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
+        // demo scene: try every feature without a capture card
+        Column {
+            visible: player.demoAvailable
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 8
+            Item { width: 1; height: 4 }
+            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("demoTitle"); color: Theme.label; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; width: 540; horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap; text: t("demoHint"); color: Theme.muted; font.pixelSize: 13 }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+                Repeater {
+                    model: [30, 60]
+                    delegate: Rectangle {
+                        required property int modelData
+                        width: 132; height: 38; radius: 19 * Theme.round
+                        color: dmMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.accentLine
+                        border.width: Math.max(1, Theme.edge)
+                        Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                        Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: "Demo · " + modelData + " fps"; color: Theme.text
+                            font.pixelSize: Theme.headCaps ? 10 : 14; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
+                        MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData) }
+                    }
+                }
+            }
+        }
+        // theme picker: each chip shows the theme's own colours and logo
+        Item { width: 1; height: 10 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("theme"); color: Theme.label; font.pixelSize: 13 }
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 10
+            Repeater {
+                model: Theme.names
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property var pal: Theme.palettes[modelData]
+                    readonly property bool sel: Theme.name === modelData
+                    width: 128; height: 44; radius: 12 * Theme.round
+                    color: pal.surface
+                    border.width: sel ? 2 : 1
+                    border.color: sel ? pal.accent : (thMa.containsMouse ? pal.accentLine : Theme.border)
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        Image { source: "icons/logo-" + modelData + ".svg"; sourceSize: Qt.size(26, 26); width: 26; height: 26; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.font; text: pal.title; color: pal.text; font.pixelSize: 14; font.weight: sel ? Font.DemiBold : Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 } height: 3; radius: 1.5 * Theme.round
+                        gradient: Gradient { orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: pal.g0 } GradientStop { position: 1; color: pal.g1 } } }
+                    MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.theme = modelData }
+                }
+            }
+        }
+        // language picker: Auto follows the system
+        Item { width: 1; height: 4 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("language"); color: Theme.label; font.pixelSize: 13 }
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+            Repeater {
+                model: ["auto"].concat(S.languages)
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property bool sel: player.languageChoice === modelData
+                    width: lgText.implicitWidth + 22; height: 30; radius: 15 * Theme.round
+                    color: sel ? Theme.accent : (lgMa.containsMouse ? Theme.surfaceHover : Theme.surface)
+                    gradient: sel ? Theme.sunset : null
+                    border.width: Theme.edge; border.color: "#000000"
+                    Text { id: lgText; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 13
+                        text: modelData === "auto" ? t("langAuto") : S.names[modelData]
+                        color: parent.sel ? Theme.accentInk : Theme.text; font.weight: parent.sel ? Font.DemiBold : Font.Normal }
+                    MouseArea { id: lgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.languageChoice = modelData }
+                }
+            }
+        }
     }
 
-    // Click / hover / double-click on the video
+    // Click / hover / double-click on the video; in the demo scene, dragging looks around
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         enabled: player.hasMedia
-        cursorShape: (win.controlsShown || !win.fs) ? Qt.ArrowCursor : Qt.BlankCursor
-        onPositionChanged: wake()
-        onClicked: { player.togglePlay(); wake() }
-        onDoubleClicked: { player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+        property real lx: 0
+        property real ly: 0
+        cursorShape: player.demoActive && pressed ? Qt.ClosedHandCursor : (win.controlsShown || !win.fs) ? Qt.ArrowCursor : Qt.BlankCursor
+        onPressed: (m) => { lx = m.x; ly = m.y }
+        onPositionChanged: (m) => {
+            wake()
+            if (pressed && player.demoActive) { player.demoLook(m.x - lx, m.y - ly); lx = m.x; ly = m.y }
+        }
+        onClicked: { if (!player.demoActive) player.togglePlay(); wake() }
+        onDoubleClicked: { if (!player.demoActive) player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+    }
+
+    // demo scene: how to swim (while the controls are shown)
+    Rectangle {
+        visible: player.demoActive && player.demoProgress >= 1 && win.controlsShown && !win.panelOpen
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 96 }
+        width: Math.min(parent.width - 40, demoKeysText.implicitWidth + 32); height: demoKeysText.implicitHeight + 16
+        radius: 10 * Theme.round; color: Theme.overlay
+        Text { id: demoKeysText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
+            font.family: Theme.font; font.pixelSize: 13; color: Theme.text; text: t("demoKeys") }
     }
 
     DropArea {
@@ -252,18 +202,18 @@ Window {
     Rectangle {
         visible: player.status !== ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
+        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18 * Theme.round; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.accentLine
-        Text { id: toastText; anchors.centerIn: parent; text: player.status; color: Theme.warn; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
+        Text { font.family: Theme.font; id: toastText; anchors.centerIn: parent; text: player.status; color: Theme.warn; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
 
     // short confirmations (profile loaded, clip or screenshot saved)
     Rectangle {
         visible: player.notice !== "" && player.status === ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
+        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18 * Theme.round; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.okLine
-        Text { id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
+        Text { font.family: Theme.font; id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
 
     // frame-time overlay (F3)
@@ -272,8 +222,8 @@ Window {
         visible: player.overlay
         z: 6
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 16; bottomMargin: 90 }
-        width: 440; height: ftCol.implicitHeight + 16; radius: 10
-        color: player.hdrOutputActive ? "#0d0716" : "#c80d0716"; border.color: Theme.border
+        width: 440; height: ftCol.implicitHeight + 16; radius: 10 * Theme.round
+        color: player.hdrOutputActive ? Theme.bg : Theme.overlay; border.color: Theme.border
         Column {
             id: ftCol
             x: 8; y: 8; width: parent.width - 16; spacing: 6
@@ -295,7 +245,7 @@ Window {
                         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
                     }
                     if (n < 2) return;
-                    ctx.strokeStyle = "#ff3d8e"; ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = Theme.accent; ctx.lineWidth = 1.5;
                     ctx.beginPath();
                     for (let i = 0; i < n; ++i) {
                         const x = i * width / (n - 1);
@@ -306,7 +256,7 @@ Window {
                 }
                 Connections { target: player; function onOverlayTick() { ftCanvas.requestPaint() } }
             }
-            Text { text: t("overlayHint"); color: Theme.dim; font.pixelSize: 11 }
+            Text { font.family: Theme.font; text: t("overlayHint"); color: Theme.dim; font.pixelSize: 11 }
         }
     }
 
@@ -315,10 +265,10 @@ Window {
         visible: player.recording || player.streaming
         anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 16 }
         spacing: 6; z: 5
-        Rectangle { width: 10; height: 10; radius: 5; color: "#ff4040"; anchors.verticalCenter: parent.verticalCenter
+        Rectangle { width: 10; height: 10; radius: 5 * Theme.round; color: "#ff4040"; anchors.verticalCenter: parent.verticalCenter
             SequentialAnimation on opacity { running: player.recording || player.streaming; loops: Animation.Infinite
                 NumberAnimation { to: 0.3; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
-        Text { text: player.streaming ? (player.recording ? "LIVE · REC" : "LIVE") : "REC"; color: "#ffdddd"; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
+        Text { font.family: Theme.font; text: player.streaming ? (player.recording ? "LIVE · REC" : "LIVE") : "REC"; color: "#ffdddd"; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
     }
 
     // ------------------------------------------------------------- title (top)
@@ -330,8 +280,8 @@ Window {
         opacity: controlsShown ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 200 } }
         gradient: Gradient { GradientStop { position: 0; color: "#b0000000" } GradientStop { position: 1; color: "#00000000" } }
-        Text { x: 22; y: 18; width: parent.width - 44; text: player.title; color: Theme.heading; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight }
-        Text { x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
+        Text { font.family: Theme.font; x: 22; y: 18; width: parent.width - 44; text: player.title; color: Theme.heading; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight }
+        Text { font.family: Theme.font; x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
     }
 
     // ------------------------------------------------------------- bottom controls
@@ -350,7 +300,7 @@ Window {
             visible: player.duration > 0
             anchors { left: parent.left; right: parent.right; bottom: controlsRow.top; leftMargin: 22; rightMargin: 22; bottomMargin: 4 }
             height: 22
-            Text { id: tCur; anchors.verticalCenter: parent.verticalCenter; text: fmt(scrubbing ? scrubValue : player.position); color: Theme.text; font.pixelSize: 12; width: 52 }
+            Text { font.family: Theme.font; id: tCur; anchors.verticalCenter: parent.verticalCenter; text: fmt(scrubbing ? scrubValue : player.position); color: Theme.text; font.pixelSize: 12; width: 52 }
             VSlider {
                 anchors { left: tCur.right; right: tDur.left; verticalCenter: parent.verticalCenter; leftMargin: 6; rightMargin: 6 }
                 from: 0; to: Math.max(player.duration, 0.001)
@@ -358,14 +308,14 @@ Window {
                 onDraggingChanged: { if (dragging) { win.scrubbing = true } else { win.scrubbing = false; player.seek(win.scrubValue) } }
                 onMoved: (v) => { win.scrubValue = v; wake() }
             }
-            Text { id: tDur; anchors { right: parent.right; verticalCenter: parent.verticalCenter } text: fmt(player.duration); color: Theme.label; font.pixelSize: 12; width: 52; horizontalAlignment: Text.AlignRight }
+            Text { font.family: Theme.font; id: tDur; anchors { right: parent.right; verticalCenter: parent.verticalCenter } text: fmt(player.duration); color: Theme.label; font.pixelSize: 12; width: 52; horizontalAlignment: Text.AlignRight }
         }
 
         Rectangle {
             visible: player.live
             anchors { left: parent.left; bottom: controlsRow.top; leftMargin: 22; bottomMargin: 10 }
-            width: 58; height: 22; radius: 11; color: Theme.live
-            Text { anchors.centerIn: parent; text: t("live"); color: Theme.heading; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
+            width: 58; height: 22; radius: 11 * Theme.round; color: Theme.live
+            Text { font.family: Theme.font; anchors.centerIn: parent; text: t("live"); color: Theme.heading; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
         }
         Row {
             id: controlsRow
@@ -388,6 +338,91 @@ Window {
         }
     }
 
+    // ------------------------------------------------------------- controller (Gamepad.h)
+    // Select + Start (or Guide held) opens / closes the menu; while it is open the controllers are kept from the game.
+    // The D-pad / left stick moves between the menu's controls (the nearest one in that direction), A presses,
+    // left/right change a slider, LB/RB jump between the columns, B closes the menu.
+    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen }
+    Connections {
+        target: gamepad
+        function onMenuCombo() {
+            win.panelOpen = !win.panelOpen
+            if (win.panelOpen) { padNav.active = true; padNav.current = null; padOpenTimer.restart() }
+        }
+        function onButton(name) { if (win.panelOpen) { padNav.active = true; padNav.press(name) } }
+    }
+    // the panel fades in (160 ms) and is invisible until then, so the first control is picked once it shows
+    Timer { id: padOpenTimer; interval: 200; onTriggered: if (win.panelOpen && !padNav.current) padNav.reset() }
+    QtObject {
+        id: padNav
+        property bool active: false        // shows the highlight; mouse use hides it again
+        property Item current: null
+        // every control in the menu: clickable areas (buttons, segments, switches, list rows) and sliders
+        function collect(item, out) {
+            if (!item || !item.visible || item.opacity <= 0.01) return
+            if (item.from !== undefined && item.to !== undefined && item.neutral !== undefined && item.moved !== undefined) {
+                out.push(item); return                       // a slider (VSlider): its own mouse area is not a target
+            }
+            if (item.acceptedButtons !== undefined && item.enabled && item !== panelEater && item.width > 4 && item.height > 4
+                    && item.width < panel.width * 0.6) out.push(item)
+            for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
+        }
+        function targets() { var o = []; collect(area, o); return o }
+        function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
+        function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
+        function reset() {
+            var ts = targets(); if (ts.length === 0) { current = null; return }
+            var best = ts[0], bp = centre(best)
+            for (var i = 1; i < ts.length; ++i) { var p = centre(ts[i]); if (p.x + p.y * 3 < bp.x + bp.y * 3) { best = ts[i]; bp = p } }
+            current = best
+        }
+        function move(dx, dy) {
+            var ts = targets(); if (!current || ts.indexOf(current) < 0) { reset(); return }
+            var c = centre(current), best = null, bestScore = 1e9
+            for (var i = 0; i < ts.length; ++i) {
+                if (ts[i] === current) continue
+                var p = centre(ts[i]), vx = p.x - c.x, vy = p.y - c.y
+                var along = vx * dx + vy * dy, across = Math.abs(vx * dy - vy * dx)
+                if (along <= 2) continue                     // not in that direction
+                var score = along + across * 2.5
+                if (score < bestScore) { bestScore = score; best = ts[i] }
+            }
+            if (best) current = best
+        }
+        function column(step) {
+            var cols = [secA, secB, secC], c = current ? centre(current) : null, idx = 0
+            for (var i = 0; i < cols.length; ++i) { var r = cols[i].mapToItem(win.contentItem, 0, 0); if (c && c.x >= r.x - 10) idx = i }
+            var want = Math.max(0, Math.min(cols.length - 1, idx + step)), o = []
+            collect(cols[want], o)
+            if (o.length) { var best = o[0]; for (var j = 1; j < o.length; ++j) if (centre(o[j]).y < centre(best).y) best = o[j]; current = best }
+        }
+        function press(name) {
+            if (!current || targets().indexOf(current) < 0) reset()
+            if (name === "up") move(0, -1)
+            else if (name === "down") move(0, 1)
+            else if (name === "left") { if (isSlider(current)) current.moved(Math.max(current.from, current.value - (current.to - current.from) / 40)); else move(-1, 0) }
+            else if (name === "right") { if (isSlider(current)) current.moved(Math.min(current.to, current.value + (current.to - current.from) / 40)); else move(1, 0) }
+            else if (name === "lb") column(-1)
+            else if (name === "rb") column(1)
+            else if (name === "b") win.panelOpen = false
+            else if (name === "a" && current && !isSlider(current)) current.clicked(null)
+            Qt.callLater(function () { padRing.place() })
+        }
+    }
+    // the highlight around the selected control
+    Rectangle {
+        id: padRing
+        z: 1000
+        visible: padNav.active && win.panelOpen && padNav.current !== null
+        color: "transparent"; border.width: 3; border.color: Theme.accent; radius: 8 * Theme.round
+        function place() {
+            var t = padNav.current; if (!t) return
+            var p = t.mapToItem(win.contentItem, 0, 0), q = t.mapToItem(win.contentItem, t.width, t.height)
+            x = p.x - 4; y = p.y - 4; width = q.x - p.x + 8; height = q.y - p.y + 8
+        }
+        Connections { target: padNav; function onCurrentChanged() { padRing.place() } }
+    }
+
     // ------------------------------------------------------------- enhancement panel
     // Half the window wide, everything visible at once (no scrolling): the sections sit in three columns (two in narrow
     // windows), and if they still do not fit the height, the whole content is scaled down to fit.
@@ -401,14 +436,14 @@ Window {
         opacity: panelOpen ? 1 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 160 } }
-        radius: 18
+        radius: 18 * Theme.round
         // HDR output: fully opaque. Bright HDR video behind a 95 % panel shines through several times stronger than in
         // SDR (up to ~7x SDR white) and greys out the menu.
         color: player.hdrOutputActive ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
         border.color: Theme.border
         // sunset line along the top edge
-        Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1; gradient: Theme.sunset; opacity: 0.85 }
-        MouseArea { anchors.fill: parent; hoverEnabled: true; onPositionChanged: wake() }   // keep controls awake & eat clicks
+        Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1 * Theme.round; gradient: Theme.sunset; opacity: 0.85 }
+        MouseArea { id: panelEater; anchors.fill: parent; hoverEnabled: true; onPositionChanged: { wake(); padNav.active = false } }   // keep controls awake & eat clicks
 
         component Param: Column {
             id: p
@@ -419,8 +454,8 @@ Window {
             width: parent.width; spacing: 4; opacity: player.enhance ? 1 : 0.45
             Row {
                 width: parent.width
-                Text { text: p.label; color: Theme.label; font.pixelSize: 16; width: parent.width - 50 }
-                Text { text: p.value.toFixed(p.decimals); color: Theme.text; font.pixelSize: 16; width: 50; horizontalAlignment: Text.AlignRight }
+                Text { font.family: Theme.font; text: p.label; color: Theme.label; font.pixelSize: 16; width: parent.width - 50 }
+                Text { font.family: Theme.font; text: p.value.toFixed(p.decimals); color: Theme.text; font.pixelSize: 16; width: 50; horizontalAlignment: Text.AlignRight }
             }
             VSlider { width: parent.width; from: p.from; to: p.to; value: p.value; neutral: p.neutral; onMoved: (v) => p.moved(v) }
         }
@@ -454,19 +489,19 @@ Window {
                     spacing: 20
                     Row {
                         width: parent.width
-                        Text { text: t("enhance"); color: Theme.heading; font.pixelSize: 24; font.weight: Font.Bold; font.letterSpacing: 0.5; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: t("enhance"); color: Theme.heading; font.pixelSize: 24 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
                         ToggleSwitch { checked: player.enhance; onToggled: (v) => player.enhance = v; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Column {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { text: t("upscale"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("upscale"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
                             model: [t("native"), "1.5×", "2×", "3×"]
                             current: { var i = scales.indexOf(Math.round(player.scale * 10) / 10); return i < 0 ? 0 : i }
                             onPicked: (i) => player.scale = scales[i]
                         }
-                        Text { text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
+                        Text { font.family: Theme.font; text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
                             // shown as Lanczos | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
@@ -475,7 +510,7 @@ Window {
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.upscalerError !== "" ? Theme.warn : Theme.muted
                             text: player.upscalerError !== "" ? t("fsrFallback") + player.upscalerError
@@ -487,7 +522,7 @@ Window {
                     }
                     Column {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { text: t("denoise"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("denoise"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             width: parent.width; model: t("denoiseModes"); enabled: player.enhance
                             current: player.denoise; onPicked: (i) => player.denoise = i
@@ -496,21 +531,21 @@ Window {
                             width: parent.width; model: t("denoiseLevels"); enabled: player.enhance && player.denoise > 0
                             current: player.denoiseStrength; onPicked: (i) => player.denoiseStrength = i
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted
                             text: t("denoiseHint" + player.denoise)
                         }
-                        Text { text: t("hdr"); color: Theme.label; font.pixelSize: 16; topPadding: 6 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; text: t("hdr"); color: Theme.label; font.pixelSize: 16; topPadding: 6 }
                         Segmented {
                             width: parent.width; model: ["600", "1000", "2000", "4000 nits"]
                             readonly property var peaks: [600, 1000, 2000, 4000]
                             current: Math.max(0, peaks.indexOf(player.hdrPeak))
                             onPicked: (i) => player.hdrPeak = peaks[i]
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("hdrHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("hdrHint") }
                         Item {
                             width: parent.width; height: 22
-                            Text { text: t("hdrOut"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("hdrOut"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.hdrOutput; onToggled: (v) => player.hdrOutput = v }
                         }
@@ -527,7 +562,7 @@ Window {
                             current: Math.max(0, peaks.indexOf(player.displayPeak))
                             onPicked: (i) => player.displayPeak = peaks[i]
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             visible: player.hdrOutput
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.hdrOutputActive ? Theme.ok : Theme.warn
@@ -537,11 +572,11 @@ Window {
                         Item {
                             visible: player.gamescopeAvailable || player.inGamescope
                             width: parent.width; height: 26
-                            Text { text: t("gamescope"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("gamescope"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.gamescope; onToggled: (v) => player.gamescope = v }
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             visible: player.gamescopeAvailable || player.inGamescope
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.inGamescope ? Theme.accent3 : Theme.muted
@@ -549,8 +584,8 @@ Window {
                         }
                         Rectangle {
                             visible: player.hdrOutputRestart || player.gamescopeRestart
-                            width: hdrRs.implicitWidth + 22; height: 26; radius: 8; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
-                            Text { id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            width: hdrRs.implicitWidth + 22; height: 26; radius: 8 * Theme.round; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
+                            Text { font.family: Theme.font; id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
                             MouseArea { id: hdrRsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.restartApp() }
                         }
                     }
@@ -558,7 +593,7 @@ Window {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
                         Row {
                             width: parent.width
-                            Text { text: t("aa") + " (FXAA)"; color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("aa") + " (FXAA)"; color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { checked: player.fxaa; enabled: player.enhance; onToggled: (v) => player.fxaa = v; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Segmented {
@@ -575,16 +610,16 @@ Window {
                         function refresh() { sinks = player.audioSinks() }
                         Component.onCompleted: refresh()
                         Connections { target: win; function onPanelOpenChanged() { if (win.panelOpen) sinkCol.refresh() } }
-                        Text { text: t("audioOut"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("audioOut"); color: Theme.label; font.pixelSize: 16 }
                         Repeater {
                             model: [{ name: "", desc: t("audioOutDefault") }].concat(sinkCol.sinks.slice(0, 8))
                             delegate: Rectangle {
                                 required property var modelData
                                 readonly property bool sel: player.audioOutput === modelData.name
-                                width: sinkCol.width; height: 28; radius: 8
+                                width: sinkCol.width; height: 28; radius: 8 * Theme.round
                                 color: sinkMa.containsMouse ? Theme.surfaceHover : Theme.surface
                                 gradient: sel ? Theme.sunset : null
-                                Text { anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                Text { font.family: Theme.font; anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
                                     text: modelData.desc; elide: Text.ElideRight; font.pixelSize: 15
                                     color: parent.sel ? Theme.accentInk : Theme.text }
                                 MouseArea { id: sinkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -594,8 +629,8 @@ Window {
                         Item { width: 1; height: 6 }
                         Item {
                             width: parent.width; height: 18
-                            Text { text: t("audioIn"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
+                            Text { font.family: Theme.font; text: t("audioIn"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font;
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 font.pixelSize: 13; font.weight: Font.Medium
                                 color: player.audioActive ? Theme.ok : Theme.muted
@@ -605,7 +640,7 @@ Window {
                         // spectrum: 24 bands from 50 Hz (left) to 16 kHz (right)
                         Rectangle {
                             id: spec
-                            width: parent.width; height: 46; radius: 8; color: Theme.surfaceDeep; border.color: Theme.border
+                            width: parent.width; height: 46; radius: 8 * Theme.round; color: Theme.surfaceDeep; border.color: Theme.border
                             Row {
                                 id: specRow
                                 anchors { fill: parent; margins: 6 }
@@ -620,7 +655,7 @@ Window {
                                         readonly property real level: player.audioBands.length > index ? player.audioBands[index] : 0
                                         Rectangle {
                                             anchors.bottom: parent.bottom
-                                            width: parent.width; radius: 2
+                                            width: parent.width; radius: 2 * Theme.round
                                             height: Math.max(2, parent.height * parent.level)
                                             gradient: Theme.sunset
                                             opacity: player.muted ? 0.45 : 1
@@ -629,7 +664,7 @@ Window {
                                 }
                             }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("audioInHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("audioInHint") }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     // ---- Retro TV (CRT-Geom)
@@ -637,12 +672,12 @@ Window {
                         width: parent.width; spacing: 10
                         Item {
                             width: parent.width; height: 28
-                            Text { text: "Retro TV"; color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Retro TV"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.retroTv; onToggled: (v) => player.retroTv = v }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("retroHint") }
-                        Text { visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("retroHint") }
+                        Text { font.family: Theme.font; visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             visible: player.retroTv
                             width: parent.width
@@ -651,6 +686,23 @@ Window {
                             current: Math.max(0, values.indexOf(player.retroLines))
                             onPicked: (i) => player.retroLines = values[i]
                         }
+                        // ---- pixel-perfect scaling (shares the Retro TV section)
+                        Item {
+                            width: parent.width; height: 30
+                            Text { font.family: Theme.font; text: t("pixelPerfect"); color: Theme.label; font.pixelSize: 17; width: parent.width - 62; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
+                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                checked: player.pixelPerfect; onToggled: (v) => player.pixelPerfect = v }
+                        }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("pixelHint") }
+                        Text { font.family: Theme.font; visible: player.pixelPerfect; text: t("pixelGrid") + (player.pixelGrid === 1 && player.pixelGridSize !== "" ? "  ·  " + player.pixelGridSize : ""); color: Theme.label; font.pixelSize: 16 }
+                        Segmented {
+                            visible: player.pixelPerfect
+                            width: parent.width
+                            model: t("pixelGridModes")
+                            current: player.pixelGrid
+                            onPicked: (i) => player.pixelGrid = i
+                        }
+                        Text { font.family: Theme.font; visible: player.pixelPerfect; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 14; color: Theme.muted; text: t("pixelGridHint") }
                     }
                 }
                 Column {
@@ -667,23 +719,23 @@ Window {
                         label: t("audioDelay"); from: -300; to: 300; decimals: 0; neutral: 0; opacity: 1
                         value: player.audioDelay; onMoved: (v) => player.audioDelay = Math.round(v / 10) * 10
                     }
-                    Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("audioDelayHint") }
+                    Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("audioDelayHint") }
                     Item {
                         width: parent.width; height: 26
-                        Text { text: t("normalize"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.font; text: t("normalize"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                         ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: player.normalize; onToggled: (v) => player.normalize = v }
                     }
                     Rectangle {
-                        width: parent.width; height: 34; radius: 10; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                        Text { anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 17 }
+                        width: parent.width; height: 34; radius: 10 * Theme.round; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                        Text { font.family: Theme.font; anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 17 }
                         MouseArea { id: rstMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.resetEnhance() }
                     }
 
                     // ---- profiles
                     Column {
                         width: parent.width; spacing: 6
-                        Text { text: t("profiles"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("profiles"); color: Theme.label; font.pixelSize: 16 }
                         Flow {
                             width: parent.width; spacing: 6
                             visible: player.profiles.length > 0
@@ -694,12 +746,12 @@ Window {
                                     required property int index
                                     readonly property bool active: player.activeProfile === modelData
                                     readonly property string bound: player.profileSignal(modelData)
-                                    height: 28; radius: 8; width: chipRow.implicitWidth + 16
+                                    height: 28; radius: 8 * Theme.round; width: chipRow.implicitWidth + 16
                                     color: active ? Theme.accent : (chipMa.containsMouse ? Theme.surfaceHover : Theme.surface)
                                     Row {
                                         id: chipRow; anchors.centerIn: parent; spacing: 6
-                                        Text { text: (index < 9 ? (index + 1) + "  " : "") + modelData + (bound !== "" ? "  ⚡" : ""); color: active ? Theme.accentInk : Theme.text; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                                        Text {
+                                        Text { font.family: Theme.font; text: (index < 9 ? (index + 1) + "  " : "") + modelData + (bound !== "" ? "  ⚡" : ""); color: active ? Theme.accentInk : Theme.text; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                                        Text { font.family: Theme.font;
                                             text: "×"; color: active ? Theme.accentInk : Theme.muted; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter
                                             MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: player.deleteProfile(modelData) }
                                         }
@@ -711,13 +763,13 @@ Window {
                         Row {
                             width: parent.width; spacing: 6
                             Rectangle {
-                                width: parent.width - saveBtn.width - 6; height: 30; radius: 8; color: Theme.surface
+                                width: parent.width - saveBtn.width - 6; height: 30; radius: 8 * Theme.round; color: Theme.surface
                                 border.color: nameIn.activeFocus ? Theme.accent : Theme.surfaceHover
                                 TextInput {
                                     id: nameIn; anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                                     verticalAlignment: TextInput.AlignVCenter; color: Theme.text; font.pixelSize: 16; maximumLength: 24
                                     clip: true; selectByMouse: true
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: t("profileName"); color: Theme.dim; font.pixelSize: 16 }
+                                    Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: t("profileName"); color: Theme.dim; font.pixelSize: 16 }
                                     onAccepted: saveBtn.save()
                                     Keys.onEscapePressed: { text = ""; keyRoot.forceActiveFocus() }
                                 }
@@ -725,9 +777,9 @@ Window {
                             Rectangle {
                                 id: saveBtn
                                 function save() { if (nameIn.text.trim() !== "") { player.saveProfile(nameIn.text, bindSig.checked); nameIn.text = ""; keyRoot.forceActiveFocus() } }
-                                width: saveTxt.implicitWidth + 24; height: 30; radius: 8
+                                width: saveTxt.implicitWidth + 24; height: 30; radius: 8 * Theme.round
                                 color: nameIn.text.trim() !== "" ? (saveMa.containsMouse ? Theme.accentHover : Theme.accent) : Theme.surfaceHover
-                                Text { id: saveTxt; anchors.centerIn: parent; text: t("saveProfile"); color: nameIn.text.trim() !== "" ? Theme.accentInk : Theme.muted; font.pixelSize: 16; font.weight: Font.Medium }
+                                Text { font.family: Theme.font; id: saveTxt; anchors.centerIn: parent; text: t("saveProfile"); color: nameIn.text.trim() !== "" ? Theme.accentInk : Theme.muted; font.pixelSize: 16; font.weight: Font.Medium }
                                 MouseArea { id: saveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: saveBtn.save() }
                             }
                         }
@@ -737,19 +789,19 @@ Window {
                             visible: player.signalKey !== ""
                             spacing: 8
                             Rectangle {
-                                width: 16; height: 16; radius: 4; anchors.verticalCenter: parent.verticalCenter
+                                width: 16; height: 16; radius: 4 * Theme.round; anchors.verticalCenter: parent.verticalCenter
                                 color: bindSig.checked ? Theme.accent : "transparent"; border.color: bindSig.checked ? Theme.accent : Theme.dim
-                                Text { anchors.centerIn: parent; text: "✓"; visible: bindSig.checked; color: Theme.accentInk; font.pixelSize: 15 }
+                                Text { font.family: Theme.font; anchors.centerIn: parent; text: "✓"; visible: bindSig.checked; color: Theme.accentInk; font.pixelSize: 15 }
                             }
-                            Text { text: t("bindSignal").replace("%1", player.signalKey); color: Theme.text; font.pixelSize: 15; width: secB.width - 30; wrapMode: Text.Wrap }
+                            Text { font.family: Theme.font; text: t("bindSignal").replace("%1", player.signalKey); color: Theme.text; font.pixelSize: 15; width: secB.width - 30; wrapMode: Text.Wrap }
                             TapHandler { onTapped: bindSig.checked = !bindSig.checked }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("profilesHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("profilesHint") }
                     }
                     Column {
                         width: parent.width; spacing: 3
-                        Text { width: parent.width; text: t("gpu") + ": " + (player.gpuName !== "" ? player.gpuName : t("cpuOnly")); color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
-                        Text { width: parent.width; text: player.perf; color: Theme.label; font.pixelSize: 16; wrapMode: Text.Wrap }
+                        Text { font.family: Theme.font; width: parent.width; text: t("gpu") + ": " + (player.gpuName !== "" ? player.gpuName : t("cpuOnly")); color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
+                        Text { font.family: Theme.font; width: parent.width; text: player.perf; color: Theme.label; font.pixelSize: 16; wrapMode: Text.Wrap }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     FrameGenSection { width: parent.width; tr: win.t }
@@ -761,21 +813,30 @@ Window {
                     spacing: 20
                     Column {
                         width: parent.width; spacing: 8
-                        Text { text: "Steam"; color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5 }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("steamHint") }
+                        Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Steam"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("steamHint") }
                         Rectangle {
-                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10
+                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10 * Theme.round
                             color: steamMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                            Text { id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            Text { font.family: Theme.font; id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                             MouseArea { id: steamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.addToSteam() }
                         }
                         Item {
                             width: parent.width; height: 26
-                            Text { text: t("autostart"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight }
+                            Text { font.family: Theme.font; text: t("autostart"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.autostart; onToggled: (v) => player.autostart = v }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
+                        // controller: which one is connected, and how to open the menu with it
+                        Item {
+                            width: parent.width; height: 26
+                            Text { font.family: Theme.font; text: t("controller"); color: Theme.label; font.pixelSize: 17; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.62; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+                                font.pixelSize: 14; color: gamepad.controllers.length > 0 ? Theme.ok : Theme.muted
+                                text: gamepad.controllers.length > 0 ? "● " + t("padOn").replace("%1", gamepad.controllers.join(", ")) : t("padNone") }
+                        }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("padHint") }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
@@ -794,7 +855,21 @@ Window {
         id: keyRoot
         anchors.fill: parent
         focus: true
+        // demo scene: W A S D Q E Shift swim, 1-6 viewpoints (while the menu is closed)
+        function demoKeyName(k) {
+            switch (k) {
+            case Qt.Key_W: return "w"; case Qt.Key_A: return "a"; case Qt.Key_S: return "s"; case Qt.Key_D: return "d"
+            case Qt.Key_Q: return "q"; case Qt.Key_E: return "e"; case Qt.Key_Shift: return "shift"
+            }
+            return ""
+        }
+        Keys.onReleased: (e) => { const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true } }
         Keys.onPressed: (e) => {
+            if (player.demoActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
+                const k = demoKeyName(e.key)
+                if (k !== "") { if (!e.isAutoRepeat) player.demoKey(k, true); e.accepted = true; return }
+                if (e.key >= Qt.Key_1 && e.key <= Qt.Key_6) { player.demoPose(e.key - Qt.Key_1); e.accepted = true; return }
+            }
             if (e.key >= Qt.Key_1 && e.key <= Qt.Key_9 && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                 player.loadProfileIndex(e.key - Qt.Key_1); e.accepted = true; return
             }

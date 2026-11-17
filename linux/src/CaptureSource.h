@@ -14,6 +14,7 @@ struct AVFrame;
 struct AVPacket;
 
 namespace veyamux { class ScreenCastStream; }
+namespace veyamux::demo { class Stream; }
 
 namespace veyamux {
 
@@ -71,6 +72,8 @@ public:
     // mode is ignored then).
     bool open(const std::string& path, const CaptureMode& mode, std::string& error);
     static bool isScreenCast(const std::string& path) { return path.rfind("pipewire:", 0) == 0; }
+    // "demo:30" / "demo:60": the built-in demo scene (DemoSource.h)
+    static bool isDemo(const std::string& path) { return path.rfind("demo:", 0) == 0; }
     void close();
     Result read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error);
     // Newest frame only; anything older that the driver queued is dropped immediately (lowest latency).
@@ -89,6 +92,7 @@ private:
     bool dequeueNewest(v4l2_buffer& held, std::string& error);
     int fd_ = -1;
     std::unique_ptr<ScreenCastStream> sc_;   // window / screen source
+    std::unique_ptr<demo::Stream> demo_;     // demo scene
     uint32_t fourcc_ = 0;
     int rawStride_ = 0;
     std::vector<Buf> bufs_;

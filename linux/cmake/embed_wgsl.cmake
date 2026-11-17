@@ -1,0 +1,13 @@
+# Writes OUT: one C++ string constant per WGSL file in DIR (W_<NAME>), for the Abyssal Garden demo.
+file(GLOB files "${DIR}/*.wgsl")
+list(SORT files)
+set(text "// generated from src/abyssal/wgsl/*.wgsl - do not edit\n#pragma once\nnamespace abyssal {\n")
+foreach(f ${files})
+  get_filename_component(n "${f}" NAME_WE)
+  string(TOUPPER "${n}" N)
+  file(READ "${f}" body)
+  string(APPEND text "inline constexpr const char* W_${N} = R\"WGSL(${body})WGSL\";\n")
+endforeach()
+string(APPEND text "} // namespace abyssal\n")
+file(WRITE "${OUT}.tmp" "${text}")
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OUT}.tmp" "${OUT}")

@@ -70,7 +70,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -82,6 +82,13 @@ VkPipeline EnhanceChain::kernel(const char* name) const {
 }
 
 void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, int& oh) {
+    if (s.pixelActive()) {
+        // the game's grid when it is measured and smaller than the signal, else the signal itself
+        const bool grid = s.pixelGrid == 1 && s.gridW >= 64 && s.gridH >= 64 && s.gridW < w && s.gridH < h;
+        ow = grid ? (s.gridW & ~1) : w;
+        oh = grid ? (s.gridH & ~1) : h;
+        return;
+    }
     if (!s.enabled || s.scale <= 1.001f) { ow = w; oh = h; return; }
     ow = std::max(2, int(std::lround(w * s.scale)) & ~1);
     oh = std::max(2, int(std::lround(h * s.scale)) & ~1);
@@ -232,6 +239,15 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         cur = &up_;
         upHistory_ = false;
         timer_.mark(ctx_.active(), GpuTimer::Upscale);
+    } else if (s.pixelActive()) {
+        // pixel-perfect: back to the game's grid (if measured); the display enlarges it with sharp pixels
+        if (ow != w || oh != h) {
+            struct { uint32_t sw, sh, ow, oh; } gp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
+            run("LxPixelGrid", {cur}, {&up_}, &gp, sizeof gp, ow, oh, 16);
+            cur = &up_;
+        }
+        upHistory_ = false;
+        timer_.mark(ctx_.active(), GpuTimer::Upscale);
     } else if (s.enabled && (ow != w || oh != h)) {
         bool done = false;
         // A setup failure is not retried every frame (context creation stalls the GPU): only after the size or the
@@ -270,8 +286,8 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     } else {
         upHistory_ = false;
     }
-    if (s.enabled && ((s.sharpen > 0.001f && !s.retroTv) || s.exposure != 0.0f || s.contrast != 1.0f || s.saturation != 1.0f)) {
-        EnhanceParams ep{uint32_t(ow), uint32_t(oh), s.retroTv ? 0.0f : s.sharpen, s.exposure, s.contrast, s.saturation, {0, 0}};
+    if (s.enabled && ((s.sharpen > 0.001f && !s.retroTv && !s.pixelActive()) || s.exposure != 0.0f || s.contrast != 1.0f || s.saturation != 1.0f)) {
+        EnhanceParams ep{uint32_t(ow), uint32_t(oh), (s.retroTv || s.pixelActive()) ? 0.0f : s.sharpen, s.exposure, s.contrast, s.saturation, {0, 0}};
         run("LxEnhance", {cur}, {&fin_}, &ep, sizeof ep, ow, oh, 16);
         cur = &fin_;
     }

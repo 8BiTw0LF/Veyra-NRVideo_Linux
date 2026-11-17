@@ -10,6 +10,6 @@ int run(const QString& self);                               // the --watch loop 
 QString cardName(const QString& devicePath);                // V4L2 card name from sysfs ("Live Gamer Ultra 2.1")
 QString findDeviceByName(const QString& name);              // /dev/videoN of the first capture node with that name
 bool autostartEnabled();
-bool setAutostart(bool on, const QString& self, QString& error);   // writes/removes the autostart entry, starts/stops the watcher
+bool setAutostart(bool on, QString& error);   // writes/removes the autostart entry, starts/stops the watcher
 
 } // namespace veyamux::watch

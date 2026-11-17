@@ -44,7 +44,7 @@ endforeach()
 foreach(q 3 4 5)
   veyamux_spv(AaFxaa${q} "${ORIG_SHADERS}/AaFxaa.hlsl" -DFXAA_PRESET=${q})
 endforeach()
-foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom)
+foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom LxPixelGrid)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
 # AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
@@ -104,7 +104,7 @@ add_dependencies(veyamux-selftest veyamux_shaders)
 # ---- Media engine (FFmpeg + PulseAudio/PipeWire), still Qt-free ----
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -116,10 +116,31 @@ add_executable(veyamux-play-test src/play_test.cpp)
 target_link_libraries(veyamux-play-test PRIVATE veyamux_media)
 add_dependencies(veyamux-play-test veyamux_shaders)
 
+# ---- Demo scene "Abyssal Garden" (WebGPU through wgpu-native, prebuilt: scripts/fetch-tools.sh) ----
+set(VEYAMUX_WGPU_ROOT "${CMAKE_SOURCE_DIR}/.tools/wgpu" CACHE PATH "wgpu-native release (include/, lib/)")
+if(EXISTS "${VEYAMUX_WGPU_ROOT}/lib/libwgpu_native.a")
+  file(GLOB ABYSSAL_WGSL "${CMAKE_SOURCE_DIR}/src/abyssal/wgsl/*.wgsl")
+  set(ABYSSAL_WGSL_H "${CMAKE_BINARY_DIR}/generated/abyssal_wgsl.h")
+  add_custom_command(OUTPUT "${ABYSSAL_WGSL_H}"
+    COMMAND ${CMAKE_COMMAND} -DDIR=${CMAKE_SOURCE_DIR}/src/abyssal/wgsl -DOUT=${ABYSSAL_WGSL_H} -P ${CMAKE_SOURCE_DIR}/cmake/embed_wgsl.cmake
+    DEPENDS ${ABYSSAL_WGSL} "${CMAKE_SOURCE_DIR}/cmake/embed_wgsl.cmake" VERBATIM)
+  add_library(veyamux_abyssal STATIC src/abyssal/AbyssalMath.cpp src/abyssal/AbyssalWorld.cpp src/abyssal/AbyssalScene.cpp
+    src/abyssal/AbyssalAudio.cpp "${ABYSSAL_WGSL_H}")
+  target_include_directories(veyamux_abyssal PUBLIC src/abyssal PRIVATE "${CMAKE_BINARY_DIR}/generated" "${VEYAMUX_WGPU_ROOT}/include")
+  target_link_libraries(veyamux_abyssal PRIVATE "${VEYAMUX_WGPU_ROOT}/lib/libwgpu_native.a" ${CMAKE_DL_LIBS} Threads::Threads m)
+  target_compile_definitions(veyamux_abyssal PUBLIC VEYAMUX_HAVE_ABYSSAL=1)
+  add_executable(veyamux-abyssal-test src/abyssal/abyssal_test.cpp)
+  target_link_libraries(veyamux-abyssal-test PRIVATE veyamux_abyssal)
+  target_link_libraries(veyamux_media PUBLIC veyamux_abyssal)
+  message(STATUS "Abyssal Garden demo: wgpu-native from ${VEYAMUX_WGPU_ROOT}")
+else()
+  message(WARNING "wgpu-native not found in ${VEYAMUX_WGPU_ROOT}: the demo scene is left out (scripts/fetch-tools.sh fetches it)")
+endif()
+
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -134,9 +155,12 @@ foreach(f pq_video hdr_window)
 endforeach()
 qt_add_resources(veyamux "hdrshaders" PREFIX "/" FILES ${QSB_FILES})
 qt_add_resources(veyamux "qml" PREFIX "/" FILES
-  qml/qmldir qml/Theme.qml qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
+  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
-  qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg)
+  qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
+  qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
+  qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
+  i18n/messages.json)
 target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network Qt6::DBus)
 add_dependencies(veyamux veyamux_shaders)
 

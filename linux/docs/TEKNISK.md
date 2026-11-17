@@ -15,13 +15,34 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 ```
 `scripts/fetch-tools.sh` henter DXC, linuxdeploy og appimagetool automatisk. Kør AppImage uden FUSE: `APPIMAGE_EXTRACT_AND_RUN=1`.
 
+## Flatpak (Flathub)
+Manifest: `packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml` (KDE-runtime 6.11 = freedesktop 25.08). App-id'et har `_`
+foran `8BiTw0LF`, fordi en del af et Flatpak-id ikke må starte med et tal.
+- **Bygges med:** FFmpeg 9 (VAAPI, x264, GnuTLS til RTMPS) og x264 som moduler. DXC er Microsofts færdige Linux-udgave og
+  bruges kun under bygningen (fjernes bagefter), derfor kun x86_64 (`flathub.json`).
+- **Lokalt:** `flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub --force-clean build-flatpak
+  packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml`. GitHub Actions (`.github/workflows/flatpak.yml`) bygger den samme
+  ved hvert push til main og gemmer `VeyAmux.flatpak` som artefakt.
+- **Til Flathub:** `scripts/make-flathub-manifest.sh <tag>` skriver `dist/flathub/` med VeyAmux fra et udgivet tag
+  (Flathub bygger kun fra faste kilder) og `flathub.json`.
+- **Rettigheder:** `--device=all` (capture-kort og controllere), Wayland + X11 (XWayland-fallback), PulseAudio, netværk
+  (RTMP og OBS-browserkilden), `xdg-videos`/`xdg-pictures` (optagelser), Steams `userdata` (*Tilføj til Steam*) og
+  `Lossless Scaling`-mappen (læses), `xdg-config/autostart` (start når kortet tilsluttes).
+- **Forskelle i koden** (`src/Sandbox.h`): Steam-genvejen og autostart-filen starter `flatpak run --command=veyamux <id>`.
+  Autostart-filen skrives i den rigtige `~/.config/autostart`. En Flatpak kan ikke se, om Steam kører, så brugeren bedes
+  i stedet genstarte Steam.
+- **lsfg-vk** kan ikke bruges fra værtens `~/.local`. Det kommer som Flatpak-udvidelsen
+  `org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`, som runtime'en monterer under `/usr/lib/extensions/vulkan`.
+  `XDG_DATA_DIRS` får den mappe med, så både Vulkan-loaderen og VeyAmux' egen søgning finder lageret. Menuen viser
+  installationskommandoen, når laget mangler.
+
 ## Hvad er med
 | Område | Status |
 |---|---|
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
+| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX SDK 1.1.4 FSR 3.1 upscaler på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -45,8 +66,8 @@ viser derfor først det målte indhold og signalet bagefter, fx `≈1920×1080 @
   checkerboard) eller kornfilter efter opskaleringen genskaber fine detaljer og læses derfor som højere opløsning; meget
   flade scener giver intet skøn. `veyamux-probe-test` i build-mappen tester begge målinger på rå luma-filer.
 
-## Støjfjerning
-Menu → *Forbedring* → *Støjfjerning*: Fra / Rumlig / Temporal / Begge og Let / Middel / Kraftig. Kører først i kæden
+## Støjreduktion
+Menu → *Forbedring* → *Støjreduktion*: Fra / Rumlig / Temporal / Begge og Let / Middel / Kraftig. Kører først i kæden
 (på kildebilledet før FXAA, opskalering og skarphed), så *Skarphed* kan skrues op uden at gøre støjen skarp.
 - **Rumlig** (`shaders/LxNlm.hlsl`): non-local means – hver pixel blandes med pixels i et 7×7-område, hvis 3×3-omgivelser
   og farve ligner den. Billede for billede, ingen spøgelser ved bevægelse.
@@ -60,7 +81,7 @@ Begge 36,9–40,9 dB, alle med detalje 0,97–1,02. En rød boks, der flytter 40
 spor eller glorier (ingen pixel over 30/255 fra det rene billede). Hastighed på et rigtigt grafikkort er ikke målt her.
 
 ## Bevægelsesmåling (FSR-opskalering)
-Video har ingen bevægelsesvektorer fra en spilmotor, så VeyAmux måler dem selv til FSR 3.1-opskaleringen og den temporale støjfjerning
+Video har ingen bevægelsesvektorer fra en spilmotor, så VeyAmux måler dem selv til FSR 3.1-opskaleringen og den temporale støjreduktion
 (`src/MotionEstimator.cpp`): luma-pyramide med op til 7 niveauer, regulariseret Lucas-Kanade fra groft til fint,
 udfyldning af flade områder og til sidst skarpe bevægelseskanter (`LxMvSelect`). Over 2560 px bredde måles i halv opløsning.
 
@@ -114,6 +135,20 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   Lanczos). Konklusion: på video er FSR 3.1 blødere end Lanczos; derfor er Lanczos standard. FSR 4.1.2 findes kun som lukkede
   Windows-DLL'er og kan ikke bruges i et Linux-program.
 
+## Temaer
+`qml/Theme.qml` styrer alle farver, hjørneradier og skrifttyper. Temaet vælges på startskærmen (`ui/theme`), skiftes med
+det samme og gælder både startskærmen og menuen.
+
+| Tema | Farver | Form og skrift |
+|---|---|---|
+| Vice | det oprindelige: violet med pink→orange | runde hjørner, systemets skrift |
+| Code | sort med terminalgrøn (#00FF41) | mindre runde hjørner, monospace overalt |
+| Inferno | næsten sort med blodrød og glød | Cinzel (OFL) til overskrifter |
+| Retro | 8-bit konsol: grå, sort og rød | firkantet, 2 px sort kant med lys top og mørk bund, Press Start 2P (OFL) til overskrifter og hovedknapper, store bogstaver i knapper |
+
+Logoet findes i én udgave pr. tema (`qml/icons/logo-<tema>.svg`, i Retro som 16×16 pixelgrafik). Vinduesikonet følger
+også temaet på X11/XWayland. På Wayland bruger skrivebordet skrivebordsfilens ikon, som er Vice-logoet.
+
 ## Retro TV (CRT-Geom)
 `shaders/LxCrtGeom.hlsl` er crt-geom fra ShaderGlass' forudindstilling `crt/crt-geom`. ShaderGlass har den kun som
 oversat DirectX-bytekode, så det er en oversættelse af den kilde, ShaderGlass er bygget fra: libretro slang-shaders
@@ -135,6 +170,74 @@ Forskelle fra originalen (billedet er det samme):
 - **Billedlinjer:** crt-geom's `ysize` er 240, 480 eller kildens egne. Et capture-kort leverer 240p skaleret op til 1080p,
   så hver simuleret linje tager gennemsnittet af de kilderækker, den dækker (op til 8), i stedet for at plukke én.
 - **Maske:** kun maske 1 er med.
+
+## Demo-scene (Abyssal Garden)
+Kilden `demo:30` / `demo:60` er **Abyssal Garden** (https://github.com/Noniv/abyssal-garden, MIT, © 2026 Maksymilian
+Dendura, commit `a596354`), oversat fra JavaScript/WebGPU til C++ i `src/abyssal/`.
+
+**Shaders og grafik**
+- WGSL-shaderne bruges uændret. `tools/abyssal/extract.mjs` skriver dem ud for det høje detaljeniveau, så de ligger i
+  `src/abyssal/wgsl/`.
+- De køres gennem **wgpu-native** v29 (WebGPU på Vulkan, MIT/Apache-2.0, linket statisk). Den hentes af
+  `scripts/fetch-tools.sh`.
+
+**Verdensgeneratoren**
+- `world.js`, `math.js` og genereringsdelen af `main.js` er oversat sætning for sætning. JavaScripts regneregler er
+  bevaret: doubles, float-lagring, Math.round og den samme tilfældige talrække. Hvor JavaScript trækker flere
+  tilfældige tal i ét udtryk, trækkes de i samme rækkefølge.
+- Resultatet er **byte for byte identisk** med originalen: terræn, cirka 2 mio. blade, sten, svampe, koraller, fisk,
+  bobler, lysvolumen, kollisionsfelt og alle 26 meshes.
+  - Tjek: `ABYSSAL_DUMP=<mappe> veyamux-abyssal-test <ud>` skriver C++-udgaven.
+  - `node tools/abyssal/jsgen.mjs <abyssal-garden>/source/src <mappe> <js-mappe>` kører originalen på det samme
+    tæthedsgitter.
+  - Sammenlign de to mapper med `cmp`.
+
+**Billede og styring**
+- **Opløsning:** fast 1920×1080 (høj kvalitet: 4× MSAA, 4096-skyggekort, 34 lysstråle-trin). Dynamisk opløsning er
+  fjernet, så VeyAmux altid får samme størrelse.
+- **Billedet til VeyAmux:** det læses tilbage som RGBA og afleveres som et capture-billede (`DemoSource.cpp`), så hele
+  kæden virker.
+- **Billedhastighed:** 30 eller 60 fps, holdt af rendertråden.
+- **Verden bygges én gang** pr. kørsel i baggrunden, og der vises et ventebillede med fremskridt imens.
+- **Styring:** taster, træk med musen og controller samles i `demo::setKey` / `addLook` / `setPad`.
+  - Uden menu: venstre stik svømmer, højre stik kigger, triggere og skulderknapper giver ned/op, og venstre
+    stik-klik er hurtigere.
+  - Kun når menuen er lukket. Når den åbnes, nulstilles alt.
+
+**Lyd**
+- `audio.js`-grafen er bygget om til en lille synthesizer (`AbyssalAudio.cpp`). Den kører i capture-lydtråden som
+  kilden `@demo`, så lydmåler, optagelse og stream får den.
+- Konvolutions-efterklangen på 5 s er erstattet af en Freeverb-agtig efterklang med samme hendøen.
+
+## Pixel-perfekt skalering
+Under Retro TV. To dele:
+- **Visning** (`VideoItem`): billedet forstørres med et helt tal `k = floor(min(vinduesbredde/b, vindueshøjde/h))` med
+  nearest-neighbour, centreret og lagt på hele skærmpixels. Uden det tegnes det med lineær filtrering.
+- **Spilpixels** (`shaders/LxPixelGrid.hlsl`): finder spillets eget gitter i signalet. Hver gitterpixel er gennemsnittet
+  af den inderste halvdel af de kildepixels, den dækker (`max(skala·0,25; 0,5)` til hver side), så de bløde kanter, en
+  opskalerer efterlader mellem spilpixels, ikke smitter af.
+  - *240p* og *480p* er faste gitre. *Auto* bruger spillets målte opløsning (samme måling som infolinjen) og skifter
+    først, når den har været stabil i 1,5 s.
+  - Skarphed springes over, mens pixel-perfekt er aktiv.
+
+## Controller
+`src/Gamepad.cpp` læser controllere direkte fra kernen (evdev, `/dev/input/event*`). Xbox-, PlayStation-, Switch- og
+HID-driverne melder de samme standardkoder:
+- `BTN_SOUTH` = A/kryds og `BTN_EAST` = B/cirkel.
+- D-pad som `BTN_DPAD_*` eller `ABS_HAT0X/Y`, venstre stik som `ABS_X/Y` (tærskel 60 %).
+
+Menuen styres sådan:
+- **Åbn og luk:** Select + Start, eller Guide holdt i 500 ms.
+- **Spillet får intet**, mens menuen er åben: alle controllere grabbes med `EVIOCGRAB`. Grab'et starter først, når de
+  knapper, der åbnede menuen, er sluppet, og slippes først, når lukkeknapperne er sluppet, så spillet aldrig ser en
+  knap, der hænger.
+- **Retninger gentages:** første gang efter 380 ms, derefter hver 110 ms.
+- **Navigation i QML** (`padNav` i `Main.qml`): alle synlige `MouseArea`s og skydere i panelet samles. Den nærmeste i den
+  valgte retning vælges efter `afstand + 2,5 · sideafvigelse`.
+  - LB/RB springer mellem kolonnerne, og venstre/højre flytter en skyder 1/40 af dens område.
+  - Musebevægelse skjuler markeringen igen.
+
+Test uden controller: `VEYAMUX_TEST_PAD_FIFO=<fifo>` læser rå `input_event`-strukturer fra en pipe.
 
 ## Frame generation
 Menu → *Frame generation*:
@@ -266,7 +369,7 @@ selv hvis programmet lukkes brat). Replay gemmes fra et keyframe i en baggrundst
 afvigelse. libva bundles ikke i AppImage'en (værtens libva finder værtens VA-driver).
 
 ## GPU-tid og latens
-Vulkan-timestamps pr. trin (input, støjfjerning, kantudjævning, opskalering, finish, output) i hver frame-slot, læst når
+Vulkan-timestamps pr. trin (input, støjreduktion, kantudjævning, opskalering, finish, output) i hver frame-slot, læst når
 slotten genbruges (ingen ventetid), udglattet. Menuen viser GPU-tid, CPU-tid og "i VeyAmux" (capture-driverens
 tidsstempel → GPU-arbejde færdigt).
 
@@ -291,7 +394,15 @@ når det præsenteres. Kræver *Adaptiv synkronisering* i KDE's skærmindstillin
 kombineres med Lossless Scaling (lsfg-vk kræver fast skærmfrekvens).
 
 ## Sprog
-Engelsk som standard; dansk automatisk når sprog **eller** region er dansk (`da_DK`, `en_DK`, dansk `LC_TIME` …).
+Engelsk, dansk, tysk, spansk, fransk, svensk, norsk (bokmål) og russisk.
+- **Automatisk:** sproget tages fra `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` og `LANG` (`no`/`nn` → bokmål). Dansk vælges
+  stadig også, når kun regionen er dansk.
+- **På startskærmen:** sproget kan vælges, og valget gemmes som `ui/lang`.
+
+Hvor teksterne ligger:
+- **Brugerfladen:** `qml/Strings.js`.
+- **Beskeder fra C++:** `i18n/messages.json`, slået op på den engelske tekst.
+- **Manglende oversættelser** vises på engelsk.
 
 ## Lav latens (capture)
 Samme princip som Windows-versionen: billedet forlader aldrig GPU'en. Rå YUYV/UYVY/NV12-frames uploades, farvekonverteres og
@@ -336,4 +447,4 @@ C capture · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
 Licens: GPL-3.0 (som det oprindelige Veyra-NRVideo, som VeyAmux bygger på). Tredjepart: se `THIRD_PARTY_NOTICES_LINUX.md`.
 
 Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> lanczos|fsr|fsr1|nis [skala]` (hele forbedringskæden, til
-PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjfjerning til).
+PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjreduktion til).

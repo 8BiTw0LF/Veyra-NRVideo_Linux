@@ -1,25 +1,55 @@
-## VeyAmux 2.1.5-linux19
+## VeyAmux 2.1.5-linux21
 
-What's new since **2.1.5-linux17**.
+What's new since **2.1.5-linux19**.
 
-### Sound
-- **All your sound outputs are listed.** *Sound output* now shows every output device: TV, headset, speakers, virtual surround and so on. Before, it often only showed "System default", because the list came from the `pactl` tool, which isn't installed everywhere. VeyAmux now asks the sound server (PipeWire / PulseAudio) directly, and the audio sources in the capture dialog use the same route.
-- **Sound from the source** is a new live spectrum meter (50 Hz – 16 kHz) under *Sound output*. It shows whether sound is coming in from the capture card or file at all, and says "Sound is coming in" or "No sound".
-- **Mute for you, not for your viewers.** Mute (M) and the volume only affect your own speakers. Recordings, replays and the live stream to Twitch, YouTube or your own server always get the sound. This was already how it worked, and the menu now says so.
+### Built-in demo: try VeyAmux without a capture card
+- **Abyssal Garden** is now part of VeyAmux. It is a live 3D underwater world with kelp forests, light shafts, a
+  shipwreck, a stone whale fluke and manta rays. Press **Demo · 30 fps** or **Demo · 60 fps** on the start screen.
+- It is rendered in **1920×1080 on your graphics card** and goes through VeyAmux exactly like a console's picture. So
+  upscaling, noise reduction, Retro TV, pixel-perfect scaling, frame generation, recording, replay and streaming can
+  all be tried on a moving scene. It has its own underwater sound, which also reaches the sound meter, recordings and
+  the stream.
+- **Play while the menu is closed:**
+  - **Keyboard:** **W A S D** to swim, **Q / E** down / up, **Shift** faster, **1–6** for six viewpoints.
+  - **Mouse:** drag to look around.
+  - **Controller:** sticks to swim and look, triggers for down / up, **Y** for the next viewpoint.
+- **The menu still works as normal:** **P** or **Select + Start** opens it, and the swimming stops while it is open.
+- The first start builds the world, which takes a few seconds, and then it is kept until you close VeyAmux.
+- Abyssal Garden is by Maksymilian Dendura (MIT license) and was originally made for the browser. VeyAmux runs it
+  natively, with no browser needed.
 
-### Menu
-- **Bigger text and controls.** Text and controls are bigger, and the menu now fills the panel instead of leaving empty space at the sides.
-- **New layout.** *Sound output* now sits under anti-aliasing, and *Retro TV* under the sound meter. *Steam* and *OBS* are in the right-hand column, and *Frame generation* is in the middle.
-- **Contrast centred.** The contrast slider now runs from 0.6 to 1.4, so the neutral 1.00 sits in the middle like the other sliders.
-- **"Capture" button.** The start screen button is now called **Capture**, because it opens windows and screens as well as capture cards.
+### Game controller in the menu
+- **Select + Start** opens and closes the menu, or hold **Guide / PS** for half a second.
+- While the menu is open, the controller only steers the menu, and **the game gets nothing**:
+  - the D-pad or stick moves,
+  - **A** chooses and **B** closes,
+  - left/right change sliders,
+  - **LB / RB** jump between the columns.
+- Works with Xbox, PlayStation, Switch and most other controllers, including through Steam Input. The menu shows
+  which controllers are connected.
 
-### Look
-- **New logo.** The V is laid over the A so the two letters form an X.
+### Picture
+- **Pixel-perfect scaling** (under Retro TV) enlarges the picture by a whole number with sharp, square pixels.
+- **Game pixels** (Auto, 240p or 480p) first finds a retro game's own pixel grid inside the capture signal, so every
+  game pixel becomes an exact, even block.
 
-### Fixes since the first linux17 build
-- **Sharing a whole screen** no longer makes VeyAmux crash. The current linux17 download already had this fix.
+### Look and language
+- **Four themes** on the start screen, and the logo changes with them:
+  - **Vice**: violet with a pink-to-orange sunset.
+  - **Code**: black with terminal green.
+  - **Inferno**: blood red and ember.
+  - **Retro**: 8-bit greys with a pixel font.
+- **Eight languages**: English, Danish, German, Spanish, French, Swedish, Norwegian and Russian. They are picked from
+  the system, or chosen on the start screen.
+- In Danish, "Støjfjerning" is now called **Støjreduktion**.
+
+### Other
+- Preparations for a **Flathub** release (Flatpak manifest and metadata). In the Flatpak version, lsfg-vk comes as the
+  Flathub extension `org.freedesktop.Platform.VulkanLayer.lsfgvk`.
 
 ### Download
-Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. Once installed, it can update itself through the `.zsync` file (for example with Gear Lever).
+Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. Once installed, it can update
+itself through the `.zsync` file (for example with Gear Lever).
 
-Lossless Scaling frame generation still needs your own copy of Lossless Scaling (Steam) and lsfg-vk. VeyAmux does not include either of them.
+Lossless Scaling frame generation still needs your own copy of Lossless Scaling (Steam) and lsfg-vk. VeyAmux does not
+include either of them.

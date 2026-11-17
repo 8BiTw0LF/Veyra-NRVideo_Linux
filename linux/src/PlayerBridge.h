@@ -28,6 +28,10 @@
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
+    // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
+    Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
+    Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
+    Q_PROPERTY(double demoProgress READ demoProgress NOTIFY demoChanged)
     Q_PROPERTY(bool live READ live NOTIFY mediaChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
     Q_PROPERTY(double position READ position NOTIFY positionChanged)
@@ -66,6 +70,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QString obsError READ obsError NOTIFY obsChanged)
     // Lossless Scaling (lsfg-vk): state code for the UI, see lsfgState()
     Q_PROPERTY(QString lsfgState READ lsfgState NOTIFY lsfgChanged)
+    // installed from Flathub (lsfg-vk then comes as a Flatpak extension)
+    Q_PROPERTY(bool flatpak READ flatpak CONSTANT)
     Q_PROPERTY(QString lsfgFolder READ lsfgFolder NOTIFY lsfgChanged)
     Q_PROPERTY(QString lsfgLog READ lsfgLog NOTIFY lsfgChanged)
     Q_PROPERTY(bool lsfgActive READ lsfgActive NOTIFY lsfgChanged)
@@ -76,7 +82,16 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
     Q_PROPERTY(bool fxaa READ fxaa WRITE setFxaa NOTIFY enhanceChanged)
     Q_PROPERTY(bool retroTv READ retroTv WRITE setRetroTv NOTIFY enhanceChanged)
+    // UI theme: vice / code / inferno / retro (Theme.qml), saved as ui/theme
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
+    // UI language: languageChoice is auto or a code (saved as ui/lang); language is the one in use
+    Q_PROPERTY(QString language READ language NOTIFY languageChanged)
+    Q_PROPERTY(QString languageChoice READ languageChoice WRITE setLanguageChoice NOTIFY languageChanged)
     Q_PROPERTY(int retroLines READ retroLines WRITE setRetroLines NOTIFY enhanceChanged)
+    // pixel-perfect scaling (EnhanceSettings::pixelPerfect); pixelDisplay = the display enlarges with sharp pixels now
+    Q_PROPERTY(bool pixelPerfect READ pixelPerfect WRITE setPixelPerfect NOTIFY enhanceChanged)
+    Q_PROPERTY(int pixelGrid READ pixelGrid WRITE setPixelGrid NOTIFY enhanceChanged)
+    Q_PROPERTY(QString pixelGridSize READ pixelGridSize NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
     Q_PROPERTY(int denoise READ denoise WRITE setDenoise NOTIFY enhanceChanged)
     // HDR capture (P010): brightest level of the source in nits (tone-mapped to SDR)
@@ -134,6 +149,9 @@ public:
     ~PlayerBridge() override;
 
     bool hasMedia() const { return engine_.isOpen(); }
+    bool demoAvailable() const;
+    bool demoActive() const { return demoActive_ && engine_.isOpen(); }
+    double demoProgress() const { return demoProgress_; }
     bool live() const { return engine_.isLive(); }
     bool playing() const { return engine_.playing(); }
     double position() const { return engine_.isOpen() ? engine_.position() : 0.0; }
@@ -157,7 +175,17 @@ public:
     QString upscalerError() const { return upError_; }
     bool fxaa() const { return s_.fxaa; }
     bool retroTv() const { return s_.retroTv; }
+    QString theme() const { return theme_; }
+    QString language() const { return lang_; }
+    QString languageChoice() const { return langChoice_; }
+    void setLanguageChoice(const QString& c);
+    static QString systemLanguage();
+    void setTheme(const QString& t);
     int retroLines() const { return s_.retroLines; }
+    bool pixelPerfect() const { return s_.pixelPerfect; }
+    int pixelGrid() const { return s_.pixelGrid; }
+    bool pixelDisplay() const { return s_.pixelActive(); }
+    QString pixelGridSize() const { return s_.gridW > 0 ? QStringLiteral("%1×%2").arg(s_.gridW).arg(s_.gridH) : QString(); }
     int denoise() const { return int(s_.denoise); }
     int hdrPeak() const { return int(std::lround(s_.hdrPeak)); }
     void setHdrPeak(int v) { s_.hdrPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/hdrPeak", hdrPeak()); applyEnhance(); }
@@ -208,6 +236,7 @@ public:
     // "active", "ready" (restart to enable), "noInstall", "noDll" (only Lossless.dll: needs the lsfg-vk Steam branch),
     // "noLayer" (lsfg-vk not installed), "oldLayer" (lsfg-vk 1.x), "noVulkanUi", "crashed"
     QString lsfgState() const;
+    bool flatpak() const;
     QString lsfgFolder() const { return lsfg_.installDir; }
     // What lsfg-vk itself reports in this run (from its log file), translated framing; empty when not applicable.
     QString lsfgLog() const { return lsfgLog_; }
@@ -217,7 +246,7 @@ public:
     bool fgPaused() const { return fgPaused_; }
     double displayHz() const;
     // Set by main() before the window exists: whether Vulkan UI is used and whether lsfg-vk was enabled for this run.
-    void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish);
+    void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed);
     void setWindow(QWindow* w) {
         window_ = w;
         refreshEdidPeak();
@@ -250,6 +279,8 @@ public:
     void setFxaa(bool v);
     void setRetroTv(bool v) { s_.retroTv = v; applyEnhance(); }
     void setRetroLines(int v) { s_.retroLines = (v == 0 || v == 240 || v == 480) ? v : 240; applyEnhance(); }
+    void setPixelPerfect(bool v) { s_.pixelPerfect = v; applyEnhance(); }
+    void setPixelGrid(int v) { s_.pixelGrid = std::clamp(v, 0, 1); applyEnhance(); }
     void setFrameGenMode(int v);
     void setFxaaQuality(int v);
     void setSharpen(double v);
@@ -359,8 +390,18 @@ public slots:
     void retryLsfg();
     void refreshLsfg();
     void chooseLsfgFolder();
+    // demo scene: start it at 30 or 60 fps; keyboard / mouse / controller input while the menu is closed
+    void openDemo(int fps);
+    void demoKey(const QString& key, bool down);   // "w" "a" "s" "d" "q" "e" "shift"
+    void demoLook(double dx, double dy);
+    void demoPose(int pose);                       // -1: the next viewpoint
+    void demoRelease();
+    void demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
 
 signals:
+    void demoChanged();
+    void languageChanged();
+    void themeChanged();
     void audioMeterChanged();
     void noticeChanged();
     void profilesChanged();
@@ -402,8 +443,15 @@ private:
     bool muted_ = false;
     QString gpuName_, status_, perf_;
     bool lastPlaying_ = false;
+    bool demoActive_ = false;
+    double demoProgress_ = 0;
+    int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;
     veyamux::AudioMeter meter_;
+    QString theme_;
+    // measured game resolution for pixel-perfect "Measured": taken over once it has been the same for ~1.5 s
+    int gridCandW_ = 0, gridCandH_ = 0, gridStable_ = 0;
+    void updatePixelGrid();
     QVariantList bands_;
     bool audioActive_ = false;
     QVariantList audioBands() const { return bands_; }
@@ -414,7 +462,9 @@ private:
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
     lsfg::Detection lsfg_;
-    bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false, danish_ = false;
+    bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false;
+    QString lang_ = "en";            // the language in use (en, da, de, es, fr, sv, nb, ru)
+    QString langChoice_ = "auto";    // what the user picked (ui/lang): auto = follow the system
     int lsfgMultiplier_ = 2;
     bool fgPaused_ = false;
     int fgHighTicks_ = 0, fgLowTicks_ = 0;
@@ -464,5 +514,6 @@ private:
     void updateLsfgLog();
     void updateOutputFps(uint64_t shownTotal);
     void updateLsfgMultiplier();
-    QString L(const char* en, const char* da) const { return QString::fromUtf8(danish_ ? da : en); }
+    // a text in the UI language: Danish inline, English as the key into i18n/messages.json for the others
+    QString L(const char* en, const char* da) const;
 };

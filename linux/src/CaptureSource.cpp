@@ -1,4 +1,5 @@
 #include "CaptureSource.h"
+#include "DemoSource.h"
 #include "ScreenCast.h"
 #include <cstdio>
 
@@ -282,6 +283,15 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     close();
     probe_.reset();
     delivered_.reset();
+    if (isDemo(path)) {
+        auto d = std::make_unique<demo::Stream>();
+        if (!d->open(std::atoi(path.c_str() + 5), error)) return false;
+        demo_ = std::move(d);
+        w_ = demo::kWidth; h_ = demo::kHeight; fps_ = demo_->fps();
+        card_ = "Abyssal Garden (demo)";
+        fourcc_ = 0;
+        return true;
+    }
     if (isScreenCast(path)) {
         int pfd = -1; unsigned node = 0;
         if (std::sscanf(path.c_str(), "pipewire:%d:%u", &pfd, &node) != 2) { error = "Bad screen share address"; return false; }
@@ -355,6 +365,7 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
 
 void CaptureSource::close() {
     sc_.reset();
+    demo_.reset();
     if (fd_ < 0) return;
     if (streaming_) { int type = V4L2_BUF_TYPE_VIDEO_CAPTURE; xioctl(fd_, VIDIOC_STREAMOFF, &type); streaming_ = false; }
     for (auto& b : bufs_) if (b.start) munmap(b.start, b.length);
@@ -409,6 +420,15 @@ bool CaptureSource::dequeueNewest(v4l2_buffer& held, std::string& error) {
 }
 
 CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeoutMs, std::string& error) {
+    if (demo_) {
+        RawFrame f;
+        const auto r = demo_->readLatest(f, timeoutMs, error);
+        if (r != demo::Stream::Result::Frame) return r == demo::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+        lastRepeat_ = false;
+        probe_.feed(f.data.data() + 1, f.w, f.h, f.stride, 4, f.captured);
+        rgba.swap(f.data);
+        return Result::Frame;
+    }
     if (sc_) {
         RawFrame f;
         const auto r = sc_->readLatest(f, timeoutMs, error);
@@ -442,6 +462,11 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
 }
 
 CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    if (demo_) {
+        const auto r = demo_->readLatest(out, timeoutMs, error);
+        if (r == demo::Stream::Result::Frame) probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);
+        return r == demo::Stream::Result::Frame ? Result::Frame : r == demo::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+    }
     if (sc_) {
         const auto r = sc_->readLatest(out, timeoutMs, error);
         if (r == ScreenCastStream::Result::Frame) {

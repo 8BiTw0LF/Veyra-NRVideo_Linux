@@ -11,17 +11,17 @@ Item {
     signal moved(real v)
     height: 26
     readonly property real pos: (Math.max(from, Math.min(to, value)) - from) / (to - from)
-    Rectangle { id: track; anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 5; radius: 2.5; color: Theme.surfaceHover
+    Rectangle { id: track; anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 5; radius: 2.5 * Theme.round; color: Theme.surfaceHover
         Rectangle {
             readonly property real n: isNaN(root.neutral) ? 0 : (root.neutral - root.from) / (root.to - root.from)
             x: Math.min(n, root.pos) * parent.width
             width: Math.abs(root.pos - n) * parent.width
-            height: parent.height; radius: 2; color: root.accent
+            height: parent.height; radius: 2 * Theme.round; color: root.accent
         }
     }
     Rectangle {
         x: root.pos * (root.width - width); anchors.verticalCenter: parent.verticalCenter
-        width: ma.pressed || ma.containsMouse ? 17 : 15; height: width; radius: width / 2; color: Theme.heading
+        width: ma.pressed || ma.containsMouse ? 17 : 15; height: width; radius: width / 2 * Theme.round; color: Theme.heading
     }
     MouseArea {
         id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

@@ -1,4 +1,6 @@
 #include "VideoItem.h"
+#include <algorithm>
+#include <cmath>
 #include "PlayerBridge.h"
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
@@ -31,6 +33,18 @@ void VideoItem::setPlayer(QObject* p) {
     emit playerChanged();
 }
 
+// Pixel-perfect: the largest whole-number enlargement that fits, placed on the screen's pixel grid, sharp (nearest).
+// Returns false if the picture is larger than the item (then it is fitted smoothly as usual).
+static bool pixelRect(const QQuickItem* item, QSize sz, QRectF& r) {
+    const qreal dpr = item->window() ? item->window()->effectiveDevicePixelRatio() : 1.0;
+    const qreal aw = item->width() * dpr, ah = item->height() * dpr;
+    const int k = int(std::floor(std::min(aw / sz.width(), ah / sz.height())));
+    if (k < 1) return false;
+    const qreal w = qreal(sz.width()) * k, h = qreal(sz.height()) * k;
+    r = QRectF(std::floor((aw - w) / 2) / dpr, std::floor((ah - h) / 2) / dpr, w / dpr, h / dpr);
+    return true;
+}
+
 QSGNode* VideoItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
     auto* node = static_cast<QSGSimpleTextureNode*>(old);
     // ---- zero-copy live capture: wrap the Vulkan image the chain just rendered, no CPU involved ----
@@ -52,10 +66,17 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
                                                                             QQuickWindow::TextureIsOpaque));
             nodeGen_ = lv->generation();
         }
-        const double a = player_->videoAspect() > 0 ? player_->videoAspect() : double(sz.width()) / sz.height();
-        double w = width(), h = width() / a;
-        if (h > height()) { h = height(); w = h * a; }
-        node->setRect(QRectF((width() - w) / 2, (height() - h) / 2, w, h));
+        QRectF pr;
+        if (player_->pixelDisplay() && pixelRect(this, sz, pr)) {
+            node->setFiltering(QSGTexture::Nearest);
+            node->setRect(pr);
+        } else {
+            node->setFiltering(QSGTexture::Linear);
+            const double a = player_->videoAspect() > 0 ? player_->videoAspect() : double(sz.width()) / sz.height();
+            double w = width(), h = width() / a;
+            if (h > height()) { h = height(); w = h * a; }
+            node->setRect(QRectF((width() - w) / 2, (height() - h) / 2, w, h));
+        }
         // the texture's content changed (new picture in the same image): lets a layer above re-render (HDR output)
         if (player_->hdrOutputActive()) node->markDirty(QSGNode::DirtyMaterial);
         return node;
@@ -72,6 +93,13 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         node->setTexture(window()->createTextureFromImage(image_, QQuickWindow::TextureIsOpaque));
         dirty_ = false;
     }
+    QRectF pr;
+    if (player_ && player_->pixelDisplay() && pixelRect(this, image_.size(), pr)) {
+        node->setFiltering(QSGTexture::Nearest);
+        node->setRect(pr);
+        return node;
+    }
+    node->setFiltering(QSGTexture::Linear);
     // Fit while preserving the display aspect (SAR-corrected).
     const double a = player_ ? player_->videoAspect() : double(image_.width()) / image_.height();
     double w = width(), h = width() / a;

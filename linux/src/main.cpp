@@ -1,6 +1,7 @@
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
 #include "PlayerBridge.h"
+#include "Gamepad.h"
 #include "VideoItem.h"
 #include "VkContext.h"
 #include <algorithm>
@@ -10,6 +11,8 @@
 #include <QFileInfo>
 #include <QLocale>
 #include <QProcess>
+#include "Sandbox.h"
+#include "DemoSource.h"
 #include "Watcher.h"
 #include <cstring>
 #include <QQmlApplicationEngine>
@@ -39,15 +42,6 @@ static QString findShaderDir() {
 }
 
 // Danish when the language OR the region is Danish (e.g. LANG=en_DK or a Danish LC_TIME also count); English otherwise.
-static bool systemIsDanish() {
-    const QLocale sys = QLocale::system();
-    if (sys.language() == QLocale::Danish || sys.territory() == QLocale::Denmark) return true;
-    for (const char* var : {"LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE", "LC_TIME", "LC_NUMERIC"}) {
-        const QString v = qEnvironmentVariable(var);
-        if (v.startsWith("da") || v.contains("_DK")) return true;
-    }
-    return false;
-}
 
 static QString relaunchTarget() {
     // Inside an AppImage the binary lives in a temporary mount that vanishes on exit; relaunch the AppImage itself.
@@ -112,7 +106,7 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux19");
+    QCoreApplication::setApplicationVersion("2.1.5-linux21");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -137,7 +131,7 @@ int main(int argc, char** argv) {
     }
     QApplication app(argc, argv);
     QGuiApplication::setApplicationDisplayName("VeyAmux");
-    QGuiApplication::setDesktopFileName("veyamux");
+    QGuiApplication::setDesktopFileName(veyamux::sandbox::flatpak() ? veyamux::sandbox::flatpakId() : QStringLiteral("veyamux"));
 
     QString openFile, grabPath, capturePath;
     bool startPanel = false, startDialog = false;
@@ -297,15 +291,20 @@ int main(int argc, char** argv) {
     std::unique_ptr<LiveVulkan> live;       // declared before the player/engine so it is destroyed after them
     qmlRegisterType<VideoItem>("VeyAmux", 1, 0, "VideoItem");
     PlayerBridge player(findShaderDir());
+    veyamux::GamepadInput gamepad;   // controllers for the menu (Select + Start); outlives the QML engine
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("gamepad", &gamepad);
+    // the demo scene swims with the controller while the menu is closed; Y jumps to the next viewpoint
+    QObject::connect(&gamepad, &veyamux::GamepadInput::analog, &player, &PlayerBridge::demoPad);
+    QObject::connect(&gamepad, &veyamux::GamepadInput::freeButton, &player, [&player](const QString& b) {
+        if (b == "y" && player.demoActive()) player.demoPose(-1);
+    });
     engine.rootContext()->setContextProperty("player", &player);
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
-    const bool danish = systemIsDanish();
-    engine.rootContext()->setContextProperty("uiLanguage", danish ? "da" : "en");
     player.setVrrAtStart(vrrAtStart);
-    player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed, danish);
+    player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
     engine.load(QUrl("qrc:/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;
     auto* win = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
@@ -459,6 +458,7 @@ int main(int argc, char** argv) {
     // would keep the capture card open and block the next start. Settings are already saved at this point.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&player] {
         player.shutdown();
+        veyamux::demo::shutdown();   // the demo scene's render thread
         std::thread([] { std::this_thread::sleep_for(std::chrono::seconds(4)); _exit(0); }).detach();
     });
     return app.exec();

@@ -47,13 +47,20 @@ struct EnhanceSettings {
     // Like frame generation it does not depend on the "Enhance" switch. retroLines: simulated lines (0 = the source's).
     bool retroTv = false;
     int retroLines = 240;
+    // Pixel-perfect: no smoothing upscaler; the picture is sent at its pixel grid and the display enlarges it by a whole
+    // number with sharp pixels. pixelGrid 0 = the signal's own pixels, 1 = the measured game resolution (gridW x gridH,
+    // set by the player from the content measurement; 0 = unknown). Retro TV comes first when both are on.
+    bool pixelPerfect = false;
+    int pixelGrid = 0;
+    int gridW = 0, gridH = 0;
+    bool pixelActive() const { return pixelPerfect && !retroTv; }
     // Frame generation is independent of the "Enhance" switch (that one only covers upscale/AA/sharpen/grade).
     bool lsfgFg() const { return frameGen == FrameGenMode::LsfgFixed || frameGen == FrameGenMode::LsfgFixed3; }
     bool fgPaused = false;    // ~120 Hz capture: no generated frames
     bool fsrFg() const { return frameGen == FrameGenMode::FsrFree && !fgPaused; }
 
     bool isIdentity() const {
-        return !retroTv && (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
+        return !retroTv && !pixelPerfect && (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
                             contrast == 1.0f && saturation == 1.0f));
     }
 };

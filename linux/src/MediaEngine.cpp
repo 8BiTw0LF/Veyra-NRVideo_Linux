@@ -1,4 +1,5 @@
 #include "MediaEngine.h"
+#include "DemoSource.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -242,7 +243,7 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     info_.width = cap_->width();
     info_.height = cap_->height();
     info_.fps = cap_->fps();
-    info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : fourccName(mode.fourcc);
+    info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : CaptureSource::isDemo(devicePath) ? "Demo" : fourccName(mode.fourcc);
     info_.audioCodec = audioSource.empty() ? "" : "live";
     capAudioSource_ = audioSource;
     capPath_ = devicePath;
@@ -281,7 +282,8 @@ void MediaEngine::captureLoop() {
     };
     clk::time_point lastReopen{};
     // A shared window/screen only sends a picture when something changes, and cannot be reopened once it is gone.
-    const bool screenCast = CaptureSource::isScreenCast(capPath_);
+    // (the demo scene behaves the same way: no reopening, and nothing to wait for while its world is built)
+    const bool screenCast = CaptureSource::isScreenCast(capPath_) || CaptureSource::isDemo(capPath_);
     while (!quit_) {
         std::string err;
         const bool toGpu = rawLive_.load();
@@ -394,9 +396,11 @@ void MediaEngine::captureAudioLoop() {
     pattr.prebuf = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 2000, &ss));   // start playing after two blocks
     pattr.minreq = uint32_t(pa_usec_to_bytes(pa_usec_t(blockMs) * 1000, &ss));
     int err = 0;
+    // "@demo": the demo scene's own sound, made here instead of recorded (paced by the playback stream)
+    const bool demoSound = capAudioSource_ == "@demo";
     const char* dev = capAudioSource_ == "@default" ? nullptr : capAudioSource_.c_str();
-    pa_simple* rec = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
-    if (!rec) { if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Capture audio unavailable: ") + pa_strerror(err)); return; }
+    pa_simple* rec = demoSound ? nullptr : pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
+    if (!rec && !demoSound) { if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Capture audio unavailable: ") + pa_strerror(err)); return; }
     int sinkGen = sinkGen_.load();
     std::string sink = sinkName();
     pa_simple* out = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sink.empty() ? nullptr : sink.c_str(), "capture playback", &ss, nullptr, &pattr, &err);
@@ -405,7 +409,7 @@ void MediaEngine::captureAudioLoop() {
     Leveler leveler;
     if (!out) {
         if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Audio output unavailable: ") + pa_strerror(err));
-        pa_simple_free(rec);
+        if (rec) pa_simple_free(rec);
         return;
     }
     std::vector<int16_t> buf(size_t(kRate / 1000 * blockMs) * 2);   // one block
@@ -414,8 +418,9 @@ void MediaEngine::captureAudioLoop() {
     size_t lineHead = 0, lineFill = 0;
     int tick = 0;
     while (!quit_) {
-        if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
-        if (!playing_.load()) continue;
+        if (demoSound) demo::audio(buf.data(), int(buf.size() / 2));
+        else if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
+        if (!playing_.load()) { if (demoSound) std::this_thread::sleep_for(std::chrono::milliseconds(blockMs)); continue; }
         if (cb_.onAudio)   // the block started one block ago and is heard after the audio delay
             cb_.onAudio(buf.data(), int(buf.size() / 2),
                         std::chrono::steady_clock::now() - std::chrono::milliseconds(blockMs - std::max(0, audioDelayMs_.load())));
@@ -445,7 +450,7 @@ void MediaEngine::captureAudioLoop() {
         if (++tick % std::max(1, 500 / blockMs) == 0 && pa_simple_get_latency(out, &err) > pa_usec_t(queueMs) * 3000) pa_simple_flush(out, &err);
     }
     pa_simple_free(out);
-    pa_simple_free(rec);
+    if (rec) pa_simple_free(rec);
 }
 
 // ------------------------------------------------------------------ control

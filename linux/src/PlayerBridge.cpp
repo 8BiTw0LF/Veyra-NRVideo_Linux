@@ -1,5 +1,11 @@
 #include "PlayerBridge.h"
+#include "Sandbox.h"
+#include "DemoSource.h"
 #include "PulseDevices.h"
+#include <cstring>
+#include <QLocale>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QUrl>
 #include <QTimer>
 #include <QCoreApplication>
@@ -27,6 +33,8 @@ using veyamux::MediaEngine;
 
 PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     : QObject(parent), engine_(shaderDir.toStdString()), rec_(std::make_unique<veyamux::Recorder>()) {
+    setTheme(QSettings().value("ui/theme", "vice").toString());
+    setLanguageChoice(QSettings().value("ui/lang", "auto").toString());
     rec_->onMessage = [this](const std::string& m, bool error) {
         const QString q = QString::fromStdString(m);
         QMetaObject::invokeMethod(this, [this, q, error] { onRecMessage(q, error); }, Qt::QueuedConnection);
@@ -113,6 +121,17 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         if (rec_->recording() || rec_->streaming()) emit recTick();
         if (overlay_) updateOverlay();
         checkHighRate();
+        updatePixelGrid();
+        if (demoActive_) {
+            const double p = veyamux::demo::progress();
+            if (p != demoProgress_) {
+                demoProgress_ = p;
+                emit demoChanged();
+                if (p >= 1) setStatus({});
+                else setStatus(L("Building the underwater world", "Bygger undervandsverdenen") + QStringLiteral("... %1 %").arg(int(p * 100)));
+            }
+            if (veyamux::demo::failed() && !veyamux::demo::stage().empty()) setStatus(translateMessage(QString::fromStdString(veyamux::demo::stage())));
+        }
         if (!engine_.isOpen()) return;
         emit positionChanged();
         if (engine_.playing() != lastPlaying_) { lastPlaying_ = engine_.playing(); emit playingChanged(); }
@@ -429,14 +448,18 @@ QImage PlayerBridge::sdrCopy(QImage img) const {
 }
 
 void PlayerBridge::addToSteam() {
-    // the AppImage itself (the binary inside lives in a temporary mount)
-    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
+    // the AppImage itself (the binary inside lives in a temporary mount), or `flatpak run <id>`
+    const auto run = veyamux::sandbox::launcher();
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
     const QString icon = dir + "/veyamux-steam.png";
     QIcon(":/qml/icons/logo.svg").pixmap(512, 512).save(icon, "PNG");
-    const auto r = veyamux::steam::addShortcut(exe, icon, "--fullscreen --capture last");
-    if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
+    const QString opts = (run.args + QStringList{"--fullscreen", "--capture", "last"}).join(' ');
+    const auto r = veyamux::steam::addShortcut(run.program, icon, opts);
+    if (r.ok && veyamux::sandbox::flatpak())
+        // a Flatpak cannot see whether Steam is running; Steam rewrites its shortcut list when it closes
+        showNotice(L("Added to Steam: if Steam was open, close it and press the button again", "Tilføjet til Steam: hvis Steam var åben, så luk den og tryk på knappen igen"));
+    else if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
     else if (r.message == "Close Steam first") showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
     else showNotice(L("Could not add to Steam: ", "Kunne ikke tilføje til Steam: ") + r.message);
 }
@@ -487,6 +510,8 @@ void PlayerBridge::loadSettings() {
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.retroTv = q.value("enh/retroTv", false).toBool();
     { const int l = q.value("enh/retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }
+    s_.pixelPerfect = q.value("enh/pixelPerfect", false).toBool();
+    s_.pixelGrid = std::clamp(q.value("enh/pixelGrid", 0).toInt(), 0, 1);
     s_.denoise = veyamux::Denoise(std::clamp(q.value("enh/denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value("enh/denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value("enh/hdrPeak", 1000).toInt(), 203, 10000));
@@ -514,6 +539,7 @@ void PlayerBridge::saveSettings() {
     QSettings q;
     q.setValue("enh/enabled", s_.enabled); q.setValue("enh/scale", double(s_.scale)); q.setValue("enh/upscaler", int(s_.upscaler));
     q.setValue("enh/retroTv", s_.retroTv); q.setValue("enh/retroLines", s_.retroLines);
+    q.setValue("enh/pixelPerfect", s_.pixelPerfect); q.setValue("enh/pixelGrid", s_.pixelGrid);
     q.setValue("enh/fxaa", s_.fxaa); q.setValue("enh/denoise", int(s_.denoise)); q.setValue("enh/denoiseStrength", s_.denoiseStrength); q.setValue("enh/hdrPeak", hdrPeak()); q.setValue("enh/vrr", s_.vrr); q.setValue("enh/frameGenMode", int(s_.frameGen)); q.setValue("enh/fxaaQuality", s_.fxaaQuality);
     q.setValue("enh/sharpen", double(s_.sharpen)); q.setValue("enh/exposure", double(s_.exposure));
     q.setValue("enh/contrast", double(s_.contrast)); q.setValue("enh/saturation", double(s_.saturation));
@@ -569,7 +595,7 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
     if (pipeMs > 0) t += L(" · in VeyAmux %1 ms", " · i VeyAmux %1 ms").arg(pipeMs, 0, 'f', 1);
     if (gpu >= 0) {
         static const char* en[] = {"input", "noise red.", "FXAA", "upscale", "finish", "OBS"};
-        static const char* da[] = {"ind", "støjfjern.", "FXAA", "opskal.", "afslut.", "OBS"};
+        static const char* da[] = {"ind", "støjred.", "FXAA", "opskal.", "afslut.", "OBS"};
         QStringList parts;
         for (int i = 0; i < veyamux::GpuTimer::kStages; ++i)
             if (st[size_t(i)] >= 0) parts << QString("%1 %2").arg(L(en[i], da[i])).arg(double(st[size_t(i)]), 0, 'f', 2);
@@ -581,6 +607,18 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
 // A 120 Hz capture (signal mode or a game running at ~120 fps) needs no generated frames: 2x would ask for 240 fps,
 // more than the display shows, and only adds latency and GPU load. Frame generation is paused (multiplier 1, the
 // setting itself is kept) after 1 s at >= 95 fps and resumes after 2 s below 80 fps.
+void PlayerBridge::updatePixelGrid() {
+    if (!s_.pixelActive() || s_.pixelGrid != 1 || !engine_.isOpen() || !engine_.isLive()) { gridStable_ = 0; return; }
+    const auto c = engine_.liveContent();
+    const int w = c.estW, h = c.estH;
+    if (w <= 0 || h <= 0) return;
+    if (w != gridCandW_ || h != gridCandH_) { gridCandW_ = w; gridCandH_ = h; gridStable_ = 0; return; }
+    if (++gridStable_ < 15 || (w == s_.gridW && h == s_.gridH)) return;   // 15 x 100 ms
+    s_.gridW = w;
+    s_.gridH = h;
+    applyEnhance();
+}
+
 void PlayerBridge::checkHighRate() {
     const bool live = engine_.isOpen() && engine_.isLive();
     double rate = 0;
@@ -665,6 +703,7 @@ bool PlayerBridge::openUrl(const QUrl& url) { return openPath(url.isLocalFile() 
 
 bool PlayerBridge::openPath(const QString& path) {
     std::string err;
+    demoActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     if (!engine_.open(path.toStdString(), err)) {
@@ -774,6 +813,7 @@ void PlayerBridge::saveProfile(const QString& rawName, bool bindToSignal) {
     q.setValue(g + "enabled", s_.enabled); q.setValue(g + "scale", double(s_.scale)); q.setValue(g + "upscaler", int(s_.upscaler));
     q.setValue(g + "fxaa", s_.fxaa); q.setValue(g + "fxaaQuality", s_.fxaaQuality);
     q.setValue(g + "retroTv", s_.retroTv); q.setValue(g + "retroLines", s_.retroLines);
+    q.setValue(g + "pixelPerfect", s_.pixelPerfect); q.setValue(g + "pixelGrid", s_.pixelGrid);
     q.setValue(g + "denoise", int(s_.denoise)); q.setValue(g + "denoiseStrength", s_.denoiseStrength);
     q.setValue(g + "hdrPeak", hdrPeak());
     q.setValue(g + "sharpen", double(s_.sharpen)); q.setValue(g + "exposure", double(s_.exposure));
@@ -805,6 +845,8 @@ bool PlayerBridge::loadProfile(const QString& name) {
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
     s_.retroTv = q.value(g + "retroTv", false).toBool();
     { const int l = q.value(g + "retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }
+    s_.pixelPerfect = q.value(g + "pixelPerfect", false).toBool();
+    s_.pixelGrid = std::clamp(q.value(g + "pixelGrid", 0).toInt(), 0, 1);
     s_.denoise = veyamux::Denoise(std::clamp(q.value(g + "denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value(g + "denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value(g + "hdrPeak", 1000).toInt(), 203, 10000));
@@ -858,6 +900,63 @@ QVariantList PlayerBridge::captureModes(const QString& path) {
     return out;
 }
 
+namespace {
+// i18n/messages.json: { "<language>": { "<English text>": "<translation>" } }
+const QJsonObject& messageTable() {
+    static const QJsonObject t = [] {
+        QFile f(QStringLiteral(":/i18n/messages.json"));
+        return f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
+    }();
+    return t;
+}
+const QStringList kLanguages{"en", "da", "de", "es", "fr", "sv", "nb", "ru"};
+}
+
+QString PlayerBridge::L(const char* en, const char* da) const {
+    if (lang_ == "en") return QString::fromUtf8(en);
+    if (lang_ == "da" && std::strcmp(en, da) != 0) return QString::fromUtf8(da);
+    const QJsonValue v = messageTable().value(lang_).toObject().value(QString::fromUtf8(en));
+    return v.isString() ? v.toString() : QString::fromUtf8(lang_ == "da" ? da : en);
+}
+
+QString PlayerBridge::systemLanguage() {
+    // the system's language if VeyAmux has it, else English (Norwegian Nynorsk / "no" use Bokmål)
+    QStringList cands;
+    for (const char* var : {"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"}) {
+        const QString v = qEnvironmentVariable(var);
+        if (!v.isEmpty()) for (const QString& part : v.split(':')) cands << part;
+    }
+    cands << QLocale::system().name();
+    for (QString c : cands) {
+        c = c.left(c.indexOf(QRegularExpression("[_.@-]")) < 0 ? c.size() : c.indexOf(QRegularExpression("[_.@-]"))).toLower();
+        if (c == "no" || c == "nn") c = "nb";
+        if (kLanguages.contains(c)) return c;
+        if (!c.isEmpty() && c != "c" && c != "posix") return "en";
+    }
+    return "en";
+}
+
+void PlayerBridge::setLanguageChoice(const QString& c) {
+    const QString choice = (c == "auto" || kLanguages.contains(c)) ? c : QStringLiteral("auto");
+    const QString use = choice == "auto" ? systemLanguage() : choice;
+    QSettings().setValue("ui/lang", choice);
+    if (choice == langChoice_ && use == lang_) return;
+    langChoice_ = choice;
+    lang_ = use;
+    emit languageChanged();
+}
+
+void PlayerBridge::setTheme(const QString& t) {
+    static const QStringList known{"vice", "code", "inferno", "retro"};
+    const QString v = known.contains(t) ? t : QStringLiteral("vice");
+    // the window icon follows the theme's logo (X11/XWayland task bars; Wayland uses the desktop file's icon)
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qml/icons/logo-%1.svg").arg(v)));
+    if (v == theme_) return;
+    theme_ = v;
+    QSettings().setValue("ui/theme", v);
+    emit themeChanged();
+}
+
 QVariantList PlayerBridge::audioSources() {
     // PulseAudio/PipeWire input sources (capture cards expose their HDMI audio as one); the "monitors" of outputs are
     // left out (they would record VeyAmux's own sound).
@@ -902,9 +1001,8 @@ QString PlayerBridge::lastCaptureDevice() const {
 }
 
 void PlayerBridge::setAutostart(bool on) {
-    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
     QString err;
-    if (!veyamux::watch::setAutostart(on, exe, err)) showNotice(err);
+    if (!veyamux::watch::setAutostart(on, err)) showNotice(err);
     else if (on && QSettings().value("cap/name").toString().isEmpty())
         showNotice(L("Open the capture card once, so VeyAmux knows which card to wait for", "Åbn capture-kortet én gang, så VeyAmux ved, hvilket kort den skal vente på"));
     emit recChanged();
@@ -939,6 +1037,8 @@ void PlayerBridge::openScreenCast(const QString& audioSource, bool useLast) {
 
 bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource) {
     const bool screenCast = veyamux::CaptureSource::isScreenCast(path.toStdString());
+    demoActive_ = veyamux::CaptureSource::isDemo(path.toStdString());
+    veyamux::demo::releaseAll();
     if (!screenCast && portal_) portal_->closeSession();   // a capture card replaces the shared window
     std::string err;
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
@@ -969,19 +1069,50 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
 
 bool PlayerBridge::openCaptureAuto(const QString& path) {
     if (path == "screencast") { openScreenCast(lastCaptureAudio(), true); return true; }
+    if (veyamux::CaptureSource::isDemo(path.toStdString())) { openDemo(path.mid(5).toInt()); return true; }
     QString card;
     for (const auto& d : veyamux::listCaptureDevices()) if (QString::fromStdString(d.path) == path) card = QString::fromStdString(d.name);
     captureModes(path);
     return openCapture(path, 0, guessAudioSource(card));
 }
 
+// ------------------------------------------------------------------ demo scene
+
+bool PlayerBridge::demoAvailable() const { return veyamux::demo::available(); }
+
+void PlayerBridge::openDemo(int fps) {
+    if (!veyamux::demo::available()) { setStatus(L("This build has no demo scene", "Denne udgave har ingen demo")); return; }
+    if (portal_) portal_->closeSession();
+    demoProgress_ = -1;   // the tick reports the first progress
+    startCapture(QStringLiteral("demo:%1").arg(fps == 30 ? 30 : 60), veyamux::CaptureMode{}, QStringLiteral("@demo"));
+}
+
+void PlayerBridge::demoKey(const QString& key, bool down) {
+    using K = veyamux::demo::Key;
+    static const QHash<QString, K> keys = {{"w", K::Forward}, {"s", K::Back}, {"a", K::Left}, {"d", K::Right}, {"e", K::Up}, {"q", K::Down}, {"shift", K::Fast}};
+    if (auto it = keys.find(key); it != keys.end()) veyamux::demo::setKey(*it, down);
+}
+
+void PlayerBridge::demoLook(double dx, double dy) { veyamux::demo::addLook(dx, dy); }
+
+void PlayerBridge::demoPose(int pose) {
+    demoPose_ = pose >= 0 ? pose % 6 : (demoPose_ + 1) % 6;
+    veyamux::demo::jumpTo(demoPose_);
+}
+
+void PlayerBridge::demoRelease() { veyamux::demo::releaseAll(); }
+
+void PlayerBridge::demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast) {
+    if (!demoActive()) return;
+    veyamux::demo::setPad(lx, ly, rx, ry, lt, rt, fast);
+}
+
 // ------------------------------------------------------------------ frame generation / Lossless Scaling
 
-void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish) {
+void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed) {
     vulkanUi_ = vulkanUi;
     lsfgActive_ = lsfgActive;
     lsfgCrashed_ = lsfgCrashed;
-    danish_ = danish;
     refreshLsfg();
     if (lsfgActive_) {
         lsfgMultiplier_ = s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : (s_.lsfgFg() ? 2 : 1);
@@ -1004,6 +1135,8 @@ void PlayerBridge::chooseLsfgFolder() {
     QSettings().setValue("lsfg/folder", dir);
     refreshLsfg();
 }
+
+bool PlayerBridge::flatpak() const { return veyamux::sandbox::flatpak(); }
 
 QString PlayerBridge::lsfgState() const {
     if (lsfgCrashed_) return "crashed";
@@ -1097,44 +1230,48 @@ void PlayerBridge::restartApp() {
 }
 
 QString PlayerBridge::translateMessage(const QString& msg) const {
-    if (!danish_ || msg.isEmpty()) return msg;
-    static const std::pair<const char*, const char*> table[] = {
-        {"Audio unavailable: ", "Lyd utilgængelig: "},
-        {"Capture audio unavailable: ", "Capture-lyd utilgængelig: "},
-        {"Audio output unavailable: ", "Lydudgang utilgængelig: "},
-        {"No signal from the capture card", "Intet signal fra capture-kortet"},
-        {"Capture card lost, reconnecting...", "Capture-kortet forsvandt – forbinder igen …"},
-        {"Capture device disconnected", "Capture-enheden blev frakoblet"},
-        {"Vulkan unavailable: ", "Vulkan utilgængelig: "},
-        {"Could not set up the enhancement chain: ", "Kunne ikke starte forbedringskæden: "},
-        {"GPU error, falling back to passthrough: ", "GPU-fejl, viser uden forbedring: "},
-        {"GPU enhancement disabled (VEYAMUX_NO_GPU=1)", "GPU-forbedring slået fra (VEYAMUX_NO_GPU=1)"},
-        {"Read error: ", "Læsefejl: "},
-        {"Could not open the file: ", "Kunne ikke åbne filen: "},
-        {"Could not read stream info: ", "Kunne ikke læse streaminformation: "},
-        {"The file contains no playable audio or video", "Filen indeholder ingen lyd eller video, der kan afspilles"},
-        {"No decoder for the video stream", "Ingen dekoder til videostrømmen"},
-        {"Could not open the video decoder: ", "Kunne ikke åbne videodekoderen: "},
-        {"Could not open ", "Kunne ikke åbne "},
-        {"The device refused pixel format ", "Enheden afviste pixelformatet "},
-        {"The device does not support memory-mapped streaming", "Enheden understøtter ikke memory-mapped streaming"},
-        {"Out of GPU memory for FSR upscaling", "Ikke nok GPU-hukommelse til FSR-opskalering"},
-        {"Out of GPU memory", "Ikke nok GPU-hukommelse"},
-        {"The capture device is in use by another program", "Capture-kortet bruges af et andet program"},
-        {"Live path unavailable", "GPU-direkte visning utilgængelig"},
-        {"The shared window was closed", "Det delte vindue blev lukket"},
-        {"The screen share sends no picture", "Skærmdelingen sender intet billede"},
-        {"The screen share portal (xdg-desktop-portal) is not running", "Skærmdelings-portalen (xdg-desktop-portal) kører ikke"},
-        {"Screen share portal: ", "Skærmdelings-portal: "},
-        {"Screen share error: ", "Skærmdelingsfejl: "},
-        {"Nothing was picked to share", "Der blev ikke valgt noget at dele"},
-        {"The screen share was not started", "Skærmdelingen blev ikke startet"},
-        {"PipeWire (libpipewire-0.3.so.0) was not found", "PipeWire (libpipewire-0.3.so.0) blev ikke fundet"},
-        {"PipeWire: ", "PipeWire: "},
+    if (lang_ == "en" || msg.isEmpty()) return msg;
+    // messages from the engine start with one of these English texts; the rest (a path, a reason) is kept
+    static const char* const prefixes[] = {
+        "Audio unavailable: ",
+        "Capture audio unavailable: ",
+        "Audio output unavailable: ",
+        "No signal from the capture card",
+        "Capture card lost, reconnecting...",
+        "Capture device disconnected",
+        "Vulkan unavailable: ",
+        "Could not set up the enhancement chain: ",
+        "GPU error, falling back to passthrough: ",
+        "GPU enhancement disabled (VEYAMUX_NO_GPU=1)",
+        "Read error: ",
+        "Could not open the file: ",
+        "Could not read stream info: ",
+        "The file contains no playable audio or video",
+        "No decoder for the video stream",
+        "Could not open the video decoder: ",
+        "Could not open ",
+        "The device refused pixel format ",
+        "The device does not support memory-mapped streaming",
+        "Out of GPU memory for FSR upscaling",
+        "Out of GPU memory",
+        "The capture device is in use by another program",
+        "Live path unavailable",
+        "The shared window was closed",
+        "The screen share sends no picture",
+        "The screen share portal (xdg-desktop-portal) is not running",
+        "Screen share portal: ",
+        "Screen share error: ",
+        "Nothing was picked to share",
+        "The screen share was not started",
+        "PipeWire (libpipewire-0.3.so.0) was not found",
+        "PipeWire: ",
+        "No Vulkan graphics card for the demo",
+        "The graphics card refused the demo's device",
+        "The demo's graphics device was lost",
     };
-    for (const auto& [en, da] : table) {
+    for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);
-        if (msg.startsWith(e)) return QString::fromUtf8(da) + msg.mid(e.size());
+        if (msg.startsWith(e)) return L(en, en) + msg.mid(e.size());
     }
     return msg;
 }
