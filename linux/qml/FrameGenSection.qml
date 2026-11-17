@@ -127,7 +127,7 @@ Column {
                     case "ready": return player.restartNeeded ? tr("lsRestart") : tr("lsReady").replace("%1", player.lsfgFolder)
                     case "noInstall": return tr("lsNoInstall")
                     case "noDll": return tr("lsNoDll")
-                    case "noLayer": return player.flatpak ? tr("lsNoLayerFlatpak") : tr("lsNoLayer")
+                    case "noLayer": return tr("lsNoLayer")
                     case "oldLayer": return tr("lsOldLayer")
                     case "noVulkanUi": return tr("lsNoVulkan")
                     case "crashed": return tr("lsCrashed")

@@ -16,34 +16,13 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 `scripts/fetch-tools.sh` henter DXC, linuxdeploy og appimagetool automatisk. Kør AppImage uden FUSE: `APPIMAGE_EXTRACT_AND_RUN=1`.
 
 ## Versionsnumre
-VeyAmux har sine egne versionsnumre: **1.0, 1.1 … 1.9, 2.0, 2.1** og så videre, ét trin for hver opdatering på GitHub
-og Flathub.
+VeyAmux har sine egne versionsnumre: **1.0, 1.1 … 1.9, 2.0, 2.1** og så videre, ét trin for hver opdatering på GitHub.
+VeyAmux udgives kun som AppImage (Flatpak-udgaven er fjernet efter 1.1).
 - **Tagget** hedder `VeyAmux-V.<version>` (fx `VeyAmux-V.1.0`), både i VeyAmux-repoet og i fork'en. Udgivelsen får
   samme navn.
-- **Ved hver udgivelse ændres nummeret fire steder:** `setApplicationVersion` i `src/main.cpp`, `project(... VERSION)`
-  i `CMakeLists.txt` og `<releases>` i begge metainfo-filer.
+- **Ved hver udgivelse ændres nummeret tre steder:** `setApplicationVersion` i `src/main.cpp`, `project(... VERSION)`
+  i `CMakeLists.txt` og `<releases>` i `packaging/veyamux.metainfo.xml`.
 - **Ældre udgaver** hed `2.1.5-linuxNN` efter Veyra-NRVideo 2.1.5, sidst `2.1.5-linux21`.
-
-## Flatpak (Flathub)
-Manifest: `packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml` (KDE-runtime 6.11 = freedesktop 25.08). App-id'et har `_`
-foran `8BiTw0LF`, fordi en del af et Flatpak-id ikke må starte med et tal.
-- **Bygges med:** FFmpeg 9 (VAAPI, x264, GnuTLS til RTMPS) og x264 som moduler. DXC er Microsofts færdige Linux-udgave og
-  bruges kun under bygningen (fjernes bagefter), derfor kun x86_64 (`flathub.json`).
-- **Lokalt:** `flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub --force-clean build-flatpak
-  packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml`. GitHub Actions (`.github/workflows/flatpak.yml`) bygger den samme
-  ved hvert push til main og gemmer `VeyAmux.flatpak` som artefakt.
-- **Til Flathub:** `scripts/make-flathub-manifest.sh <tag>` skriver `dist/flathub/` med VeyAmux fra et udgivet tag
-  (Flathub bygger kun fra faste kilder) og `flathub.json`.
-- **Rettigheder:** `--device=all` (capture-kort og controllere), Wayland + X11 (XWayland-fallback), PulseAudio, netværk
-  (RTMP og OBS-browserkilden), `xdg-videos`/`xdg-pictures` (optagelser), Steams `userdata` (*Tilføj til Steam*) og
-  `Lossless Scaling`-mappen (læses), `xdg-config/autostart` (start når kortet tilsluttes).
-- **Forskelle i koden** (`src/Sandbox.h`): Steam-genvejen og autostart-filen starter `flatpak run --command=veyamux <id>`.
-  Autostart-filen skrives i den rigtige `~/.config/autostart`. En Flatpak kan ikke se, om Steam kører, så brugeren bedes
-  i stedet genstarte Steam.
-- **lsfg-vk** kan ikke bruges fra værtens `~/.local`. Det kommer som Flatpak-udvidelsen
-  `org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`, som runtime'en monterer under `/usr/lib/extensions/vulkan`.
-  `XDG_DATA_DIRS` får den mappe med, så både Vulkan-loaderen og VeyAmux' egen søgning finder lageret. Menuen viser
-  installationskommandoen, når laget mangler.
 
 ## Hvad er med
 | Område | Status |

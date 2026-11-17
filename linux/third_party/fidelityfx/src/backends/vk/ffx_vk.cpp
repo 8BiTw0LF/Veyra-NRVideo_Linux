@@ -929,7 +929,7 @@ FfxErrorCode allocateDeviceMemory(BackendContext_VK* backendContext, VkMemoryReq
     allocInfo.memoryTypeIndex = findMemoryTypeIndex(backendContext->physicalDevice, memRequirements, requiredMemoryProperties, backendResource->memoryProperties);
 
     if (allocInfo.memoryTypeIndex == UINT32_MAX) {
-        return FFX_ERROR_BACKEND_API_ERROR;
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
     }
 
     VkResult result = backendContext->vkFunctionTable.vkAllocateMemory(backendContext->device, &allocInfo, nullptr, &backendResource->deviceMemory);
@@ -940,7 +940,7 @@ FfxErrorCode allocateDeviceMemory(BackendContext_VK* backendContext, VkMemoryReq
         case(VK_ERROR_OUT_OF_DEVICE_MEMORY):
             return FFX_ERROR_OUT_OF_MEMORY;
         default:
-            return FFX_ERROR_BACKEND_API_ERROR;
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
     }
 
@@ -1536,8 +1536,8 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
         descriptorPoolCreateInfo.pPoolSizes = poolSizes;
         descriptorPoolCreateInfo.maxSets = backendContext->maxEffectContexts * FFX_MAX_PASS_COUNT * MAX_PIPELINE_USAGE_PER_FRAME * FFX_MAX_QUEUED_FRAMES;
 
-        if (backendContext->vkFunctionTable.vkCreateDescriptorPool(backendContext->device, &descriptorPoolCreateInfo, nullptr, &backendContext->descriptorPool) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorPool(backendContext->device, &descriptorPoolCreateInfo, nullptr, &backendContext->descriptorPool)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
         // set bindless resource view to base
@@ -1559,9 +1559,9 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
             bufferInfo.usage              = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             bufferInfo.sharingMode        = VK_SHARING_MODE_EXCLUSIVE;
 
-            if (backendContext->vkFunctionTable.vkCreateBuffer(backendContext->device, &bufferInfo, NULL, &backendContext->uniformBuffer) != VK_SUCCESS)
+            if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateBuffer(backendContext->device, &bufferInfo, NULL, &backendContext->uniformBuffer)) != VK_SUCCESS)
             {
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
 
             // allocate memory block for all uniform buffers
@@ -1587,7 +1587,7 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
 
                 if (allocInfo.memoryTypeIndex == UINT32_MAX)
                 {
-                    return FFX_ERROR_BACKEND_API_ERROR;
+                    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                 }
             }
 
@@ -1601,7 +1601,7 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                 case (VK_ERROR_OUT_OF_DEVICE_MEMORY):
                     return FFX_ERROR_OUT_OF_MEMORY;
                 default:
-                    return FFX_ERROR_BACKEND_API_ERROR;
+                    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                 }
             }
 
@@ -1610,13 +1610,13 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                     backendContext->device, backendContext->uniformBufferMemory, 0, backendContext->uniformBufferSize, 0, &backendContext->uniformBufferMem) !=
                 VK_SUCCESS)
             {
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
 
-            if (backendContext->vkFunctionTable.vkBindBufferMemory(
-                    backendContext->device, backendContext->uniformBuffer, backendContext->uniformBufferMemory, 0) != VK_SUCCESS)
+            if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkBindBufferMemory(
+                    backendContext->device, backendContext->uniformBuffer, backendContext->uniformBufferMemory, 0)) != VK_SUCCESS)
             {
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
         }
 
@@ -1624,7 +1624,7 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
         {
             FfxDeviceCapabilities devCaps = {};
             if (GetDeviceCapabilitiesVK(backendInterface, &devCaps) != FFX_OK)
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
 
             // Get info for memory used as Breadcrumbs buffer
             VkBufferCreateInfo bufferInfo = {};
@@ -1641,7 +1641,7 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
             if (vkCreateBuffer(backendContext->device, &bufferInfo, nullptr, &testBuffer) != VK_SUCCESS)
             {
                 FFX_ASSERT_FAIL("Cannot create test Breadcrumbs buffer to find memory requirements!");
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
 
             uint32_t memoryTypeBits = 0;
@@ -1710,7 +1710,7 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
             if (backendContext->breadcrumbsMemoryIndex == UINT32_MAX)
             {
                 FFX_ASSERT_FAIL("No memory that satisfies requirements requested by Breadcrumbs buffer type!");
-                return FFX_ERROR_BACKEND_API_ERROR;
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
 
             // Will switch to use vkCmdWriteBufferMarkerAMD() to write breadcrumbs into the buffer instead of vkCmdFillBuffer() for ensuring proper ordering of writes
@@ -1800,10 +1800,10 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                 descriptorPoolCreateInfo.pPoolSizes    = poolSizes;
                 descriptorPoolCreateInfo.maxSets       = poolSizeCount;
 
-                if (backendContext->vkFunctionTable.vkCreateDescriptorPool(
-                        backendContext->device, &descriptorPoolCreateInfo, nullptr, &effectContext.bindlessDescriptorPool) != VK_SUCCESS)
+                if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorPool(
+                        backendContext->device, &descriptorPoolCreateInfo, nullptr, &effectContext.bindlessDescriptorPool)) != VK_SUCCESS)
                 {
-                    return FFX_ERROR_BACKEND_API_ERROR;
+                    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                 }
 
                 // create the descriptor layout for bindless texture srv buffers
@@ -1826,11 +1826,11 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                     layoutInfo.bindingCount                    = 1;
                     layoutInfo.pBindings                       = &binding;
 
-                    if (backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
-                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessTextureSrvDescriptorSetLayout) != VK_SUCCESS)
+                    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
+                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessTextureSrvDescriptorSetLayout)) != VK_SUCCESS)
                     {
                      
-                        return FFX_ERROR_BACKEND_API_ERROR;
+                        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                     }
 
                     // allocate descriptor set
@@ -1864,10 +1864,10 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                     layoutInfo.bindingCount                    = 1;
                     layoutInfo.pBindings                       = &binding;
 
-                    if (backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
-                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessBufferSrvDescriptorSetLayout) != VK_SUCCESS)
+                    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
+                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessBufferSrvDescriptorSetLayout)) != VK_SUCCESS)
                     {
-                        return FFX_ERROR_BACKEND_API_ERROR;
+                        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                     }
 
                     // allocate descriptor set
@@ -1901,10 +1901,10 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                     layoutInfo.bindingCount                    = 1;
                     layoutInfo.pBindings                       = &binding;
 
-                    if (backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
-                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessTextureUavDescriptorSetLayout) != VK_SUCCESS)
+                    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
+                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessTextureUavDescriptorSetLayout)) != VK_SUCCESS)
                     {
-                        return FFX_ERROR_BACKEND_API_ERROR;
+                        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                     }
 
                     // allocate descriptor set
@@ -1938,10 +1938,10 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
                     layoutInfo.bindingCount                    = 1;
                     layoutInfo.pBindings                       = &binding;
 
-                    if (backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
-                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessBufferUavDescriptorSetLayout) != VK_SUCCESS)
+                    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(
+                            backendContext->device, &layoutInfo, nullptr, &effectContext.bindlessBufferUavDescriptorSetLayout)) != VK_SUCCESS)
                     {
-                        return FFX_ERROR_BACKEND_API_ERROR;
+                        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                     }
 
                     // allocate descriptor set
@@ -2267,8 +2267,8 @@ FfxErrorCode CreateResourceVK(
         if (resourceState == FFX_RESOURCE_STATE_COPY_DEST)
             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-        if (backendContext->vkFunctionTable.vkCreateBuffer(backendContext->device, &bufferInfo, NULL, &backendResource->bufferResource) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateBuffer(backendContext->device, &bufferInfo, NULL, &backendResource->bufferResource)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
 #ifdef _DEBUG
@@ -2282,8 +2282,8 @@ FfxErrorCode CreateResourceVK(
         if (FFX_OK != errorCode)
             return errorCode;
 
-        if (backendContext->vkFunctionTable.vkBindBufferMemory(backendContext->device, backendResource->bufferResource, backendResource->deviceMemory, 0) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkBindBufferMemory(backendContext->device, backendResource->bufferResource, backendResource->deviceMemory, 0)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
         // if this is an upload buffer (currently only support upload buffers), copy the data and return
@@ -2292,8 +2292,8 @@ FfxErrorCode CreateResourceVK(
             // only allow copies directly into mapped memory for buffer resources since all texture resources are in optimal tiling
             void* data = NULL;
 
-            if (backendContext->vkFunctionTable.vkMapMemory(backendContext->device, backendResource->deviceMemory, 0, initData.size, 0, &data) != VK_SUCCESS) {
-                return FFX_ERROR_BACKEND_API_ERROR;
+            if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkMapMemory(backendContext->device, backendResource->deviceMemory, 0, initData.size, 0, &data)) != VK_SUCCESS) {
+                return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
             }
 
             if (initData.type == FFX_RESOURCE_INIT_DATA_TYPE_BUFFER)
@@ -2347,8 +2347,8 @@ FfxErrorCode CreateResourceVK(
             imageInfo.format = ffxGetVkFormatFromSurfaceFormat(ffxGetSurfaceFormatFromGamma(createResourceDescription->resourceDescription.format));
         }
 
-        if (backendContext->vkFunctionTable.vkCreateImage(backendContext->device, &imageInfo, nullptr, &backendResource->imageResource) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImage(backendContext->device, &imageInfo, nullptr, &backendResource->imageResource)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
 #ifdef _DEBUG
@@ -2362,8 +2362,8 @@ FfxErrorCode CreateResourceVK(
         if (FFX_OK != errorCode)
             return errorCode;
 
-        if (backendContext->vkFunctionTable.vkBindImageMemory(backendContext->device, backendResource->imageResource, backendResource->deviceMemory, 0) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkBindImageMemory(backendContext->device, backendResource->imageResource, backendResource->deviceMemory, 0)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
         break;
@@ -2427,8 +2427,8 @@ FfxErrorCode CreateResourceVK(
         addMutableViewForSRV(imageViewCreateInfo, imageViewUsageCreateInfo, backendResource->resourceDescription);
 
         // create an image view containing all mip levels for use as an srv
-        if (backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->srvViewIndex].imageView) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->srvViewIndex].imageView)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 #ifdef _DEBUG
         setVKObjectName(backendContext->vkFunctionTable, backendContext->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)backendContext->pResourceViews[backendResource->srvViewIndex].imageView, backendResource->resourceName);
@@ -2450,8 +2450,8 @@ FfxErrorCode CreateResourceVK(
                 imageViewCreateInfo.subresourceRange.levelCount = 1;
                 imageViewCreateInfo.subresourceRange.baseMipLevel = mip;
 
-                if (backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView) != VK_SUCCESS) {
-                    return FFX_ERROR_BACKEND_API_ERROR;
+                if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView)) != VK_SUCCESS) {
+                    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                 }
 #ifdef _DEBUG
                 setVKObjectName(backendContext->vkFunctionTable, backendContext->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView, backendResource->resourceName);
@@ -2582,7 +2582,7 @@ FfxErrorCode MapResourceVK(FfxInterface* backendInterface, FfxResourceInternal r
     BackendContext_VK::Resource* res = &backendContext->pResources[resource.internalIndex];
 
     if ((backendContext->vkFunctionTable.vkMapMemory(backendContext->device, res->deviceMemory, 0, res->resourceDescription.size, 0, ptr) != VK_SUCCESS))
-        return FFX_ERROR_BACKEND_API_ERROR;
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
 
     return FFX_OK;
 }
@@ -2739,8 +2739,8 @@ FfxErrorCode RegisterResourceVK(
         VkImageViewUsageCreateInfo imageViewUsageCreateInfo = {};
         addMutableViewForSRV(imageViewCreateInfo, imageViewUsageCreateInfo, backendResource->resourceDescription);
 
-        if (backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->srvViewIndex].imageView) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->srvViewIndex].imageView)) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 #ifdef _DEBUG
         setVKObjectName(backendContext->vkFunctionTable, backendContext->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)backendContext->pResourceViews[backendResource->srvViewIndex].imageView, backendResource->resourceName);
@@ -2762,8 +2762,8 @@ FfxErrorCode RegisterResourceVK(
                 imageViewCreateInfo.subresourceRange.levelCount = 1;
                 imageViewCreateInfo.subresourceRange.baseMipLevel = mip;
 
-                if (backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView) != VK_SUCCESS) {
-                    return FFX_ERROR_BACKEND_API_ERROR;
+                if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView)) != VK_SUCCESS) {
+                    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
                 }
 #ifdef _DEBUG
                 setVKObjectName(backendContext->vkFunctionTable, backendContext->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)backendContext->pResourceViews[backendResource->uavViewIndex + mip].imageView, backendResource->resourceName);
@@ -2918,10 +2918,10 @@ FfxErrorCode registerStaticTextureSrv(BackendContext_VK* backendContext, const F
         if (backendContext->pResourceViews[imageViewIndex].imageView)
             backendContext->vkFunctionTable.vkDestroyImageView(backendContext->device, backendContext->pResourceViews[imageViewIndex].imageView, nullptr);
 
-        if (backendContext->vkFunctionTable.vkCreateImageView(
-                backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[imageViewIndex].imageView) != VK_SUCCESS)
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(
+                backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[imageViewIndex].imageView)) != VK_SUCCESS)
         {
-            return FFX_ERROR_BACKEND_API_ERROR;
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
 #ifdef _DEBUG
@@ -3069,10 +3069,10 @@ FfxErrorCode registerStaticTextureUav(BackendContext_VK* backendContext, const F
         if (backendContext->pResourceViews[imageViewIndex].imageView)
             backendContext->vkFunctionTable.vkDestroyImageView(backendContext->device, backendContext->pResourceViews[imageViewIndex].imageView, nullptr);
 
-        if (backendContext->vkFunctionTable.vkCreateImageView(
-                backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[imageViewIndex].imageView) != VK_SUCCESS)
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateImageView(
+                backendContext->device, &imageViewCreateInfo, NULL, &backendContext->pResourceViews[imageViewIndex].imageView)) != VK_SUCCESS)
         {
-            return FFX_ERROR_BACKEND_API_ERROR;
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
 
 #ifdef _DEBUG
@@ -3302,8 +3302,8 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
             break;
         }
 
-        if (backendContext->vkFunctionTable.vkCreateSampler(backendContext->device, &createInfo, nullptr, &pPipelineLayout->samplers[currentSamplerIndex]) != VK_SUCCESS) {
-            return FFX_ERROR_BACKEND_API_ERROR;
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateSampler(backendContext->device, &createInfo, nullptr, &pPipelineLayout->samplers[currentSamplerIndex])) != VK_SUCCESS) {
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
     }
 
@@ -3414,8 +3414,8 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
     layoutInfo.bindingCount = numLayoutBindings;
     layoutInfo.pBindings = layoutBindings;
 
-    if (backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(backendContext->device, &layoutInfo, nullptr, &pPipelineLayout->descriptorSetLayout) != VK_SUCCESS) {
-        return FFX_ERROR_BACKEND_API_ERROR;
+    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateDescriptorSetLayout(backendContext->device, &layoutInfo, nullptr, &pPipelineLayout->descriptorSetLayout)) != VK_SUCCESS) {
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
     }
 
     // allocate descriptor sets
@@ -3428,9 +3428,9 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &pPipelineLayout->descriptorSetLayout;
 
-        if (backendContext->vkFunctionTable.vkAllocateDescriptorSets(backendContext->device, &allocateInfo, &pPipelineLayout->descriptorSets[i]) != VK_SUCCESS)
+        if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkAllocateDescriptorSets(backendContext->device, &allocateInfo, &pPipelineLayout->descriptorSets[i])) != VK_SUCCESS)
         {
-            return FFX_ERROR_BACKEND_API_ERROR;
+            return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
         }
     }
 
@@ -3472,8 +3472,8 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges    = nullptr;
 
-    if (backendContext->vkFunctionTable.vkCreatePipelineLayout(backendContext->device, &pipelineLayoutInfo, nullptr, &pPipelineLayout->pipelineLayout) != VK_SUCCESS) {
-        return FFX_ERROR_BACKEND_API_ERROR;
+    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreatePipelineLayout(backendContext->device, &pipelineLayoutInfo, nullptr, &pPipelineLayout->pipelineLayout)) != VK_SUCCESS) {
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
     }
 
     // set the root signature to pipeline
@@ -3613,8 +3613,8 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
     shaderModuleCreateInfo.pCode = (uint32_t*)shaderBlob.data;
     shaderModuleCreateInfo.codeSize = shaderBlob.size;
 
-    if (backendContext->vkFunctionTable.vkCreateShaderModule(backendContext->device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        return FFX_ERROR_BACKEND_API_ERROR;
+    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateShaderModule(backendContext->device, &shaderModuleCreateInfo, nullptr, &shaderModule)) != VK_SUCCESS) {
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
     }
 
     // fill out shader stage create info
@@ -3642,8 +3642,8 @@ FfxErrorCode CreatePipelineVK(FfxInterface* backendInterface,
     pipelineCreateInfo.layout = pPipelineLayout->pipelineLayout;
 
     VkPipeline computePipeline = VK_NULL_HANDLE;
-    if (backendContext->vkFunctionTable.vkCreateComputePipelines(backendContext->device, nullptr, 1, &pipelineCreateInfo, nullptr, &computePipeline) != VK_SUCCESS) {
-        return FFX_ERROR_BACKEND_API_ERROR;
+    if (ffxVeyamuxVk(backendContext->vkFunctionTable.vkCreateComputePipelines(backendContext->device, nullptr, 1, &pipelineCreateInfo, nullptr, &computePipeline)) != VK_SUCCESS) {
+        return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
     }
 
     // done with shader module, so clean up
@@ -4273,7 +4273,7 @@ FfxErrorCode BreadcrumbsAllocBlockVK(
         }
     }
     backendContext->vkFunctionTable.vkDestroyBuffer(backendContext->device, buffer, nullptr);
-    return FFX_ERROR_BACKEND_API_ERROR;
+    return (FfxErrorCode)ffxVeyamuxBackendErrorAt(__LINE__);  // VeyAmux Linux: records where
 }
 
 void BreadcrumbsFreeBlockVK(

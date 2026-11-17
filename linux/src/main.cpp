@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
     }
     QApplication app(argc, argv);
     QGuiApplication::setApplicationDisplayName("VeyAmux");
-    QGuiApplication::setDesktopFileName(veyamux::sandbox::flatpak() ? veyamux::sandbox::flatpakId() : QStringLiteral("veyamux"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("veyamux"));
 
     QString openFile, grabPath, capturePath;
     bool startPanel = false, startDialog = false;

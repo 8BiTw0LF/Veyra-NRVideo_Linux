@@ -8,6 +8,3 @@
 .vscode/
 .idea/
 __pycache__/
-/build-flatpak/
-/.flatpak-builder/
-/repo-flatpak/

@@ -18,9 +18,7 @@ processing design are reused, and VeyAmux is distributed under the same GPL-3.0 
 | Microsoft DirectXShaderCompiler | build tool only | University of Illinois/NCSA | Not shipped. |
 | Abyssal Garden (demo scene) | `src/abyssal/` (C++ port of the JavaScript), `src/abyssal/wgsl/` (WGSL shaders, unchanged) | MIT (`third_party/abyssal-garden/LICENSE`, Copyright (c) 2026 Maksymilian Dendura) | https://github.com/Noniv/abyssal-garden commit `a596354eff400d458bc2aeb9bdf5e0a9734b2bcf`. The world generator, renderer and camera are translated to C++; the audio graph is rebuilt as a synthesiser with a different reverb. |
 | wgpu-native v29.0.0.0 (WebGPU on Vulkan, with wgpu-core, wgpu-hal and naga) | linked statically into `veyamux` | MIT or Apache-2.0 (`third_party/wgpu-native/LICENSE.MIT`, `LICENSE.APACHE`) | https://github.com/gfx-rs/wgpu-native release `v29.0.0.0` (`wgpu-linux-x86_64-release.zip`, SHA-256 in `scripts/fetch-tools.sh`), unmodified. |
-| FFmpeg 9 (built with x264, so the FFmpeg libraries are GPL-2.0-or-later) and x264 | Flatpak build only (`packaging/flatpak`), built from source | GPL-2.0-or-later | https://ffmpeg.org (release tarball) and https://code.videolan.org/videolan/x264 (commit in the manifest), unmodified. |
 
 Not included: **lsfg-vk** (CC BY-NC-ND 4.0) and **Lossless Scaling** (commercial, Steam). VeyAmux only detects a copy the user
-installed (in the Flatpak: the separately installed Flathub extension `org.freedesktop.Platform.VulkanLayer.lsfgvk`)
-and enables it for its own window through lsfg-vk's documented environment variables; no code, shaders or DLLs
+installed and enables it for its own window through lsfg-vk's documented environment variables; no code, shaders or DLLs
 from either are copied, translated or redistributed.

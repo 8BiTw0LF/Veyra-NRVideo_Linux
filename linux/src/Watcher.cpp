@@ -21,7 +21,7 @@ namespace veyamux::watch {
 
 namespace {
 QString autostartFile() {
-    const QString cfg = sandbox::flatpak() ? sandbox::hostConfigDir() : QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    const QString cfg = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     return cfg + "/autostart/veyamux-watch.desktop";
 }
 QString pidFile() {
@@ -126,7 +126,7 @@ bool setAutostart(bool on, QString& error) {
     QDir().mkpath(QFileInfo(autostartFile()).absolutePath());
     QSaveFile f(autostartFile());
     if (!f.open(QIODevice::WriteOnly)) { error = "Cannot write " + autostartFile(); return false; }
-    // started by the desktop at login: the AppImage file, `flatpak run <id>` or the binary
+    // started by the desktop at login: the AppImage file or the binary
     const sandbox::Launcher run = sandbox::launcher();
     QString exec;
     for (const QString& a : QStringList{run.program} + run.args + QStringList{"--watch"})
@@ -135,10 +135,8 @@ bool setAutostart(bool on, QString& error) {
              "Comment=Starts VeyAmux when the capture card is plugged in\nExec=" + exec + "\n"
              "Icon=veyamux\nTerminal=false\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\nX-KDE-autostart-phase=2\n").toUtf8());
     if (!f.commit()) { error = "Cannot write " + autostartFile(); return false; }
-    // and now: inside a Flatpak the binary itself (the sandbox has no `flatpak` command); otherwise the same command, as
-    // an AppImage's inner binary disappears when the AppImage that mounted it exits
-    if (sandbox::flatpak()) QProcess::startDetached(QCoreApplication::applicationFilePath(), {"--watch"});
-    else QProcess::startDetached(run.program, run.args + QStringList{"--watch"});
+    // and now, with the same command: an AppImage's inner binary disappears when the AppImage that mounted it exits
+    QProcess::startDetached(run.program, run.args + QStringList{"--watch"});
     return true;
 }
 

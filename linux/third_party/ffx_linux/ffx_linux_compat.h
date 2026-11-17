@@ -40,3 +40,12 @@ template <size_t N> inline int sprintf_s(char (&buf)[N], const char* fmt, ...) {
     va_list ap; va_start(ap, fmt); int r = std::vsnprintf(buf, N, fmt, ap); va_end(ap); return r;
 }
 #endif
+
+// VeyAmux for Linux: where the FidelityFX Vulkan backend last failed (line in ffx_vk.cpp) and the last failing VkResult,
+// so "FfxErrorCode -2147483635" (FFX_ERROR_BACKEND_API_ERROR) can be shown with its cause.
+int ffxVeyamuxBackendErrorAt(int line);
+void ffxVeyamuxNoteVk(int vkResult);
+const char* ffxVeyamuxLastBackendError();   // "" or e.g. "ffx_vk.cpp:3433, VkResult -1000069000"
+#ifdef __cplusplus
+template <class R> inline R ffxVeyamuxVk(R r) { if (int(r) != 0) ffxVeyamuxNoteVk(int(r)); return r; }
+#endif

@@ -16,7 +16,11 @@ namespace veyamux {
 namespace {
 constexpr size_t kMaxContexts = 3;      // optical flow + frame interpolation + shared resources (the backend sizes its descriptor pools by this)
 
-std::string ffxErr(const char* what, FfxErrorCode e) { return std::string(what) + " failed (FfxErrorCode " + std::to_string(int(e)) + ")"; }
+std::string ffxErr(const char* what, FfxErrorCode e) {
+    std::string r = std::string(what) + " failed (FfxErrorCode " + std::to_string(int(e)) + ")";
+    if (e == FFX_ERROR_BACKEND_API_ERROR && *ffxVeyamuxLastBackendError()) r += std::string(" at ") + ffxVeyamuxLastBackendError();
+    return r;
+}
 
 FfxResourceDescription describe(const ImageRes& img, FfxResourceUsage usage) {
     FfxResourceDescription d{};

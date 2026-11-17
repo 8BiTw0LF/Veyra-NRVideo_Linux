@@ -214,28 +214,6 @@ missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
 
 Press **C** (or **Capture**) to choose a capture card, window or screen. Press **P** (or ✨) for the menu.
 
-**Or as a Flatpak, with updates through Discover / GNOME Software** (VeyAmux' own Flatpak repository):
-
-```sh
-flatpak remote-add --user --if-not-exists veyamux https://8bitw0lf.github.io/VeyAmux/veyamux.flatpakrepo
-flatpak install --user veyamux io.github._8BiTw0LF.VeyAmux
-```
-
-See [8bitw0lf.github.io/VeyAmux](https://8bitw0lf.github.io/VeyAmux/) for a one-click install.
-
-**Or as a single Flatpak file** (no automatic updates):
-1. Download `VeyAmux-x86_64.flatpak` from the same release.
-2. Install and start it:
-
-   ```sh
-   flatpak install --user VeyAmux-x86_64.flatpak
-   flatpak run io.github._8BiTw0LF.VeyAmux
-   ```
-
-   The KDE runtime it needs comes from Flathub automatically.
-3. In the Flatpak version, lsfg-vk (step 3 below) is a Flatpak extension instead:
-   `flatpak install flathub org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`.
-
 ### 2. Lossless Scaling (only for its frame generation)
 
 1. Buy and install **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** on Steam. You

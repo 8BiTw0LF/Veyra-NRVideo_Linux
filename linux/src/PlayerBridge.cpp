@@ -448,7 +448,7 @@ QImage PlayerBridge::sdrCopy(QImage img) const {
 }
 
 void PlayerBridge::addToSteam() {
-    // the AppImage itself (the binary inside lives in a temporary mount), or `flatpak run <id>`
+    // the AppImage itself (the binary inside lives in a temporary mount)
     const auto run = veyamux::sandbox::launcher();
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
@@ -456,10 +456,7 @@ void PlayerBridge::addToSteam() {
     QIcon(":/qml/icons/logo.svg").pixmap(512, 512).save(icon, "PNG");
     const QString opts = (run.args + QStringList{"--fullscreen", "--capture", "last"}).join(' ');
     const auto r = veyamux::steam::addShortcut(run.program, icon, opts);
-    if (r.ok && veyamux::sandbox::flatpak())
-        // a Flatpak cannot see whether Steam is running; Steam rewrites its shortcut list when it closes
-        showNotice(L("Added to Steam: if Steam was open, close it and press the button again", "Tilføjet til Steam: hvis Steam var åben, så luk den og tryk på knappen igen"));
-    else if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
+    if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
     else if (r.message == "Close Steam first") showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
     else showNotice(L("Could not add to Steam: ", "Kunne ikke tilføje til Steam: ") + r.message);
 }
@@ -1136,7 +1133,6 @@ void PlayerBridge::chooseLsfgFolder() {
     refreshLsfg();
 }
 
-bool PlayerBridge::flatpak() const { return veyamux::sandbox::flatpak(); }
 
 QString PlayerBridge::lsfgState() const {
     if (lsfgCrashed_) return "crashed";

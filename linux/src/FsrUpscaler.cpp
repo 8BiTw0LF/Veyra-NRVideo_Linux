@@ -22,7 +22,11 @@ std::mutex& ffxBackendLock() {
 namespace {
 constexpr size_t kMaxContexts = 2;   // FSR 3.1 upscaler + shared resources
 
-std::string ffxErr(const char* what, FfxErrorCode e) { return std::string(what) + " failed (FfxErrorCode " + std::to_string(int(e)) + ")"; }
+std::string ffxErr(const char* what, FfxErrorCode e) {
+    std::string r = std::string(what) + " failed (FfxErrorCode " + std::to_string(int(e)) + ")";
+    if (e == FFX_ERROR_BACKEND_API_ERROR && *ffxVeyamuxLastBackendError()) r += std::string(" at ") + ffxVeyamuxLastBackendError();
+    return r;
+}
 
 FfxResource wrap(const ImageRes& img, const wchar_t* name, FfxResourceUsage usage) {
     FfxResourceDescription d{};

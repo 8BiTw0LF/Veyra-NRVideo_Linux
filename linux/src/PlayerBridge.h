@@ -70,8 +70,6 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QString obsError READ obsError NOTIFY obsChanged)
     // Lossless Scaling (lsfg-vk): state code for the UI, see lsfgState()
     Q_PROPERTY(QString lsfgState READ lsfgState NOTIFY lsfgChanged)
-    // installed from Flathub (lsfg-vk then comes as a Flatpak extension)
-    Q_PROPERTY(bool flatpak READ flatpak CONSTANT)
     Q_PROPERTY(QString lsfgFolder READ lsfgFolder NOTIFY lsfgChanged)
     Q_PROPERTY(QString lsfgLog READ lsfgLog NOTIFY lsfgChanged)
     Q_PROPERTY(bool lsfgActive READ lsfgActive NOTIFY lsfgChanged)
@@ -236,7 +234,6 @@ public:
     // "active", "ready" (restart to enable), "noInstall", "noDll" (only Lossless.dll: needs the lsfg-vk Steam branch),
     // "noLayer" (lsfg-vk not installed), "oldLayer" (lsfg-vk 1.x), "noVulkanUi", "crashed"
     QString lsfgState() const;
-    bool flatpak() const;
     QString lsfgFolder() const { return lsfg_.installDir; }
     // What lsfg-vk itself reports in this run (from its log file), translated framing; empty when not applicable.
     QString lsfgLog() const { return lsfgLog_; }
