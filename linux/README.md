@@ -194,7 +194,8 @@ needed for its own frame generation**, and everything else works without it:
   it is applied automatically.
 - **Frame-time overlay** (**F3**): a graph with fps, 1 % low, jitter and the delay inside VeyAmux.
 - **Add to Steam**: VeyAmux becomes a non-Steam game that starts fullscreen on the last source, also from Big Picture
-  and Bazzite's Game Mode.
+  and Bazzite's Game Mode. VeyAmux closes Steam by itself, adds the shortcut with cover art, a background and a logo
+  for the library, and starts Steam again.
 - **Start when the capture card is plugged in**: a small background helper opens VeyAmux fullscreen as soon as the card
   appears.
 - **Game controller in the menu**: hold **Select + Start** (or the **Guide / PS** button for half a second) to open and
@@ -262,7 +263,13 @@ Press **C** (or **Capture**) to choose a capture card, window or screen. Press *
 
 The official guide is at **[lsfg-vk.dev](https://lsfg-vk.dev/docs/installation/)**.
 
-**Bazzite, SteamOS, Fedora Atomic and others without a package** (installs into your home folder):
+**Automatic:** if VeyAmux finds an older lsfg-vk (1.x), it downloads the official lsfg-vk 2 build from
+builds.lsfg-vk.dev and unpacks it into `~/.local` (checked against a known SHA-256). The old lsfg-vk 1 files in your
+home folder are moved to `~/.local/share/VeyAmux/lsfg-vk-1-backup/`. The menu also has an **Install lsfg-vk 2** button.
+An lsfg-vk 1 installed as a system package must be removed with the package manager first. To turn the automatic
+install off: `VEYAMUX_LSFG_AUTOINSTALL=0`.
+
+**By hand on Bazzite, SteamOS, Fedora Atomic and others without a package** (installs into your home folder):
 
 ```sh
 # download the latest .tar.xz from https://builds.lsfg-vk.dev, then:
@@ -289,7 +296,7 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 |---|---|
 | Lossless Scaling was not found | Install it through Steam (step 2). If it is somewhere unusual, use *Choose folder…* in the menu. |
 | "Only Lossless.dll was found" | Choose the **lsfg-vk** branch in Steam (step 2). |
-| "lsfg-vk is not installed" or an old 1.x | Install lsfg-vk 2 (step 3) and run `lsfg-vk-cli healthcheck`. |
+| "lsfg-vk is not installed" or an old 1.x | Press *Install lsfg-vk 2* in the menu, or install it by hand (step 3) and run `lsfg-vk-cli healthcheck`. |
 | Frame generation turned off after a crash | Press *Try again* in the menu. To start without lsfg-vk: `VEYAMUX_LSFG=0 ./VeyAmux-x86_64.AppImage` |
 | Motion does not look smoother | The display's refresh rate must match (see step 4). Log: `~/.config/VeyAmux/lsfg-vk.log` |
 | "Device or resource busy" | Another program (or a hung VeyAmux) uses the capture card. VeyAmux retries for 5 seconds and shows which program holds it. |

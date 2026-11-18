@@ -50,7 +50,7 @@ QStringList steamLibraries() {
     return libs;
 }
 
-QStringList layerDirs() {
+QStringList layerDirsImpl() {
     QStringList dataDirs;
     const QString xdgData = qEnvironmentVariable("XDG_DATA_HOME", QDir::homePath() + "/.local/share");
     dataDirs << xdgData;
@@ -78,6 +78,26 @@ QString tomlString(QString s) {
 
 } // namespace
 
+QStringList layerDirs() { return layerDirsImpl(); }
+
+QStringList oldLayerManifests() {
+    QStringList out;
+    for (const QString& dir : layerDirsImpl()) {
+        QDirIterator it(dir, {"*.json"}, QDir::Files);
+        while (it.hasNext()) {
+            const QString f = it.next();
+            QFile j(f);
+            if (!j.open(QIODevice::ReadOnly)) continue;
+            const QByteArray body = j.read(64 * 1024);
+            if (!body.toLower().contains("lsfg") && !QFileInfo(f).fileName().toLower().contains("lsfg")) continue;
+            if (body.contains("LSFGVK")) continue;   // lsfg-vk 2
+            const QString c = QFileInfo(f).canonicalFilePath();
+            if (!out.contains(c)) out << c;
+        }
+    }
+    return out;
+}
+
 Detection detect(const QString& overridePath) {
     Detection d;
     QStringList dirs;
@@ -96,7 +116,7 @@ Detection detect(const QString& overridePath) {
         d.losslessDll = ls;
         break;
     }
-    for (const QString& dir : layerDirs()) {
+    for (const QString& dir : layerDirsImpl()) {
         QDirIterator it(dir, {"*.json"}, QDir::Files);
         while (it.hasNext()) {
             const QString f = it.next();

@@ -264,6 +264,16 @@ Menu → *Frame generation*:
   - Til/fra-skift kræver genstart (knap i menuen), fordi laget indlæses ved opstart. Crasher VeyAmux under opstart med
     lsfg-vk, slås Lossless Scaling automatisk fra, indtil du trykker *Prøv igen*.
   - VeyAmux indeholder/kopierer ingen lsfg-vk- eller Lossless Scaling-kode (lsfg-vk er CC BY-NC-ND 4.0) og bundler dem ikke.
+  - Findes kun en ældre lsfg-vk (manifest uden `LSFGVK`, dvs. 1.x), henter VeyAmux selv lsfg-vk 2 på brugerens maskine
+    (`src/LsfgInstall.cpp`): `https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz` via libcurl (kun https), tjekkes mod en
+    fast SHA-256, alle arkivposter skal ligge under `bin/`, `lib/` eller `share/`, og pakkes ud med
+    `tar -xJf … -C ~/.local --no-same-owner --no-overwrite-dir` (som lsfg-vk's egen vejledning). Derefter flyttes
+    lsfg-vk 1's manifest og det bibliotek, det peger på (og `~/.local/lib/liblsfg-vk.so`), til
+    `~/.local/share/VeyAmux/lsfg-vk-1-backup/<tid>/` – undtagen filer, lsfg-vk 2 lige har overskrevet eller selv bruger.
+    En lsfg-vk 1 uden for hjemmemappen (systempakke) røres ikke; så installeres intet, og menuen siger det. Én
+    installation ad gangen (`QLockFile` i `~/.local/share/VeyAmux`). Sker automatisk én gang pr. start, 3 s efter
+    opstart (efter en evt. genstart med xcb); `VEYAMUX_LSFG_AUTOINSTALL=0` slår det fra, og knappen *Installér lsfg-vk 2*
+    findes i menuen. Laget indlæses ved opstart, så VeyAmux skal genstartes bagefter.
 
 ## HDR-capture (P010)
 Live Gamer Ultra 2.1 (og andre kort) kan levere **P010**: 10-bit Y'CbCr 4:2:0 med HDR (BT.2020-farver, PQ/SMPTE ST 2084).
@@ -315,7 +325,15 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
   slås gamescope-start fra ved næste start.
 - *Tilføj til Steam*: skriver en non-Steam-genvej i `userdata/<konto>/config/shortcuts.vdf` (binær KeyValues; eksisterende
   genveje bevares, en tidligere VeyAmux-genvej opdateres, første gang gemmes `shortcuts.vdf.veyamux-backup`). Steam skal
-  være lukket. Startindstillinger: `--fullscreen --capture last`. Inde i gamescope starter VeyAmux altid i fuldskærm.
+  være lukket (den gemmer filen ved lukning), så: kører Steam, sender VeyAmux `steam -shutdown` (Flatpak-Steam: `flatpak run com.valvesoftware.Steam
+  -shutdown`, valgt når den kører eller er den eneste), venter op til 45 s på, at `steam`-processen er væk, plus 1,5 s,
+  skriver genvejen og starter Steam igen (detached, uden VeyAmux' egne miljøvariabler: `QT_*`, `QSG_*`, `LSFGVK_*`,
+  `DISABLE_LSFGVK`, AppImage-variablerne m.fl.). Er VeyAmux selv startet af Steam (`SteamGameId`/`SteamAppId` eller
+  Game Mode), lukkes Steam ikke – det ville lukke VeyAmux – og menuen beder om at starte VeyAmux fra skrivebordet.
+  Biblioteksbilleder tegnes ved kørsel ud fra logoet (ingen billedfiler i pakken) og gemmes i
+  `userdata/<konto>/config/grid/<appid>{p,,_hero,_logo}.png` (600×900, 920×430, 1920×620, 1280×400 gennemsigtig);
+  har brugeren selv valgt et billede som .jpg/.webp, bevares det. Startindstillinger: `--fullscreen --capture last`.
+  Inde i gamescope starter VeyAmux altid i fuldskærm.
 
 ## Signalskift og 120 Hz
 - Fejler capture-kortet (frakoblet), forsøger VeyAmux at åbne det igen hvert sekund med samme tilstand. Kommer der intet

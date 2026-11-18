@@ -5,7 +5,15 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
+#include <QLinearGradient>
+#include <QPainter>
+#include <QPainterPath>
+#include <QProcess>
+#include <QRadialGradient>
 #include <QSaveFile>
+#include <QStandardPaths>
+#include <QSvgRenderer>
 
 #include <cstdint>
 #include <memory>
@@ -116,7 +124,190 @@ bool steamRunning() {
     return false;
 }
 
-Result addShortcut(const QString& exe, const QString& icon, const QString& launchOptions) {
+bool startedBySteam() {
+    for (const char* v : {"SteamGameId", "SteamAppId", "STEAM_COMPAT_APP_ID"})
+        if (!qEnvironmentVariable(v).isEmpty() && qEnvironmentVariable(v) != "0") return true;
+    // Game Mode (gamescope session): Steam is the session itself
+    return qEnvironmentVariable("XDG_CURRENT_DESKTOP").compare("gamescope", Qt::CaseInsensitive) == 0;
+}
+
+namespace {
+
+// How to talk to the installed Steam: the native "steam" command, or the Flatpak.
+bool steamCommand(QString& program, QStringList& args) {
+    args.clear();
+    const QString native = QStandardPaths::findExecutable("steam");
+    const bool flatpakSteam = QFileInfo(QDir::homePath() + "/.var/app/com.valvesoftware.Steam/.local/share/Steam/userdata").isDir();
+    // a Flatpak Steam is used when it is the only one, or when it is the one running
+    bool flatpakRunning = false;
+    if (flatpakSteam) {
+        for (const QString& pid : QDir("/proc").entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QFile f("/proc/" + pid + "/comm");
+            if (!f.open(QIODevice::ReadOnly) || f.readAll().trimmed() != "steam") continue;
+            QFile e("/proc/" + pid + "/environ");
+            if (e.open(QIODevice::ReadOnly) && e.readAll().contains("FLATPAK_ID=com.valvesoftware.Steam")) flatpakRunning = true;
+        }
+    }
+    const QString flatpak = QStandardPaths::findExecutable("flatpak");
+    if (flatpakSteam && !flatpak.isEmpty() && (native.isEmpty() || flatpakRunning)) {
+        program = flatpak;
+        args << "run" << "com.valvesoftware.Steam";
+        return true;
+    }
+    if (native.isEmpty()) return false;
+    program = native;
+    return true;
+}
+
+// The environment for Steam: the user's, without what VeyAmux (or the AppImage runtime) set for itself.
+QProcessEnvironment cleanEnvironment() {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    for (const QString& k : env.keys()) {
+        if (k.startsWith("QT_") || k.startsWith("QSG_") || k.startsWith("QML") || k.startsWith("VEYAMUX_") ||
+            k.startsWith("LSFGVK_") || k == "DISABLE_LSFGVK" || k == "LIBVA_DRIVERS_PATH" || k == "APPIMAGE" ||
+            k == "APPDIR" || k == "ARGV0" || k == "OWD" || k == "LD_LIBRARY_PATH" || k == "LD_PRELOAD" ||
+            k == "GST_PLUGIN_SYSTEM_PATH" || k == "GDK_PIXBUF_MODULE_FILE")
+            env.remove(k);
+    }
+    return env;
+}
+
+bool runSteam(const QStringList& extra) {
+    QString program;
+    QStringList args;
+    if (!steamCommand(program, args)) return false;
+    QProcess p;
+    p.setProgram(program);
+    p.setArguments(args + extra);
+    p.setProcessEnvironment(cleanEnvironment());
+    p.setWorkingDirectory(QDir::homePath());
+    p.setStandardInputFile(QProcess::nullDevice());
+    p.setStandardOutputFile(QProcess::nullDevice());
+    p.setStandardErrorFile(QProcess::nullDevice());
+    return p.startDetached();
+}
+
+// ---- artwork
+void drawLogo(QPainter& p, const QRectF& r) {
+    static QSvgRenderer svg(QStringLiteral(":/qml/icons/logo.svg"));
+    svg.render(&p, r);
+}
+
+void background(QPainter& p, const QSize& s, QPointF glowAt, double glowR) {
+    QLinearGradient g(0, 0, s.width(), s.height());
+    g.setColorAt(0, QColor("#1a1024"));
+    g.setColorAt(1, QColor("#0b0c11"));
+    p.fillRect(QRect(QPoint(0, 0), s), g);
+    QRadialGradient glow(glowAt, glowR);
+    glow.setColorAt(0, QColor(255, 106, 48, 120));
+    glow.setColorAt(0.5, QColor(255, 61, 142, 40));
+    glow.setColorAt(1, QColor(255, 61, 142, 0));
+    p.fillRect(QRect(QPoint(0, 0), s), glow);
+    // fine diagonal lines: the X of the logo, repeated faintly
+    p.save();
+    p.setPen(QPen(QColor(255, 255, 255, 10), 2));
+    for (int x = -s.height(); x < s.width(); x += 46) {
+        p.drawLine(QPointF(x, 0), QPointF(x + s.height(), s.height()));
+        p.drawLine(QPointF(x + s.height(), 0), QPointF(x, s.height()));
+    }
+    p.restore();
+}
+
+void wordmark(QPainter& p, const QRectF& r, int px, Qt::Alignment align, const QString& sub = {}, int subPx = 0) {
+    QFont f;
+    f.setFamilies({"Inter", "Cantarell", "Noto Sans", "DejaVu Sans", "Sans Serif"});
+    f.setPixelSize(px);
+    f.setWeight(QFont::Black);
+    f.setLetterSpacing(QFont::PercentageSpacing, 96);
+    p.setFont(f);
+    const QFontMetricsF fm(f);
+    const double total = fm.height() + (sub.isEmpty() ? 0 : subPx * 1.6);
+    double y = r.top();
+    if (align & Qt::AlignVCenter) y = r.center().y() - total / 2;
+    else if (align & Qt::AlignBottom) y = r.bottom() - total;
+    const QString vey = "Vey", amux = "Amux";
+    const double w = fm.horizontalAdvance(vey + amux);
+    double x = r.left();
+    if (align & Qt::AlignHCenter) x = r.center().x() - w / 2;
+    else if (align & Qt::AlignRight) x = r.right() - w;
+    const double base = y + fm.ascent();
+    QPainterPath path;
+    path.addText(QPointF(x, base), f, vey);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#ffffff"));
+    p.drawPath(path);
+    QPainterPath path2;
+    path2.addText(QPointF(x + fm.horizontalAdvance(vey), base), f, amux);
+    QLinearGradient g(x, y, x + w, y + fm.height());
+    g.setColorAt(0, QColor("#ffa477"));
+    g.setColorAt(1, QColor("#ff3d8e"));
+    p.setBrush(g);
+    p.drawPath(path2);
+    if (!sub.isEmpty()) {
+        QFont s = f;
+        s.setPixelSize(subPx);
+        s.setWeight(QFont::DemiBold);
+        s.setLetterSpacing(QFont::PercentageSpacing, 108);
+        p.setFont(s);
+        p.setPen(QColor(255, 226, 212, 200));
+        const QRectF sr(r.left(), y + fm.height() + subPx * 0.25, r.width(), subPx * 1.4);
+        p.drawText(sr, int(align & Qt::AlignHorizontal_Mask) | Qt::AlignVCenter, sub);
+    }
+}
+
+QImage canvas(int w, int h, bool transparent) {
+    QImage img(w, h, QImage::Format_ARGB32_Premultiplied);
+    img.fill(transparent ? Qt::transparent : QColor("#0b0c11"));
+    return img;
+}
+
+} // namespace
+
+QMap<QString, QImage> artwork() {
+    const QString tag = QStringLiteral("CAPTURE  \u00b7  UPSCALE  \u00b7  FRAME GENERATION");
+    QMap<QString, QImage> out;
+    {   // portrait cover 600x900
+        QImage img = canvas(600, 900, false);
+        QPainter p(&img);
+        p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+        background(p, img.size(), QPointF(300, 360), 420);
+        drawLogo(p, QRectF(150, 210, 300, 300));
+        wordmark(p, QRectF(30, 560, 540, 200), 104, Qt::AlignHCenter | Qt::AlignTop, tag, 19);
+        out.insert("p", img);
+    }
+    {   // wide cover 920x430
+        QImage img = canvas(920, 430, false);
+        QPainter p(&img);
+        p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+        background(p, img.size(), QPointF(220, 215), 330);
+        drawLogo(p, QRectF(80, 90, 250, 250));
+        wordmark(p, QRectF(370, 0, 520, 430), 96, Qt::AlignLeft | Qt::AlignVCenter, tag, 17);
+        out.insert("", img);
+    }
+    {   // background 1920x620 (Steam puts the logo over it, left side)
+        QImage img = canvas(1920, 620, false);
+        QPainter p(&img);
+        p.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+        background(p, img.size(), QPointF(1450, 310), 760);
+        drawLogo(p, QRectF(1210, 70, 480, 480));
+        out.insert("_hero", img);
+    }
+    {   // logo 1280x400, transparent
+        QImage img = canvas(1280, 400, true);
+        QPainter p(&img);
+        p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+        drawLogo(p, QRectF(20, 40, 320, 320));
+        wordmark(p, QRectF(380, 0, 900, 400), 190, Qt::AlignLeft | Qt::AlignVCenter);
+        out.insert("_logo", img);
+    }
+    return out;
+}
+
+bool shutdownSteam() { return runSteam({"-shutdown"}); }
+
+bool startSteam() { return runSteam({}); }
+
+Result addShortcut(const QString& exe, const QString& icon, const QString& launchOptions, const QMap<QString, QImage>& grid) {
     Result r;
     const QStringList roots = steamRoots();
     if (roots.isEmpty()) { r.message = "Steam was not found"; return r; }
@@ -179,6 +370,18 @@ Result addShortcut(const QString& exe, const QString& icon, const QString& launc
             o.append(char(0x08));
             QSaveFile out(path);
             if (!out.open(QIODevice::WriteOnly) || out.write(o) != o.size() || !out.commit()) { r.message = "Cannot write " + path; continue; }
+            // library artwork: userdata/<account>/config/grid/<appid><suffix>.png (replaces earlier VeyAmux artwork,
+            // never artwork the user chose for VeyAmux: that one is kept when it is not a .png we wrote)
+            const QString gridDir = root + "/userdata/" + acct + "/config/grid";
+            if (!grid.isEmpty() && QDir().mkpath(gridDir)) {
+                for (auto it = grid.cbegin(); it != grid.cend(); ++it) {
+                    const QString base = gridDir + "/" + QString::number(appid) + it.key();
+                    bool own = false;
+                    for (const char* ext : {".jpg", ".jpeg", ".webp"}) own = own || QFileInfo::exists(base + ext);
+                    if (own) continue;   // the user set their own picture in Steam
+                    it.value().save(base + ".png", "PNG");
+                }
+            }
             ++r.accounts;
         }
     }

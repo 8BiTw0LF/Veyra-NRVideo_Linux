@@ -135,6 +135,12 @@ Column {
                     return ""
                 }
             }
+            Text { font.family: Theme.font;   // lsfg-vk 2 being installed / installed / failed
+                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
+                visible: player.lsfgInstall !== ""
+                color: player.lsfgInstall === "error" ? Theme.warn : (player.lsfgInstall === "done" ? Theme.ok : Theme.label)
+                text: player.lsfgInstallText
+            }
             Text { font.family: Theme.font;
                 width: parent.width; wrapMode: Text.WrapAnywhere; font.pixelSize: 15
                 visible: player.lsfgLog !== ""
@@ -144,7 +150,9 @@ Column {
             }
             Row {
                 spacing: 8
-                LinkButton { visible: player.restartNeeded; text: tr("restartNow"); onClicked: player.restartApp() }
+                LinkButton { visible: player.restartNeeded || player.lsfgInstall === "done"; text: tr("restartNow"); onClicked: player.restartApp() }
+                LinkButton { visible: (root.ls === "oldLayer" || root.ls === "noLayer") && player.lsfgInstall !== "busy" && player.lsfgInstall !== "done"
+                             text: tr("installLsfg2"); onClicked: player.installLsfg() }
                 LinkButton { visible: root.ls === "crashed"; text: tr("tryAgain"); onClicked: player.retryLsfg() }
                 LinkButton { visible: root.ls === "noInstall" || root.ls === "noDll"; text: tr("chooseFolder"); onClicked: player.chooseLsfgFolder() }
                 LinkButton { visible: root.ls !== "active" && root.ls !== "crashed"; text: tr("checkAgain"); onClicked: player.refreshLsfg() }

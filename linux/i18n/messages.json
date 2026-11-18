@@ -120,7 +120,18 @@
   "That address has no login code (it should contain \"code=\")": "Den adresse har ingen login-kode (den skal indeholde \"code=\")",
   "No access token from PlayStation Network (the code is used once: log in again)": "Ingen adgangsnøgle fra PlayStation Network (koden kan kun bruges én gang: log ind igen)",
   "PlayStation Network sent no account number": "PlayStation Network sendte intet kontonummer",
-  "PlayStation Network answered ": "PlayStation Network svarede "
+  "PlayStation Network answered ": "PlayStation Network svarede ",
+  "Added to Steam with cover art, and Steam is starting again": "Tilføjet til Steam med billeder, og Steam starter igen",
+  "Closing Steam to add VeyAmux…": "Lukker Steam for at tilføje VeyAmux…",
+  "Could not install lsfg-vk 2: ": "Kunne ikke installere lsfg-vk 2: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Henter lsfg-vk 2 fra builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Henter lsfg-vk 2 fra builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Genstart VeyAmux for at bruge det.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam lukkede ikke. Luk det selv, og tryk så på knappen igen",
+  "The old lsfg-vk 1 files were moved to %1.": "De gamle lsfg-vk 1-filer er flyttet til %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux er startet fra Steam og kan derfor ikke lukke Steam. Start VeyAmux fra skrivebordet, og tryk på knappen igen",
+  "lsfg-vk 2 installed": "lsfg-vk 2 installeret",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 er installeret i din hjemmemappe (~/.local)."
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -243,7 +254,18 @@
   "That address has no login code (it should contain \"code=\")": "Diese Adresse enthält keinen Anmeldecode (sie muss „code=“ enthalten)",
   "No access token from PlayStation Network (the code is used once: log in again)": "Kein Zugriffstoken von PlayStation Network (der Code gilt nur einmal: melde dich erneut an)",
   "PlayStation Network sent no account number": "PlayStation Network hat keine Kontonummer gesendet",
-  "PlayStation Network answered ": "PlayStation Network antwortete "
+  "PlayStation Network answered ": "PlayStation Network antwortete ",
+  "Added to Steam with cover art, and Steam is starting again": "Mit Bildern zu Steam hinzugefügt, Steam startet wieder",
+  "Closing Steam to add VeyAmux…": "Steam wird geschlossen, um VeyAmux hinzuzufügen…",
+  "Could not install lsfg-vk 2: ": "lsfg-vk 2 konnte nicht installiert werden: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Lade lsfg-vk 2 von builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Lade lsfg-vk 2 von builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Starte VeyAmux neu, um es zu nutzen.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam wurde nicht geschlossen. Schließe es selbst und drücke dann die Schaltfläche erneut",
+  "The old lsfg-vk 1 files were moved to %1.": "Die alten lsfg-vk-1-Dateien wurden nach %1 verschoben.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux wurde aus Steam gestartet und kann Steam daher nicht schließen. Starte VeyAmux vom Desktop und drücke die Schaltfläche erneut",
+  "lsfg-vk 2 installed": "lsfg-vk 2 installiert",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 ist in deinem Home-Ordner installiert (~/.local)."
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -366,7 +388,18 @@
   "That address has no login code (it should contain \"code=\")": "Esa dirección no tiene código de inicio de sesión (debe contener «code=»)",
   "No access token from PlayStation Network (the code is used once: log in again)": "PlayStation Network no dio un token de acceso (el código solo vale una vez: inicia sesión de nuevo)",
   "PlayStation Network sent no account number": "PlayStation Network no envió ningún número de cuenta",
-  "PlayStation Network answered ": "PlayStation Network respondió "
+  "PlayStation Network answered ": "PlayStation Network respondió ",
+  "Added to Steam with cover art, and Steam is starting again": "Añadido a Steam con portadas, y Steam se está reiniciando",
+  "Closing Steam to add VeyAmux…": "Cerrando Steam para añadir VeyAmux…",
+  "Could not install lsfg-vk 2: ": "No se pudo instalar lsfg-vk 2: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Descargando lsfg-vk 2 de builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Descargando lsfg-vk 2 de builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Reinicia VeyAmux para usarlo.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam no se cerró. Ciérralo tú y vuelve a pulsar el botón",
+  "The old lsfg-vk 1 files were moved to %1.": "Los archivos antiguos de lsfg-vk 1 se movieron a %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux se inició desde Steam, así que no puede cerrar Steam. Inicia VeyAmux desde el escritorio y vuelve a pulsar el botón",
+  "lsfg-vk 2 installed": "lsfg-vk 2 instalado",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 está instalado en tu carpeta personal (~/.local)."
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -489,7 +522,18 @@
   "That address has no login code (it should contain \"code=\")": "Cette adresse ne contient pas de code de connexion (elle doit contenir « code= »)",
   "No access token from PlayStation Network (the code is used once: log in again)": "Aucun jeton d'accès de PlayStation Network (le code ne sert qu'une fois : reconnectez-vous)",
   "PlayStation Network sent no account number": "PlayStation Network n'a envoyé aucun numéro de compte",
-  "PlayStation Network answered ": "PlayStation Network a répondu "
+  "PlayStation Network answered ": "PlayStation Network a répondu ",
+  "Added to Steam with cover art, and Steam is starting again": "Ajouté à Steam avec les images, et Steam redémarre",
+  "Closing Steam to add VeyAmux…": "Fermeture de Steam pour ajouter VeyAmux…",
+  "Could not install lsfg-vk 2: ": "Impossible d'installer lsfg-vk 2 : ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Téléchargement de lsfg-vk 2 depuis builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Téléchargement de lsfg-vk 2 depuis builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Redémarrez VeyAmux pour l'utiliser.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam ne s'est pas fermé. Fermez-le vous-même, puis appuyez de nouveau sur le bouton",
+  "The old lsfg-vk 1 files were moved to %1.": "Les anciens fichiers de lsfg-vk 1 ont été déplacés vers %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux a été lancé depuis Steam et ne peut donc pas fermer Steam. Lancez VeyAmux depuis le bureau et appuyez de nouveau sur le bouton",
+  "lsfg-vk 2 installed": "lsfg-vk 2 installé",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 est installé dans votre dossier personnel (~/.local)."
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -612,7 +656,18 @@
   "That address has no login code (it should contain \"code=\")": "Adressen har ingen påloggingskode (den skal inneholde \"code=\")",
   "No access token from PlayStation Network (the code is used once: log in again)": "Ingen tilgangsnøkkel fra PlayStation Network (koden virker bare én gang: logg inn på nytt)",
   "PlayStation Network sent no account number": "PlayStation Network sendte ikke noe kontonummer",
-  "PlayStation Network answered ": "PlayStation Network svarte "
+  "PlayStation Network answered ": "PlayStation Network svarte ",
+  "Added to Steam with cover art, and Steam is starting again": "Lagt til i Steam med omslagsbilder, og Steam starter igjen",
+  "Closing Steam to add VeyAmux…": "Lukker Steam for å legge til VeyAmux…",
+  "Could not install lsfg-vk 2: ": "Kunne ikke installere lsfg-vk 2: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Laster ned lsfg-vk 2 fra builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Laster ned lsfg-vk 2 fra builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Start VeyAmux på nytt for å bruke det.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam lukket seg ikke. Lukk det selv, og trykk så på knappen igjen",
+  "The old lsfg-vk 1 files were moved to %1.": "De gamle lsfg-vk 1-filene ble flyttet til %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux ble startet fra Steam og kan derfor ikke lukke Steam. Start VeyAmux fra skrivebordet og trykk på knappen igjen",
+  "lsfg-vk 2 installed": "lsfg-vk 2 installert",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 er installert i hjemmemappen din (~/.local)."
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -735,7 +790,18 @@
   "That address has no login code (it should contain \"code=\")": "В этом адресе нет кода входа (он должен содержать «code=»)",
   "No access token from PlayStation Network (the code is used once: log in again)": "PlayStation Network не выдал токен доступа (код действует один раз: войдите снова)",
   "PlayStation Network sent no account number": "PlayStation Network не прислал номер учётной записи",
-  "PlayStation Network answered ": "PlayStation Network ответил "
+  "PlayStation Network answered ": "PlayStation Network ответил ",
+  "Added to Steam with cover art, and Steam is starting again": "Добавлено в Steam с обложками, Steam запускается снова",
+  "Closing Steam to add VeyAmux…": "Закрываю Steam, чтобы добавить VeyAmux…",
+  "Could not install lsfg-vk 2: ": "Не удалось установить lsfg-vk 2: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Загрузка lsfg-vk 2 с builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Загрузка lsfg-vk 2 с builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Перезапустите VeyAmux, чтобы использовать его.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam не закрылся. Закройте его сами и нажмите кнопку снова",
+  "The old lsfg-vk 1 files were moved to %1.": "Старые файлы lsfg-vk 1 перемещены в %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux запущен из Steam, поэтому не может закрыть Steam. Запустите VeyAmux с рабочего стола и нажмите кнопку снова",
+  "lsfg-vk 2 installed": "lsfg-vk 2 установлен",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 установлен в вашу домашнюю папку (~/.local)."
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -858,6 +924,17 @@
   "That address has no login code (it should contain \"code=\")": "Adressen har ingen inloggningskod (den ska innehålla \"code=\")",
   "No access token from PlayStation Network (the code is used once: log in again)": "Ingen åtkomsttoken från PlayStation Network (koden gäller bara en gång: logga in igen)",
   "PlayStation Network sent no account number": "PlayStation Network skickade inget kontonummer",
-  "PlayStation Network answered ": "PlayStation Network svarade "
+  "PlayStation Network answered ": "PlayStation Network svarade ",
+  "Added to Steam with cover art, and Steam is starting again": "Tillagt i Steam med omslagsbilder, och Steam startar igen",
+  "Closing Steam to add VeyAmux…": "Stänger Steam för att lägga till VeyAmux…",
+  "Could not install lsfg-vk 2: ": "Kunde inte installera lsfg-vk 2: ",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev…": "Hämtar lsfg-vk 2 från builds.lsfg-vk.dev…",
+  "Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %": "Hämtar lsfg-vk 2 från builds.lsfg-vk.dev… %1 %",
+  "Restart VeyAmux to use it.": "Starta om VeyAmux för att använda det.",
+  "Steam did not close. Close it yourself, then press the button again": "Steam stängdes inte. Stäng det själv och tryck sedan på knappen igen",
+  "The old lsfg-vk 1 files were moved to %1.": "De gamla lsfg-vk 1-filerna flyttades till %1.",
+  "VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again": "VeyAmux startades från Steam och kan därför inte stänga Steam. Starta VeyAmux från skrivbordet och tryck på knappen igen",
+  "lsfg-vk 2 installed": "lsfg-vk 2 installerat",
+  "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 är installerat i din hemmapp (~/.local)."
  }
 }

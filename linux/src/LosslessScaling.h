@@ -7,6 +7,9 @@
 //   * writes a VeyAmux-only lsfg-vk profile (its own config file, never the user's own lsfg-vk config) and points the
 //     layer at it through lsfg-vk's documented environment variables (LSFGVK_CONFIG / LSFGVK_PROFILE).
 // lsfg-vk then generates frames on VeyAmux's Vulkan window like it does for games.
+// When only an older lsfg-vk (1.x) is installed, VeyAmux can download the official lsfg-vk 2 build from
+// builds.lsfg-vk.dev on the user's computer and unpack it into ~/.local, as lsfg-vk's own install guide does
+// (LsfgInstall.h). Nothing of lsfg-vk is shipped with VeyAmux.
 #pragma once
 #include <QString>
 #include <QStringList>
@@ -26,6 +29,10 @@ struct Detection {
 
 // override: a Lossless Scaling folder or dll chosen by the user (empty = automatic).
 Detection detect(const QString& overridePath = {});
+// Vulkan layer manifest folders that are searched (XDG data dirs, ~/.local/share, /usr/share, /etc, ...)
+QStringList layerDirs();
+// Manifests of an lsfg-vk layer that is not version 2 (lsfg-vk 1.x and older), canonical paths
+QStringList oldLayerManifests();
 
 
 

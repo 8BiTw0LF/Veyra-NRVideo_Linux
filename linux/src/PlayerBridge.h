@@ -78,6 +78,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool lsfgActive READ lsfgActive NOTIFY lsfgChanged)
     Q_PROPERTY(bool restartNeeded READ restartNeeded NOTIFY lsfgChanged)
     Q_PROPERTY(int lsfgMultiplier READ lsfgMultiplier NOTIFY lsfgChanged)
+    // lsfg-vk 2 install (when only lsfg-vk 1 is found): "" / "busy" / "done" / "error", and the text to show
+    Q_PROPERTY(QString lsfgInstall READ lsfgInstall NOTIFY lsfgChanged)
+    Q_PROPERTY(QString lsfgInstallText READ lsfgInstallText NOTIFY lsfgChanged)
     // frame generation paused automatically while the capture runs at ~120 Hz (the game is already fast)
     Q_PROPERTY(bool fgPaused READ fgPaused NOTIFY lsfgChanged)
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
@@ -253,6 +256,8 @@ public:
     QString lsfgFolder() const { return lsfg_.installDir; }
     // What lsfg-vk itself reports in this run (from its log file), translated framing; empty when not applicable.
     QString lsfgLog() const { return lsfgLog_; }
+    QString lsfgInstall() const { return lsfgInstall_; }
+    QString lsfgInstallText() const { return lsfgInstallText_; }
     bool lsfgActive() const { return lsfgActive_; }
     bool restartNeeded() const;
     int lsfgMultiplier() const { return lsfgMultiplier_; }
@@ -404,6 +409,7 @@ public slots:
     void retryLsfg();
     void refreshLsfg();
     void chooseLsfgFolder();
+    void installLsfg();   // downloads lsfg-vk 2 from builds.lsfg-vk.dev into ~/.local (LsfgInstall.h)
     // demo scene: start it at 30 or 60 fps; keyboard / mouse / controller input while the menu is closed
     void openDemo(int fps);
     void demoKey(const QString& key, bool down);   // "w" "a" "s" "d" "q" "e" "shift"
@@ -513,6 +519,10 @@ private:
     QPointer<QWindow> window_;
     lsfg::Detection lsfg_;
     bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false;
+    QString lsfgInstall_, lsfgInstallText_;
+    bool lsfgAutoTried_ = false;
+    bool steamBusy_ = false;
+    void finishAddToSteam(bool restartSteam);
     QString lang_ = "en";            // the language in use (en, da, de, es, fr, sv, nb, ru)
     QString langChoice_ = "auto";    // what the user picked (ui/lang): auto = follow the system
     int lsfgMultiplier_ = 2;

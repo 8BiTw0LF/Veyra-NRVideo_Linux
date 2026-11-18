@@ -24,6 +24,7 @@
 #include <QVariantMap>
 #include <QSettings>
 #include <QIcon>
+#include "LsfgInstall.h"
 #include "SteamShortcut.h"
 #include "Watcher.h"
 #include <QDateTime>
@@ -471,6 +472,47 @@ QImage PlayerBridge::sdrCopy(QImage img) const {
 }
 
 void PlayerBridge::addToSteam() {
+    // Steam rewrites shortcuts.vdf when it exits, so it is closed first, the shortcut and the library artwork are
+    // written, and Steam is started again. Not possible when Steam started VeyAmux (closing Steam closes VeyAmux).
+    if (steamBusy_) return;
+    namespace st = veyamux::steam;
+    const bool running = st::steamRunning();
+    if (running && st::startedBySteam()) {
+        showNotice(L("VeyAmux was started from Steam, so it cannot close Steam. Start VeyAmux from the desktop and press the button again",
+                     "VeyAmux er startet fra Steam og kan derfor ikke lukke Steam. Start VeyAmux fra skrivebordet, og tryk på knappen igen"));
+        return;
+    }
+    if (!running) { finishAddToSteam(false); return; }
+    if (!st::shutdownSteam()) {
+        showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
+        return;
+    }
+    steamBusy_ = true;
+    showNotice(L("Closing Steam to add VeyAmux…", "Lukker Steam for at tilføje VeyAmux…"));
+    auto* t = new QTimer(this);
+    auto* clock = new QElapsedTimer;
+    clock->start();
+    connect(t, &QTimer::timeout, this, [this, t, clock] {
+        const bool still = veyamux::steam::steamRunning();
+        if (!still || clock->elapsed() > 45000) {
+            t->stop();
+            t->deleteLater();
+            delete clock;
+            if (still) {
+                steamBusy_ = false;
+                showNotice(L("Steam did not close. Close it yourself, then press the button again",
+                             "Steam lukkede ikke. Luk det selv, og tryk så på knappen igen"));
+                return;
+            }
+            // give Steam's last file writes a moment
+            QTimer::singleShot(1500, this, [this] { finishAddToSteam(true); });
+        }
+    });
+    t->start(500);
+}
+
+void PlayerBridge::finishAddToSteam(bool restartSteam) {
+    steamBusy_ = false;
     // the AppImage itself (the binary inside lives in a temporary mount)
     const auto run = veyamux::sandbox::launcher();
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
@@ -478,8 +520,10 @@ void PlayerBridge::addToSteam() {
     const QString icon = dir + "/veyamux-steam.png";
     QIcon(":/qml/icons/logo.svg").pixmap(512, 512).save(icon, "PNG");
     const QString opts = (run.args + QStringList{"--fullscreen", "--capture", "last"}).join(' ');
-    const auto r = veyamux::steam::addShortcut(run.program, icon, opts);
-    if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
+    const auto r = veyamux::steam::addShortcut(run.program, icon, opts, veyamux::steam::artwork());
+    const bool restarted = restartSteam && veyamux::steam::startSteam();
+    if (r.ok && restarted) showNotice(L("Added to Steam with cover art, and Steam is starting again", "Tilføjet til Steam med billeder, og Steam starter igen"));
+    else if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
     else if (r.message == "Close Steam first") showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
     else showNotice(L("Could not add to Steam: ", "Kunne ikke tilføje til Steam: ") + r.message);
 }
@@ -1150,6 +1194,49 @@ void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashe
 void PlayerBridge::refreshLsfg() {
     lsfg_ = lsfg::detect(QSettings().value("lsfg/folder").toString());
     emit lsfgChanged();
+    // only an older lsfg-vk (1.x) installed: fetch lsfg-vk 2 by itself, once per start (VEYAMUX_LSFG_AUTOINSTALL=0: never)
+    if (!lsfgAutoTried_ && !lsfg_.layerManifest.isEmpty() && !lsfg_.layerV2 && lsfgInstall_.isEmpty() &&
+        qEnvironmentVariable("VEYAMUX_LSFG_AUTOINSTALL") != "0") {
+        lsfgAutoTried_ = true;
+        QTimer::singleShot(3000, this, &PlayerBridge::installLsfg);   // after a possible relaunch at start
+    }
+}
+
+void PlayerBridge::installLsfg() {
+    if (lsfgInstall_ == "busy") return;
+    lsfgAutoTried_ = true;
+    lsfgInstall_ = "busy";
+    lsfgInstallText_ = L("Downloading lsfg-vk 2 from builds.lsfg-vk.dev…", "Henter lsfg-vk 2 fra builds.lsfg-vk.dev…");
+    emit lsfgChanged();
+    qInfo("Lossless Scaling: installing lsfg-vk %s", lsfg::kV2Version);
+    std::thread([this, quit = psQuit_] {
+        auto last = std::make_shared<std::atomic<int>>(-1);
+        const auto r = lsfg::installV2([this, quit, last](int pc) {
+            if (quit->load() || pc / 5 == last->load() / 5) return;
+            last->store(pc);
+            QMetaObject::invokeMethod(this, [this, pc] {
+                if (lsfgInstall_ != "busy") return;
+                lsfgInstallText_ = L("Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %", "Henter lsfg-vk 2 fra builds.lsfg-vk.dev… %1 %").arg(pc);
+                emit lsfgChanged();
+            }, Qt::QueuedConnection);
+        });
+        if (quit->load()) return;   // VeyAmux closed meanwhile
+        QMetaObject::invokeMethod(this, [this, r] {
+            qInfo("Lossless Scaling: %s", qPrintable(r.message));
+            lsfgInstall_ = r.ok ? "done" : "error";
+            if (r.ok) {
+                lsfgInstallText_ = L("lsfg-vk 2 is installed in your home folder (~/.local).", "lsfg-vk 2 er installeret i din hjemmemappe (~/.local).");
+                if (!r.backupDir.isEmpty())
+                    lsfgInstallText_ += " " + L("The old lsfg-vk 1 files were moved to %1.", "De gamle lsfg-vk 1-filer er flyttet til %1.").arg(r.backupDir);
+                lsfgInstallText_ += " " + L("Restart VeyAmux to use it.", "Genstart VeyAmux for at bruge det.");
+                showNotice(L("lsfg-vk 2 installed", "lsfg-vk 2 installeret"));
+            } else {
+                lsfgInstallText_ = L("Could not install lsfg-vk 2: ", "Kunne ikke installere lsfg-vk 2: ") + r.message;
+            }
+            lsfg_ = lsfg::detect(QSettings().value("lsfg/folder").toString());
+            emit lsfgChanged();
+        }, Qt::QueuedConnection);
+    }).detach();
 }
 
 void PlayerBridge::chooseLsfgFolder() {
