@@ -68,6 +68,31 @@ detalje der er tilbage, 1,00 = alt): støjfyldt 31,2–31,3 dB. Kraftig: Rumlig 
 Begge 36,9–40,9 dB, alle med detalje 0,97–1,02. En rød boks, der flytter 40 px/billede over grå baggrund, gav ingen
 spor eller glorier (ingen pixel over 30/255 fra det rene billede). Hastighed på et rigtigt grafikkort er ikke målt her.
 
+## Anti-flimmer og FSR 3.1.6 Native AA (TAA)
+**Anti-flimmer** (`shaders/LxDeflicker.hlsl`, *Anti-flimmer* under FXAA i menuen, `enh/deflicker`):
+- **Placering:** kører før støjfjernelsen på kildebilledet. Den deler én bevægelsesmåling pr. billede med Temporal
+  (`EnhanceChain::recordMotion`).
+- **Historik:** gemmer det forrige kildebillede, billedet før det (som det var) og billedet før det justeret til det
+  forrige billede.
+- **Flimmer:** en pixel flimrer, når lysstyrken går op og ned igen (eller ned og op) over tre billeder med mere end en
+  tærskel, og billedet nu ligner billedet for to billeder siden.
+- **To hypoteser vurderes:**
+  - langs den målte bevægelse (stoles på efter konfidens og fart);
+  - på samme sted uden bevægelse, kun hvor omgivelserne 3 px væk står stille. Flimmer narrer bevægelsesmålingen på
+    selve de flimrende pixels.
+- **Resultat:** kun dér bliver resultatet 1-2-1-gennemsnittet af de tre billeder, så tænd/sluk-flimmer bliver til sin
+  rolige midterværdi. Det klemmes til nabolagets 3×3-spænd ± halvdelen af flimmeret. Ingen ekstra forsinkelse.
+- **Syntetisk test:** statiske 1 px-linjer, der skifter mellem lys og mørk hvert billede:
+  - flimmer 190 → 6,7 gennemsnitlig ændring pr. billede;
+  - en kasse, der bevæger sig 4 px pr. billede, og den stille baggrund er urørte;
+  - en panorering på 3 px pr. billede uden flimmer er urørt (fejl 0,000).
+- **Tærskel:** `VEYAMUX_DF_THRESHOLD` (standard 0,02 i perceptuelt domæne).
+
+**FSR 3.1.6 Native AA (TAA):**
+- **Valg:** *Native* + *FSR 3.1* kører FSR 3.1-opskaleringen ved 1,0× (`EnhanceSettings::fsrNativeAa`).
+- **Fejl:** kan FSR ikke starte, vises billedet uændret.
+- **Samme test:** flimmer 190 → 59, med let blødgøring (baggrundsfejl 0,56).
+
 ## Bevægelsesmåling (FSR-opskalering)
 Video har ingen bevægelsesvektorer fra en spilmotor, så VeyAmux måler dem selv til FSR 3.1-opskaleringen og den temporale støjreduktion
 (`src/MotionEstimator.cpp`): luma-pyramide med op til 7 niveauer, regulariseret Lucas-Kanade fra groft til fint,
