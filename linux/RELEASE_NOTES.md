@@ -16,6 +16,10 @@ VeyAmux's processing: upscaling, frame generation, Retro TV, recording and strea
   - A DualSense or DualShock 4 touchpad click works, and rumble from the game reaches the controller.
   - **Select + Start** opens the VeyAmux menu.
 - **Login passcode:** if the console has a 4-digit login passcode, it can be saved with the console.
+- **Delay in the frame-time overlay (F3):**
+  - **Shown:** the network (half the round trip to the console), the decoding, VeyAmux's own processing and their
+    total, plus the bitrate, the packet loss and any lost frames.
+  - **Not measurable:** the console's own encoding is shown as an estimate of about 8 ms.
 - Remote Play only works on the local network for now (not over the internet). Microphone, motion controls and touchpad
   swipes are not supported yet.
 - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng) v1.10.1. Because that library

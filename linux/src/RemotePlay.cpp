@@ -359,6 +359,9 @@ struct Stream::Impl {
     std::mutex ctrlM;
     ChiakiControllerState ctrl{};
 
+    std::atomic<double> decodeMs{0};
+    std::atomic<uint64_t> framesLost{0};
+
     ~Impl() { stop(); }
 
     void stop() {
@@ -370,13 +373,23 @@ struct Stream::Impl {
         if (frame) av_frame_free(&frame);
     }
 
-    static bool videoCb(uint8_t* buf, size_t size, int32_t, bool, void* user) { return static_cast<Impl*>(user)->decode(buf, size); }
+    static bool videoCb(uint8_t* buf, size_t size, int32_t framesLost, bool, void* user) {
+        auto* s = static_cast<Impl*>(user);
+        if (framesLost > 0) s->framesLost += uint64_t(framesLost);
+        return s->decode(buf, size);
+    }
 
     bool decode(uint8_t* buf, size_t size) {
+        const auto t0 = std::chrono::steady_clock::now();
         pkt->data = buf;
         pkt->size = int(size);
         if (avcodec_send_packet(dec, pkt) < 0) return false;   // false: chiaki asks the console for a new key frame
-        while (avcodec_receive_frame(dec, frame) == 0) deliver();
+        while (avcodec_receive_frame(dec, frame) == 0) {
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            const double o = decodeMs.load();
+            decodeMs = o <= 0 ? ms : o + 0.1 * (ms - o);
+            deliver();
+        }
         return true;
     }
 
@@ -574,6 +587,22 @@ double Stream::fps() const { return p_ ? (p_->cfg.fps <= 30 ? 30.0 : 60.0) : 60.
 std::string Stream::name() const { return p_ ? p_->cfg.console.name + " (Remote Play)" : "Remote Play"; }
 
 bool active() { std::lock_guard l(g_activeM); return g_active != nullptr; }
+
+Stats stats() {
+    std::lock_guard l(g_activeM);
+    Stats st;
+    Stream::Impl* s = g_active;
+    if (!s || !s->started) return st;
+    st.active = true;
+    st.rttMs = double(s->session.rtt_us) / 1000.0;
+    st.decodeMs = s->decodeMs.load();
+    st.mbit = s->session.stream_connection.measured_bitrate;
+    st.loss = s->session.stream_connection.congestion_control.packet_loss;
+    st.framesLost = s->framesLost.load();
+    st.ps5 = s->cfg.console.ps5;
+    st.hdr = s->cfg.console.ps5 && s->cfg.hdr;
+    return st;
+}
 
 void setController(uint32_t buttons, double lx, double ly, double rx, double ry, double l2, double r2) {
     std::lock_guard l(g_activeM);

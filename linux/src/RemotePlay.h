@@ -95,6 +95,18 @@ void setController(uint32_t buttons, double lx, double ly, double rx, double ry,
 // rumble from the game: low / high frequency motor 0..255
 void setRumbleCallback(std::function<void(int low, int high)> cb);
 bool active();
+// for the frame-time overlay (F3): what can be measured of the delay between the console and VeyAmux
+struct Stats {
+    bool active = false;
+    double rttMs = 0;        // round trip to the console, measured when the stream started (0: not yet)
+    double decodeMs = 0;     // from a complete frame received to the decoded picture (average)
+    double mbit = 0;         // video bitrate received, Mbit/s
+    double loss = 0;         // packet loss 0..1
+    uint64_t framesLost = 0; // frames the network lost since the start
+    bool ps5 = false;
+    bool hdr = false;
+};
+Stats stats();
 // 48 kHz interleaved stereo (the audio thread of the capture, like demo::audio)
 void audio(int16_t* out, int frames);
 

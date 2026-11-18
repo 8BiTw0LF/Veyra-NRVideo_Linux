@@ -105,6 +105,8 @@ needed for its own frame generation**, and everything else works without it:
   - **Controller:** your controller plays the game while the menu is closed (any controller; a DualSense or DualShock 4
     touchpad click counts as the touchpad button). **Select + Start** still opens the VeyAmux menu. Rumble from the
     game reaches the controller.
+  - **Delay:** the frame-time overlay (**F3**) shows the network, decoding and VeyAmux delay, their total, the bitrate
+    and the packet loss. The console's own encoding (about 5–10 ms) cannot be measured.
   - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
     now (not over the internet).
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best

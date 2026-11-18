@@ -321,6 +321,13 @@ bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, l
   DualSense/DS4-touchpadens klik fra dens egen evdev-enhed) → `chiaki_session_set_controller_state`, kun når menuen er
   lukket (ellers en tom tilstand). Rumble fra spillet → `EVIOCSFF`/`FF_RUMBLE` på controllerne.
 - **Ikke med endnu:** forbindelse over internettet (PSN holepunch), mikrofon, gyro og touchpad-bevægelser.
+- **Forsinkelse (F3-overlayet):**
+  - **Netværk:** halvdelen af den rundtur, chiakis senkusha-test måler ved start (`session.rtt_us`).
+  - **Afkodning:** fra en hel frame er modtaget, til billedet er afkodet (glidende gennemsnit).
+  - **VeyAmux:** samme tal som for capture-kort (`LiveVulkan::pipelineMs`).
+  - **Bitrate og tab:** `stream_connection.measured_bitrate`, `congestion_control.packet_loss` og tabte frames fra
+    video-callbacken.
+  - **Konsollens indkodning** kan ikke måles og vises som "+ konsol ~8 ms".
 - Fejlsøgning: `VEYAMUX_PS_LOG=1` viser hele chiakis log.
 
 ## Gratis frame generation (AMD FSR 3.1.6)

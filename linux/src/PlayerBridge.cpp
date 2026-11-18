@@ -329,6 +329,19 @@ void PlayerBridge::updateOverlay() {
         if (liveVulkanActive() && liveVk_->pipelineMs() > 0) s += L(" · delay %1 ms", " · forsinkelse %1 ms").arg(liveVk_->pipelineMs(), 0, 'f', 1);
         const auto st = engine_.stats();
         if (st.dropped) s += L(" · %1 dropped", " · %1 tabt").arg(st.dropped);
+        // Remote Play: the delay from the console, as far as it can be measured (the console's own encoding cannot;
+        // a PS5 / PS4 typically needs 5-10 ms for it)
+        if (const auto rp = veyamux::remoteplay::stats(); rp.active) {
+            const double vey = liveVulkanActive() ? liveVk_->pipelineMs() : 0;
+            const double net = rp.rttMs / 2;
+            QString r = L("\nRemote Play: network %1 ms (round trip %2) · decoding %3 ms · VeyAmux %4 ms",
+                          "\nRemote Play: netværk %1 ms (rundtur %2) · afkodning %3 ms · VeyAmux %4 ms")
+                            .arg(net, 0, 'f', 1).arg(rp.rttMs, 0, 'f', 1).arg(rp.decodeMs, 0, 'f', 1).arg(vey, 0, 'f', 1);
+            r += L("\ntotal ≈ %1 ms (+ console ~8 ms) · %2 Mbit/s · loss %3 %", "\ni alt ≈ %1 ms (+ konsol ~8 ms) · %2 Mbit/s · tab %3 %")
+                     .arg(net + rp.decodeMs + vey, 0, 'f', 0).arg(rp.mbit, 0, 'f', 1).arg(rp.loss * 100.0, 0, 'f', 1);
+            if (rp.framesLost) r += L(" · %1 frames lost", " · %1 billeder tabt").arg(rp.framesLost);
+            s += r;
+        }
         overlayStats_ = s;
     }
     emit overlayTick();
