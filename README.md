@@ -12,12 +12,15 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
 
 - **Capture cards with very low latency:** V4L2 → Vulkan in the UI's own frame, with no copy back to the CPU. Supports
   NV12/YUYV/UYVY/P010 (HDR).
-- **Upscaling:** Lanczos, AMD FSR 1 and AMD FSR 3.1. **Noise reduction:** spatial and motion-compensated temporal.
+- **PlayStation Remote Play (PS5 / PS4):** play the console straight over the home network, no capture card needed,
+  with all of VeyAmux's processing, the controller passed to the console and the delay shown in the overlay.
+- **Upscaling:** Lanczos, AMD FSR 1, NVIDIA Image Scaling and AMD FSR 3.1.6. **Noise reduction:** spatial and motion-compensated temporal.
   Also sharpening, FXAA (Veyra's own shaders) and colour controls.
 - **HDR:** HDR capture and HDR10/HLG files, tone-mapped with Veyra's BT.2390 functions. Experimental HDR output on
   KDE Plasma 6 / GNOME 48. **VRR pacing** for games below the signal rate.
-- **Frame generation**: Lossless Scaling (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), or AMD FSR 3.1 2× built in
-  for free when Lossless Scaling is not installed.
+- **Frame generation**: Lossless Scaling (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), or AMD FSR 3.1.6 2× built in
+  for free; switch between them in the menu.
+- **Steam Deck and other handhelds:** the menu fills the screen and works with touch and the controller.
 - **Instant replay, recording, screenshots and live streaming** (Twitch/YouTube, RTMP), encoded on the GPU (VA-API).
   **OBS browser source.** **Profiles** per capture signal. **Steam Game Mode** shortcut, start on capture-card
   plug-in, frame-time overlay. **Automatic updates** through Gear Lever / AppImageUpdate.
@@ -29,8 +32,14 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
 chmod +x VeyAmux-x86_64.AppImage && ./VeyAmux-x86_64.AppImage
 ```
 
-The Linux sources are in [`linux/`](linux/) (Qt 6 / Vulkan / FFmpeg, GPL-3.0 like Veyra). GitHub Actions builds the
-AppImage on every change and publishes it when a `veyamux-v*` tag is pushed.
+<p align="center">
+  <img src="linux/docs/images/start.png" width="480" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons">
+  <img src="linux/docs/images/remote-play.png" width="380" alt="VeyAmux's PlayStation Remote Play window">
+</p>
+
+The Linux sources are in [`linux/`](linux/) (Qt 6 / Vulkan / FFmpeg, GPL-3.0 like Veyra; the VeyAmux program as
+distributed is AGPL-3.0 because it includes chiaki-ng's Remote Play library). GitHub Actions builds the AppImage on every
+change and publishes it when a `VeyAmux-V.*` tag is pushed.
 
 ---
 <!-- veyamux-fork:end -->
