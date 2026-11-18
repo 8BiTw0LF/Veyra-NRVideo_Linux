@@ -10,26 +10,27 @@
 </p>
 
 <p align="center">
-  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1) · noise reduction · frame generation (Lossless Scaling or free FSR&nbsp;3.1) ·
-  HDR · Retro TV (CRT) and pixel-perfect scaling · replay, recording and live streaming · window or screen as a source ·
-  built-in 3D demo · controller support · 8 languages
+  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
+  HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
+  live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · 8 languages
   <br>
   <a href="https://github.com/8BiTw0LF/VeyAmux/releases/latest"><b>Download the latest release</b></a> ·
-  GPL-3.0 · Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a>
+  GPL-3.0 (the program: AGPL-3.0, see below) · Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a>
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file and Capture buttons, the demo buttons (30 and 60 fps), the four themes and the language choice">
+  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons, the demo buttons (30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
 
 ## What is VeyAmux?
 
-VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch or another PC), from a **window or a
-whole screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
+VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch or another PC), straight from a
+**PS5 or PS4 over your home network** (PlayStation Remote Play, no capture card needed), from a **window or a whole
+screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
-- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1 or Lanczos;
+- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Lanczos;
 - **remove noise**, grain and compression blocks;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
@@ -38,7 +39,8 @@ whole screen** on your desktop, or from a **video file**, and makes it look bett
 - **record, keep an instant replay and stream** to Twitch or YouTube, all encoded on the graphics card.
 
 No capture card yet? The **built-in demo** renders a live 3D underwater world, so you can try all of it right away. The
-menu can also be steered with a **game controller**.
+menu can also be steered with a **game controller**, and on the **Steam Deck** and other handhelds it fills the screen
+and works with touch.
 
 It runs on most distributions without installing anything, and it is built for **low latency**. A captured frame is
 uploaded to the GPU once, and everything else happens there. VeyAmux needs well under 1 ms of CPU time per 4K frame.
@@ -52,7 +54,7 @@ Developed and tested on **Bazzite** (KDE Plasma) with an **AMD RX 9070 XT** and 
 
 <p align="center">
   <img src="docs/images/menu.png" width="628" alt="Part of VeyAmux's menu: upscaling with NIS, noise reduction, HDR, anti-aliasing, sound output with a live spectrum, Retro TV, Steam, OBS, instant replay and live streaming">
-  <br><sub>Part of the menu (P). The whole menu sits beside the picture, with everything visible at once and no scrolling.</sub>
+  <br><sub>Part of the menu (P). On a desktop screen the whole menu sits beside the picture, with everything visible at once and no scrolling; on handhelds it fills the screen.</sub>
 </p>
 
 ## What do I need?
@@ -63,7 +65,8 @@ needed for its own frame generation**, and everything else works without it:
 | Feature | VeyAmux alone | + Lossless Scaling and lsfg-vk |
 |---|:---:|:---:|
 | Capture cards, video files, windows and screens | ✅ | ✅ |
-| Upscaling: FSR 1, NIS, FSR 3.1, Lanczos | ✅ | ✅ |
+| PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
+| Upscaling: FSR 1, NIS, FSR 3.1.6, Lanczos | ✅ | ✅ |
 | Noise reduction, sharpness, anti-aliasing (FXAA), colour | ✅ | ✅ |
 | HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
 | Retro TV (CRT-Geom), pixel-perfect scaling | ✅ | ✅ |
@@ -107,6 +110,10 @@ needed for its own frame generation**, and everything else works without it:
     game reaches the controller.
   - **Delay:** the frame-time overlay (**F3**) shows the network, decoding and VeyAmux delay, their total, the bitrate
     and the packet loss. The console's own encoding (about 5–10 ms) cannot be measured.
+  <p align="center">
+    <img src="docs/images/remote-play.png" width="520" alt="The PlayStation Remote Play window: the linked PlayStation Network account, a registered PS5 with Play, login passcode and Forget, and the picture choices 720p/1080p, 30/60 fps and HDR">
+    <br><sub>The Remote Play window (example console).</sub>
+  </p>
   - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
     now (not over the internet).
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
@@ -122,7 +129,7 @@ needed for its own frame generation**, and everything else works without it:
 - **Upscaling** 1.5× / 2× / 3×:
   - **AMD FSR 1**: edge-aware upscaling with sharpening, frame by frame, no added latency.
   - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
-  - **AMD FSR 3.1**: temporal upscaling, fed by VeyAmux's own motion estimation.
+  - **AMD FSR 3.1.6**: temporal upscaling, fed by VeyAmux's own motion estimation.
   - **Lanczos**: sharp and classic.
 - **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
@@ -195,6 +202,11 @@ needed for its own frame generation**, and everything else works without it:
   pause), and the right touchpad works as a mouse. On handhelds (Steam Deck, ROG Ally, Legion Go and other screens
   under about 10") and in small windows the menu fills the whole window at a readable size and scrolls; **✕** in the
   corner closes it.
+
+  <p align="center">
+    <img src="docs/images/handheld-menu.jpg" width="640" alt="VeyAmux's menu on a 1280×800 handheld screen: it fills the screen in two columns with large text and a close button in the corner">
+    <br><sub>The menu on a 1280×800 handheld screen (Steam Deck size).</sub>
+  </p>
 - **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.
@@ -319,7 +331,7 @@ Veyra's original HLSL shaders are reused, compiled to SPIR-V. Built for Linux:
 - **Capture:** the low-latency capture path (V4L2 straight into the UI's Vulkan frame, with format conversion on the
   GPU), the content measurement (real frame rate and rendering resolution), and the window and screen source (portal
   and PipeWire).
-- **Processing:** FSR 1, NIS and FSR 3.1 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1.6 frame
+- **Processing:** FSR 1, NIS and FSR 3.1.6 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1.6 frame
   generation, HDR output and Retro TV.
 - **Output:** recording, replay and streaming, and the Lossless Scaling integration.
 
