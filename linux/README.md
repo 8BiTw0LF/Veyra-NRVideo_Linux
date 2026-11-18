@@ -188,6 +188,9 @@ needed for its own frame generation**, and everything else works without it:
   close the menu. While it is open, the controller only steers the menu (the game gets nothing): the D-pad or left
   stick moves, **A** chooses, left/right change a slider, **LB / RB** jump between the columns and **B** closes. Xbox,
   PlayStation, Switch and most other controllers work.
+- **Steam Deck and touchscreens**: on the Deck, Select + Start are the **View (⧉)** and **Menu (☰)** buttons. The menu
+  can also be opened without them: a tap on the touchscreen shows the controls with the menu button (a tap does not
+  pause), and the right touchpad works as a mouse.
 - **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.

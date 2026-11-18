@@ -188,8 +188,9 @@ Window {
             wake()
             if (pressed && player.demoActive) { player.demoLook(m.x - lx, m.y - ly); lx = m.x; ly = m.y }
         }
-        onClicked: { if (!player.demoActive) player.togglePlay(); wake() }
-        onDoubleClicked: { if (!player.demoActive) player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+        // a tap on a touchscreen (Steam Deck) only shows the controls with the menu button; a mouse click pauses
+        onClicked: (m) => { if (!player.demoActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay(); wake() }
+        onDoubleClicked: (m) => { if (!player.demoActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
     }
 
     // demo scene: how to swim (while the controls are shown)
