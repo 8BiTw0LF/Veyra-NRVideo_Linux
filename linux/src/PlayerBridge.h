@@ -82,6 +82,7 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool fgPaused READ fgPaused NOTIFY lsfgChanged)
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
     Q_PROPERTY(bool fxaa READ fxaa WRITE setFxaa NOTIFY enhanceChanged)
+    Q_PROPERTY(bool deflicker READ deflicker WRITE setDeflicker NOTIFY enhanceChanged)
     Q_PROPERTY(bool retroTv READ retroTv WRITE setRetroTv NOTIFY enhanceChanged)
     // UI theme: vice / code / inferno / retro (Theme.qml), saved as ui/theme
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
@@ -186,6 +187,7 @@ public:
     int upscaler() const { return int(s_.upscaler); }
     QString upscalerError() const { return upError_; }
     bool fxaa() const { return s_.fxaa; }
+    bool deflicker() const { return s_.deflicker; }
     bool retroTv() const { return s_.retroTv; }
     QString theme() const { return theme_; }
     QString language() const { return lang_; }
@@ -288,6 +290,7 @@ public:
     void setScale(double v);
     void setUpscaler(int v);
     void setFxaa(bool v);
+    void setDeflicker(bool v);
     void setRetroTv(bool v) { s_.retroTv = v; applyEnhance(); }
     void setRetroLines(int v) { s_.retroLines = (v == 0 || v == 240 || v == 480) ? v : 240; applyEnhance(); }
     void setPixelPerfect(bool v) { s_.pixelPerfect = v; applyEnhance(); }

@@ -31,6 +31,9 @@ struct EnhanceSettings {
     float scale = 1.0f;       // output scale factor (>=1)
     Upscaler upscaler = Upscaler::Lanczos;
     bool fxaa = false;
+    bool deflicker = false;   // anti-flicker: calms pixels that flicker between frames (LxDeflicker)
+    // FSR 3.1 at the native size (scale 1): AMD's "native AA", i.e. temporal anti-aliasing
+    bool fsrNativeAa() const { return enabled && upscaler == Upscaler::AmdFsr3 && scale <= 1.001f && !retroTv && !pixelPerfect; }
     Denoise denoise = Denoise::Off;
     int denoiseStrength = 1;  // 0 light, 1 medium, 2 strong
     float hdrPeak = 1000.0f;  // HDR capture (P010): brightest level of the source in nits, tone-mapped to SDR white
@@ -60,7 +63,8 @@ struct EnhanceSettings {
     bool fsrFg() const { return frameGen == FrameGenMode::FsrFree && !fgPaused; }
 
     bool isIdentity() const {
-        return !retroTv && !pixelPerfect && (!enabled || (scale <= 1.001f && !fxaa && denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
+        return !retroTv && !pixelPerfect && (!enabled || (scale <= 1.001f && !fxaa && !deflicker && upscaler != Upscaler::AmdFsr3 &&
+                            denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
                             contrast == 1.0f && saturation == 1.0f));
     }
 };
@@ -103,7 +107,7 @@ public:
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }
-    void resetHistory() { upHistory_ = false; nrHistory_ = false; }
+    void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; }
     static void outputSize(int w, int h, const EnhanceSettings& s, int& ow, int& oh);
 
     // OBS stream (live path): when maxHeight >= 0, every displayed image is downscaled to fit
@@ -188,7 +192,13 @@ private:
     ImageRes nrOut_, nrHist_[2];
     int nrCur_ = 0;
     bool nrHistory_ = false;          // the temporal denoiser has a previous result of this sequence
-    const ImageRes* recordDenoise(const ImageRes* in, const EnhanceSettings& s);
+    const ImageRes* recordDenoise(const ImageRes* in, const EnhanceSettings& s, const ImageRes* mv);
+    // the motion of this frame (one estimate shared by anti-flicker and the temporal denoiser); null on a reset
+    const ImageRes* recordMotion(const ImageRes* in);
+    ImageRes dfOut_, dfPrev_[2], dfAl_[2], dfPrev2_[2];
+    int dfCur_ = 0;
+    bool dfHistory_ = false;
+    const ImageRes* recordDeflicker(const ImageRes* in, const ImageRes* mv);
     bool upHistory_ = false;          // FSR upscaling has seen the previous frame of this sequence
     std::string upError_;
     uint64_t upFailedKey_ = 0;        // sizes at which FSR upscaling failed to start (0 = none)

@@ -528,6 +528,7 @@ void PlayerBridge::loadSettings() {
     s_.scale = float(q.value("enh/scale", 1.0).toDouble());
     s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 3));
     s_.fxaa = q.value("enh/fxaa", false).toBool();
+    s_.deflicker = q.value("enh/deflicker", false).toBool();
     s_.retroTv = q.value("enh/retroTv", false).toBool();
     { const int l = q.value("enh/retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }
     s_.pixelPerfect = q.value("enh/pixelPerfect", false).toBool();
@@ -560,7 +561,7 @@ void PlayerBridge::saveSettings() {
     q.setValue("enh/enabled", s_.enabled); q.setValue("enh/scale", double(s_.scale)); q.setValue("enh/upscaler", int(s_.upscaler));
     q.setValue("enh/retroTv", s_.retroTv); q.setValue("enh/retroLines", s_.retroLines);
     q.setValue("enh/pixelPerfect", s_.pixelPerfect); q.setValue("enh/pixelGrid", s_.pixelGrid);
-    q.setValue("enh/fxaa", s_.fxaa); q.setValue("enh/denoise", int(s_.denoise)); q.setValue("enh/denoiseStrength", s_.denoiseStrength); q.setValue("enh/hdrPeak", hdrPeak()); q.setValue("enh/vrr", s_.vrr); q.setValue("enh/frameGenMode", int(s_.frameGen)); q.setValue("enh/fxaaQuality", s_.fxaaQuality);
+    q.setValue("enh/fxaa", s_.fxaa); q.setValue("enh/deflicker", s_.deflicker); q.setValue("enh/denoise", int(s_.denoise)); q.setValue("enh/denoiseStrength", s_.denoiseStrength); q.setValue("enh/hdrPeak", hdrPeak()); q.setValue("enh/vrr", s_.vrr); q.setValue("enh/frameGenMode", int(s_.frameGen)); q.setValue("enh/fxaaQuality", s_.fxaaQuality);
     q.setValue("enh/sharpen", double(s_.sharpen)); q.setValue("enh/exposure", double(s_.exposure));
     q.setValue("enh/contrast", double(s_.contrast)); q.setValue("enh/saturation", double(s_.saturation));
     q.setValue("audio/volume", volume_); q.setValue("audio/muted", muted_);
@@ -770,6 +771,7 @@ void PlayerBridge::setUpscaler(int v) {
     applyEnhance();
 }
 void PlayerBridge::setFxaa(bool v) { s_.fxaa = v; applyEnhance(); }
+void PlayerBridge::setDeflicker(bool v) { s_.deflicker = v; applyEnhance(); }
 void PlayerBridge::setFrameGenMode(int v) {
     v = std::clamp(v, 0, 5);
     if (v == 1 || v == 4) v = 2;
@@ -831,7 +833,7 @@ void PlayerBridge::saveProfile(const QString& rawName, bool bindToSignal) {
     QSettings q;
     const QString g = "profiles/" + QString(QUrl::toPercentEncoding(name)) + "/";
     q.setValue(g + "enabled", s_.enabled); q.setValue(g + "scale", double(s_.scale)); q.setValue(g + "upscaler", int(s_.upscaler));
-    q.setValue(g + "fxaa", s_.fxaa); q.setValue(g + "fxaaQuality", s_.fxaaQuality);
+    q.setValue(g + "fxaa", s_.fxaa); q.setValue(g + "fxaaQuality", s_.fxaaQuality); q.setValue(g + "deflicker", s_.deflicker);
     q.setValue(g + "retroTv", s_.retroTv); q.setValue(g + "retroLines", s_.retroLines);
     q.setValue(g + "pixelPerfect", s_.pixelPerfect); q.setValue(g + "pixelGrid", s_.pixelGrid);
     q.setValue(g + "denoise", int(s_.denoise)); q.setValue(g + "denoiseStrength", s_.denoiseStrength);
@@ -862,6 +864,7 @@ bool PlayerBridge::loadProfile(const QString& name) {
     s_.scale = float(q.value(g + "scale", 1.0).toDouble());
     s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 3));
     s_.fxaa = q.value(g + "fxaa", false).toBool();
+    s_.deflicker = q.value(g + "deflicker", false).toBool();
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
     s_.retroTv = q.value(g + "retroTv", false).toBool();
     { const int l = q.value(g + "retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }

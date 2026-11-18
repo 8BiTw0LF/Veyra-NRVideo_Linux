@@ -70,7 +70,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -95,8 +95,9 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 }
 
 void EnhanceChain::releaseResources() {
-    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1]}) ctx_.destroy(*i);
+    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1]}) ctx_.destroy(*i);
     nrHistory_ = false;
+    dfHistory_ = false;
     if (liveMode_) retire(out8_); else ctx_.destroy(out8_);
     for (auto& b : liveStaging_) ctx_.destroy(b);
     liveStagingSize_ = 0;
@@ -217,7 +218,13 @@ void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in,
 void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const int w = w_, h = h_, ow = ow_, oh = oh_;
     const ImageRes* cur = start;
-    if (s.enabled && s.denoise != Denoise::Off) { cur = recordDenoise(cur, s); timer_.mark(ctx_.active(), GpuTimer::Denoise); }
+    const bool temporalNr = s.enabled && (s.denoise == Denoise::Temporal || s.denoise == Denoise::Both);
+    const bool deflicker = s.enabled && s.deflicker;
+    // one motion estimate per frame for anti-flicker and the temporal denoiser (both look at the source)
+    const ImageRes* mv = (temporalNr || deflicker) ? recordMotion(start) : nullptr;
+    if (deflicker) cur = recordDeflicker(cur, mv);
+    else dfHistory_ = false;
+    if (s.enabled && s.denoise != Denoise::Off) { cur = recordDenoise(cur, s, mv); timer_.mark(ctx_.active(), GpuTimer::Denoise); }
     else nrHistory_ = false;
     if (s.enabled && s.fxaa) {
         AaParams ap{};
@@ -248,7 +255,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         }
         upHistory_ = false;
         timer_.mark(ctx_.active(), GpuTimer::Upscale);
-    } else if (s.enabled && (ow != w || oh != h)) {
+    } else if (s.enabled && (ow != w || oh != h || s.fsrNativeAa())) {
         bool done = false;
         // A setup failure is not retried every frame (context creation stalls the GPU): only after the size or the
         // upscaler choice changes.
@@ -264,6 +271,9 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upError_.clear();
             upFailedKey_ = 0;
         }
+        // FSR 3.1 native AA that could not start: the picture stays as it is
+        const bool skip = !done && ow == w && oh == h;
+        if (skip) done = true;
         if (!done && s.upscaler == Upscaler::Nis) done = recordNis(*cur, w, h, ow, oh);
         if (!done && s.upscaler == Upscaler::AmdFsr1) {
             // AMD FSR 1: EASU into fin_ (free until the finishing pass), RCAS back into up_
@@ -281,7 +291,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             LanczosParams lp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
             run("LxLanczos", {cur}, {&up_}, &lp, sizeof lp, ow, oh, 16);
         }
-        cur = &up_;
+        if (!skip) cur = &up_;
         timer_.mark(ctx_.active(), GpuTimer::Upscale);
     } else {
         upHistory_ = false;
@@ -307,7 +317,39 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
 static constexpr float kNrSigma[3] = {0.010f, 0.018f, 0.028f};
 static constexpr float kNrBlend[3] = {0.6f, 0.8f, 0.9f};   // temporal: at most this much history per frame
 
-const ImageRes* EnhanceChain::recordDenoise(const ImageRes* in, const EnhanceSettings& s) {
+const ImageRes* EnhanceChain::recordMotion(const ImageRes* in) {
+    if (!nrMotion_) nrMotion_ = std::make_unique<MotionEstimator>(ctx_, dir_);
+    std::string e;
+    static const bool zeroMv = std::getenv("VEYAMUX_NR_ZEROMV") != nullptr;   // test hook: no motion
+    // a reset when neither temporal pass has history (a new sequence)
+    return nrMotion_->record(ctx_.active(), *in, (!nrHistory_ && !dfHistory_) || zeroMv, e);
+}
+
+// Anti-flicker (LxDeflicker): keeps the previous source frame and the one before it (aligned to the previous frame).
+const ImageRes* EnhanceChain::recordDeflicker(const ImageRes* in, const ImageRes* mv) {
+    const int w = w_, h = h_;
+    if (!dfOut_.image) {
+        dfOut_ = ctx_.createImage(w, h, kLinearFmt, kWork);
+        for (int i = 0; i < 2; ++i) {
+            dfPrev_[i] = ctx_.createImage(w, h, kLinearFmt, kWork);
+            dfAl_[i] = ctx_.createImage(w, h, kLinearFmt, kWork);
+            dfPrev2_[i] = ctx_.createImage(w, h, kLinearFmt, kWork);
+        }
+        dfHistory_ = false;
+        if (!dfOut_.image || !dfPrev_[0].image || !dfPrev_[1].image || !dfAl_[0].image || !dfAl_[1].image || !dfPrev2_[0].image || !dfPrev2_[1].image) return in;
+    }
+    static const float thr = std::getenv("VEYAMUX_DF_THRESHOLD") ? float(std::atof(std::getenv("VEYAMUX_DF_THRESHOLD"))) : 0.02f;
+    const int prev = dfCur_;
+    dfCur_ ^= 1;
+    struct { uint32_t w, h; float threshold, strength; uint32_t history, p0, p1, p2; } dp{
+        uint32_t(w), uint32_t(h), thr, 1.0f, (dfHistory_ && mv) ? 1u : 0u, 0, 0, 0};
+    run("LxDeflicker", {in, &dfPrev_[prev], &dfAl_[prev], mv ? mv : in, &dfPrev2_[prev]},
+        {&dfOut_, &dfPrev_[dfCur_], &dfAl_[dfCur_], &dfPrev2_[dfCur_]}, &dp, sizeof dp, w, h, 16);
+    dfHistory_ = true;
+    return &dfOut_;
+}
+
+const ImageRes* EnhanceChain::recordDenoise(const ImageRes* in, const EnhanceSettings& s, const ImageRes* mv) {
     const int w = w_, h = h_;
     if (!nrOut_.image) {
         nrOut_ = ctx_.createImage(w, h, kLinearFmt, kWork);
@@ -319,10 +361,6 @@ const ImageRes* EnhanceChain::recordDenoise(const ImageRes* in, const EnhanceSet
     const int k = std::clamp(s.denoiseStrength, 0, 2);
     const ImageRes* cur = in;
     if (s.denoise == Denoise::Temporal || s.denoise == Denoise::Both) {
-        if (!nrMotion_) nrMotion_ = std::make_unique<MotionEstimator>(ctx_, dir_);
-        std::string e;
-        static const bool zeroMv = std::getenv("VEYAMUX_NR_ZEROMV") != nullptr;   // test hook: no motion
-        const ImageRes* mv = nrMotion_->record(ctx_.active(), *in, !nrHistory_ || zeroMv, e);
         if (mv) {
             const int prev = nrCur_;
             nrCur_ ^= 1;

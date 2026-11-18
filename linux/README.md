@@ -67,7 +67,7 @@ needed for its own frame generation**, and everything else works without it:
 | Capture cards, video files, windows and screens | ✅ | ✅ |
 | PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
 | Upscaling: FSR 1, NIS, FSR 3.1.6, Lanczos | ✅ | ✅ |
-| Noise reduction, sharpness, anti-aliasing (FXAA), colour | ✅ | ✅ |
+| Noise reduction, anti-flicker, sharpness, anti-aliasing (FXAA, FSR 3.1.6 TAA), colour | ✅ | ✅ |
 | HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
 | Retro TV (CRT-Geom), pixel-perfect scaling | ✅ | ✅ |
 | Built-in demo scene, controller in the menu | ✅ | ✅ |
@@ -129,10 +129,14 @@ needed for its own frame generation**, and everything else works without it:
 - **Upscaling** 1.5× / 2× / 3×:
   - **AMD FSR 1**: edge-aware upscaling with sharpening, frame by frame, no added latency.
   - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
-  - **AMD FSR 3.1.6**: temporal upscaling, fed by VeyAmux's own motion estimation.
+  - **AMD FSR 3.1.6**: temporal upscaling, fed by VeyAmux's own motion estimation. At **Native** it works as
+    temporal anti-aliasing (TAA, AMD's "Native AA"): it calms flickering and crawling edges without enlarging the
+    picture. Games that already use TAA mostly get softer.
   - **Lanczos**: sharp and classic.
 - **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
+- **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by
+  averaging them with the two previous frames along the motion. Everything else is left alone, and it adds no delay.
 - **Sharpness**, **anti-aliasing** (FXAA from Veyra), **exposure**, **contrast** and **saturation**.
 - **Retro TV**: turns the picture into an old CRT television, with a slightly curved glass screen, rounded corners,
   visible scanlines and red-green-blue phosphor stripes. This is CRT-Geom with the same settings as ShaderGlass'

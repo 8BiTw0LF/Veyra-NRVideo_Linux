@@ -565,7 +565,7 @@ Window {
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.upscalerError !== "" ? Theme.warn : Theme.muted
                             text: player.upscalerError !== "" ? t("fsrFallback") + player.upscalerError
-                                  : (player.upscaler === 1 ? t("fsr31Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
+                                  : (player.upscaler === 1 ? (player.scale <= 1.001 ? t("fsrNativeAaHint") : t("fsr31Hint"))
                                      : player.upscaler === 2 ? t("fsr1Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
                                      : player.upscaler === 3 ? t("nisHint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
                                                              : t("lanczosHint"))
@@ -651,6 +651,12 @@ Window {
                             width: parent.width; model: t("aaq"); enabled: player.enhance && player.fxaa
                             current: player.fxaaQuality; onPicked: (i) => player.fxaaQuality = i
                         }
+                        Row {
+                            width: parent.width
+                            Text { font.family: Theme.font; text: t("deflicker"); color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
+                            ToggleSwitch { checked: player.deflicker; enabled: player.enhance; onToggled: (v) => player.deflicker = v; anchors.verticalCenter: parent.verticalCenter }
+                        }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("deflickerHint") }
                     }
                     // ---- sound output (the system default plus every output the sound server reports; refreshed when
                     // the menu opens) and a spectrum of the source's sound, so you can see whether sound comes in
