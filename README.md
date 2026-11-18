@@ -15,15 +15,17 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
 - **PlayStation Remote Play (PS5 / PS4):** play the console straight over the home network, no capture card needed,
   with all of VeyAmux's processing, the controller passed to the console and the delay shown in the overlay.
 - **Upscaling:** Lanczos, AMD FSR 1, NVIDIA Image Scaling and AMD FSR 3.1.6. **Noise reduction:** spatial and motion-compensated temporal.
-  Also sharpening, FXAA (Veyra's own shaders) and colour controls.
+  Also sharpening, FXAA (Veyra's own shaders), **FSR 3.1.6 TAA** at native resolution, **anti-flicker** and colour controls.
 - **HDR:** HDR capture and HDR10/HLG files, tone-mapped with Veyra's BT.2390 functions. Experimental HDR output on
   KDE Plasma 6 / GNOME 48. **VRR pacing** for games below the signal rate.
 - **Frame generation**: Lossless Scaling (2× / 3×) through [lsfg-vk](https://lsfg-vk.dev), or AMD FSR 3.1.6 2× built in
-  for free; switch between them in the menu.
+  for free; switch between them in the menu. An old lsfg-vk 1.x is replaced by lsfg-vk 2 automatically.
 - **Steam Deck and other handhelds:** the menu fills the screen and works with touch and the controller.
 - **Instant replay, recording, screenshots and live streaming** (Twitch/YouTube, RTMP), encoded on the GPU (VA-API).
-  **OBS browser source.** **Profiles** per capture signal. **Steam Game Mode** shortcut, start on capture-card
+  **OBS browser source.** **Profiles** per capture signal. **Steam shortcut in one click** (Steam is closed and restarted for you, with cover art), start on capture-card
   plug-in, frame-time overlay. **Automatic updates** through Gear Lever / AppImageUpdate.
+
+**New in VeyAmux 1.3:** FSR 3.1.6 TAA, anti-flicker, Add to Steam with library artwork, automatic lsfg-vk 2 install.
 
 **[⬇ Download the latest VeyAmux AppImage](../../releases/latest)** · [Linux README and install guide](linux/README.md) ·
 [technical notes (Danish)](linux/docs/TEKNISK.md)

@@ -10,9 +10,10 @@
 </p>
 
 <p align="center">
-  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
+  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
   HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
-  live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · 8 languages
+  live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · one-click Steam
+  shortcut with artwork · 8 languages
   <br>
   <a href="https://github.com/8BiTw0LF/VeyAmux/releases/latest"><b>Download the latest release</b></a> ·
   GPL-3.0 (the program: AGPL-3.0, see below) · Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a>
@@ -24,6 +25,24 @@
 
 ---
 
+## New in 1.3
+
+- **Native + FSR 3.1 (TAA):** AMD FSR 3.1.6 as anti-aliasing at the source resolution, without upscaling. Choose
+  Upscale *Native* and Method *FSR 3.1*.
+- **Anti-flicker:** calms pixels that flicker between frames (thin lines, fences, foliage, distant detail). Nothing else
+  is touched, and there is no added delay.
+- **Add to Steam, all by itself:** VeyAmux closes Steam, adds itself with a cover, a background and a logo for the
+  library, and starts Steam again.
+- **lsfg-vk 2 installed automatically:** if only an older lsfg-vk (1.x) is found, VeyAmux downloads the official
+  lsfg-vk 2 and installs it in your home folder (old files are kept in a backup folder).
+
+[All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
+
+<p align="center">
+  <img src="docs/images/steam-artwork.jpg" width="640" alt="VeyAmux's Steam library artwork: the background with the logo over it, the portrait cover and the wide cover">
+  <br><sub>The artwork VeyAmux adds to your Steam library: background with logo, cover and wide cover.</sub>
+</p>
+
 ## What is VeyAmux?
 
 VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch or another PC), straight from a
@@ -31,7 +50,7 @@ VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch o
 screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
 - **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Lanczos;
-- **remove noise**, grain and compression blocks;
+- **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA or FSR 3.1.6 TAA;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
 - **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes), or show retro games with
@@ -77,7 +96,8 @@ needed for its own frame generation**, and everything else works without it:
 | **Frame generation 2× / 3×**: Lossless Scaling (best quality) | – | ✅ |
 
 > Lossless Scaling is a paid application on Steam (by THS). lsfg-vk (CC BY-NC-ND 4.0) is a separate open-source project
-> that runs its frame generation on Linux. Neither is included: VeyAmux finds and uses **your own** installation.
+> that runs its frame generation on Linux. Neither is included: VeyAmux finds and uses **your own** installation. If only
+> an older lsfg-vk 1.x is installed, VeyAmux downloads lsfg-vk 2 from its official site and installs it for you.
 
 ## Features
 
