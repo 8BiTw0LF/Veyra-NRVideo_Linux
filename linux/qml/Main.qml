@@ -17,6 +17,9 @@ Window {
     Binding { target: Theme; property: "name"; value: player.theme }
 
     readonly property bool fs: visibility === Window.FullScreen
+    // small screens (Steam Deck and other handhelds, under ~10" wide) and small windows: the menu fills the whole window
+    readonly property real screenMm: Screen.pixelDensity > 0 ? Screen.width * Screen.devicePixelRatio / Screen.pixelDensity : 1000
+    readonly property bool compactMenu: handheld || Qt.application.arguments.indexOf("--compact-menu") >= 0 || screenMm < 260 || width < 1000
     property bool panelOpen: startPanel
     onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
     property bool controlsShown: true
@@ -439,7 +442,17 @@ Window {
             var p = t.mapToItem(win.contentItem, 0, 0), q = t.mapToItem(win.contentItem, t.width, t.height)
             x = p.x - 4; y = p.y - 4; width = q.x - p.x + 8; height = q.y - p.y + 8
         }
-        Connections { target: padNav; function onCurrentChanged() { padRing.place() } }
+        Connections { target: padNav; function onCurrentChanged() {
+            // full-window menu: scroll the selected control into view
+            if (win.compactMenu && padNav.current && panelOpen) {
+                const p = padNav.current.mapToItem(menuFlick.contentItem, 0, 0)
+                const h = padNav.current.height * area.fit
+                if (p.y < menuFlick.contentY + 20) menuFlick.contentY = Math.max(0, p.y - 40)
+                else if (p.y + h > menuFlick.contentY + menuFlick.height - 20)
+                    menuFlick.contentY = Math.min(menuFlick.contentHeight - menuFlick.height, p.y + h - menuFlick.height + 40)
+            }
+            padRing.place()
+        } }
     }
 
     // ------------------------------------------------------------- enhancement panel
@@ -447,22 +460,30 @@ Window {
     // windows), and if they still do not fit the height, the whole content is scaled down to fit.
     Rectangle {
         id: panel
-        width: Math.max(560, parent.width / 2 - 18)
-        // as tall as the (scaled) content needs, at most the window height
-        height: Math.min(parent.height - 24, area.contentH * area.fit + 2 * area.anchors.margins)
-        y: 12
-        x: parent.width - width - 12            // always anchored; never animates on window resize (fullscreen)
+        width: win.compactMenu ? parent.width : Math.max(560, parent.width / 2 - 18)
+        // as tall as the (scaled) content needs, at most the window height (small screens: the whole window)
+        height: win.compactMenu ? parent.height : Math.min(parent.height - 24, area.contentH * area.fit + 2 * area.anchors.margins)
+        y: win.compactMenu ? 0 : 12
+        x: win.compactMenu ? 0 : parent.width - width - 12   // always anchored; never animates on window resize (fullscreen)
         opacity: panelOpen ? 1 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 160 } }
-        radius: 18 * Theme.round
+        radius: win.compactMenu ? 0 : 18 * Theme.round
         // HDR output: fully opaque. Bright HDR video behind a 95 % panel shines through several times stronger than in
         // SDR (up to ~7x SDR white) and greys out the menu.
-        color: player.hdrOutputActive ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
+        color: player.hdrOutputActive || win.compactMenu ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
         border.color: Theme.border
         // sunset line along the top edge
         Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1 * Theme.round; gradient: Theme.sunset; opacity: 0.85 }
         MouseArea { id: panelEater; anchors.fill: parent; hoverEnabled: true; onPositionChanged: { wake(); padNav.active = false } }   // keep controls awake & eat clicks
+        // full-window menu: nothing is left to click beside it, so it gets its own close button (touch)
+        Rectangle {
+            visible: win.compactMenu; z: 10
+            anchors { right: parent.right; top: parent.top; margins: 8 }
+            width: 44; height: 44; radius: 22 * Theme.round; color: closeMa.containsMouse ? Theme.surfaceHover : Theme.surface
+            Text { anchors.centerIn: parent; text: "✕"; color: Theme.text; font.pixelSize: 20 }
+            MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.panelOpen = false }
+        }
 
         component Param: Column {
             id: p
@@ -481,20 +502,31 @@ Window {
 
         Item {
             id: area
-            anchors { fill: parent; margins: 26 }
+            anchors { fill: parent; margins: 26; topMargin: win.compactMenu ? 60 : 26 }
             // The menu is laid out at a fixed design width and then scaled as one piece to the panel (half the window),
             // so text, controls and spacing all grow and shrink together. Three columns, two in tall narrow windows.
-            readonly property int cols: width / Math.max(1, win.height - 76) >= 0.75 ? 3 : 2
+            readonly property int cols: win.compactMenu ? 2 : width / Math.max(1, win.height - 76) >= 0.75 ? 3 : 2
             readonly property real gap: 36
             readonly property real designW: cols === 3 ? 1220 : 820
             readonly property real colW: (designW - (cols - 1) * gap) / cols
             readonly property real contentW: designW
             readonly property real contentH: cols === 3 ? Math.max(secA.height, secB.height, secC.height)
                                                         : Math.max(secA.height + gap + secB.height, secC.height)
-            readonly property real fit: Math.min(width / designW, (win.height - 24 - 2 * anchors.margins) / Math.max(1, contentH))
+            readonly property real fit: win.compactMenu ? width / designW
+                                                        : Math.min(width / designW, (win.height - 24 - 2 * anchors.margins) / Math.max(1, contentH))
             Component.onCompleted: if (Qt.application.arguments.indexOf("--layout-debug") >= 0) layoutDbg.start()
             Timer { id: layoutDbg; interval: 3000; onTriggered: { console.log("LAYOUT cols", area.cols, "W", area.width, "H", win.height, "designW", area.designW, "contentH", area.contentH, "A", secA.height, "B", secB.height, "C", secC.height, "fitW", (area.width / area.designW).toFixed(3), "fit", area.fit.toFixed(3)); for (const c of [secA, secB, secC]) { let o = []; for (let i = 0; i < c.children.length; ++i) o.push(Math.round(c.children[i].height)); console.log("LAYOUT col", o.join(" ")) } } }
 
+            // small screens: the menu is shown at a readable size and scrolls (drag with a finger / the touchpad;
+            // the controller scrolls to what it selects)
+            Flickable {
+                id: menuFlick
+                anchors.fill: parent
+                interactive: win.compactMenu
+                clip: win.compactMenu
+                contentWidth: width; contentHeight: content.height * area.fit
+                boundsBehavior: Flickable.StopAtBounds
+                onContentYChanged: padRing.place()
             Item {
                 id: content
                 width: area.contentW; height: area.contentH
@@ -863,6 +895,7 @@ Window {
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     RecordSection { width: parent.width; tr: win.t }
                 }
+            }
             }
         }
     }

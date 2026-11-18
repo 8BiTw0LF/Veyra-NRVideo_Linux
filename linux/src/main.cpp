@@ -305,6 +305,18 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("player", &player);
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);
+    // a handheld PC (Steam Deck, ROG Ally, Legion Go, ...): the menu fills the whole window (Main.qml compactMenu)
+    const bool handheld = [] {
+        if (qEnvironmentVariable("SteamDeck") == "1") return true;   // set by Steam in the Deck's Game Mode
+        QFile f("/sys/class/dmi/id/product_name");
+        if (!f.open(QIODevice::ReadOnly)) return false;
+        const QString n = QString::fromLatin1(f.readAll()).trimmed();
+        static const char* names[] = {"Jupiter", "Galileo", "ROG Ally", "RC71L", "RC72L", "Legion Go", "83E1", "83L3",
+                                      "AYANEO", "AYA NEO", "ONEXPLAYER", "ONE XPLAYER", "Claw", "G1618", "G1619", "WIN 4", "WIN Mini"};
+        for (const char* h : names) if (n.contains(QLatin1String(h), Qt::CaseInsensitive)) return true;
+        return false;
+    }();
+    engine.rootContext()->setContextProperty("handheld", handheld);
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);

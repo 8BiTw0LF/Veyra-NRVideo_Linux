@@ -190,7 +190,9 @@ needed for its own frame generation**, and everything else works without it:
   PlayStation, Switch and most other controllers work.
 - **Steam Deck and touchscreens**: on the Deck, Select + Start are the **View (⧉)** and **Menu (☰)** buttons. The menu
   can also be opened without them: a tap on the touchscreen shows the controls with the menu button (a tap does not
-  pause), and the right touchpad works as a mouse.
+  pause), and the right touchpad works as a mouse. On handhelds (Steam Deck, ROG Ally, Legion Go and other screens
+  under about 10") and in small windows the menu fills the whole window at a readable size and scrolls; **✕** in the
+  corner closes it.
 - **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.
