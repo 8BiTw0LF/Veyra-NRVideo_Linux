@@ -706,9 +706,17 @@ void PlayerBridge::checkHighRate() {
     if (!change) return;
     s_.fgPaused = fgPaused_;
     applyEnhance();
-    if (s_.lsfgFg() || s_.frameGen == veyamux::FrameGenMode::FsrFree)
+    if (s_.lsfgFg() && lsfgActive_) {
+        // lsfg-vk cannot pause: say once that it keeps going and how to stop it
+        if (fgPaused_ && !lsfgHighNoticed_) {
+            lsfgHighNoticed_ = true;
+            showNotice(L("120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it",
+                         "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den"));
+        }
+    } else if (s_.frameGen == veyamux::FrameGenMode::FsrFree) {
         showNotice(fgPaused_ ? L("120 Hz signal: frame generation paused", "120 Hz-signal: frame generation sat på pause")
                              : L("Frame generation resumed", "Frame generation kører igen"));
+    }
     updateLsfgMultiplier();
     emit lsfgChanged();
     emit mediaChanged();
@@ -771,6 +779,7 @@ bool PlayerBridge::openUrl(const QUrl& url) { return openPath(url.isLocalFile() 
 
 bool PlayerBridge::openPath(const QString& path) {
     std::string err;
+    openFile_ = path;
     demoActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
@@ -834,12 +843,20 @@ void PlayerBridge::setFrameGenMode(int v) {
     s_.frameGen = veyamux::FrameGenMode(v);
     const bool isLs = v == 2 || v == 3;
     { QSettings q; q.setValue("enh/frameGenMode", v); }
-    if (lsfgActive_) {
-        // lsfg-vk hot-reloads the multiplier: 1 = joined but no generated frames.
-        lsfgMultiplier_ = isLs && !fgPaused_ ? (v == 3 ? 3 : 2) : 1;
+    if (lsfgActive_ && isLs) {
+        // lsfg-vk hot-reloads its config: 2x <-> 3x changes while it runs
+        lsfgMultiplier_ = v == 3 ? 3 : 2;
         lsfg::writeConfig(lsfg_, lsfgMultiplier_, lsfgPerformance_, lsfgFlowScale());
     }
     applyEnhance();
+    // lsfg-vk 2 cannot be switched off while it runs (a multiplier of 1 is refused and the old config stays; without
+    // a matching profile the window stops presenting): VeyAmux starts again without it, on the same source.
+    if (lsfgActive_ && !isLs && !lsfgOffPending_) {
+        lsfgOffPending_ = true;
+        saveSettings();
+        showNotice(L("Turning Lossless Scaling off: VeyAmux restarts…", "Slår Lossless Scaling fra: VeyAmux genstarter…"));
+        QTimer::singleShot(700, this, [this] { restartWithSource(); });
+    }
     emit mediaChanged();   // the "→ N fps" part of the media line
     if (wasLs != isLs) emit lsfgChanged();
     emit lsfgChanged();
@@ -1302,11 +1319,9 @@ void PlayerBridge::setLsfgPerformance(bool v) {
 
 void PlayerBridge::updateLsfgMultiplier() {
     if (!lsfgActive_) return;
-    int m = lsfgMultiplier_;
-    if (fgPaused_) m = 1;
-    else if (s_.frameGen == veyamux::FrameGenMode::LsfgFixed3) m = 3;
-    else if (s_.lsfgFg()) m = 2;
-    else m = 1;
+    // only 2 or 3: lsfg-vk 2 refuses 1 (it cannot pause; turning it off restarts VeyAmux, see setFrameGenMode)
+    if (!s_.lsfgFg()) return;
+    const int m = s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : 2;
     const double flow = lsfgFlowScale();
     if (m == lsfgMultiplier_ && flow == lastFlow_ && QFileInfo::exists(lsfg::configPath())) return;
     lastFlow_ = flow;
@@ -1342,6 +1357,25 @@ void PlayerBridge::updateLsfgLog() {
 void PlayerBridge::retryLsfg() {
     QSettings().remove("lsfg/disabledAfterCrash");
     restartApp();
+}
+
+void PlayerBridge::restartWithSource() {
+    saveSettings();
+    const QString target = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
+    // the old source and window arguments are replaced by the current ones
+    QStringList old = QCoreApplication::arguments().mid(1), args;
+    for (int i = 0; i < old.size(); ++i) {
+        if (old[i] == "--capture" || old[i] == "--grab") { ++i; continue; }
+        if (old[i] == "--probe-ui" || old[i] == "--fullscreen" || !old[i].startsWith("--")) continue;
+        args << old[i];
+    }
+    if (engine_.isOpen() && engine_.isLive()) args << "--capture" << "last";
+    else if (engine_.isOpen() && !openFile_.isEmpty()) args << openFile_;
+    if (window_ && window_->visibility() == QWindow::FullScreen) args << "--fullscreen";
+    engine_.close();   // release the capture card before the new instance opens it
+    QSettings().sync();
+    if (QProcess::startDetached(target, args)) QCoreApplication::quit();
+    else { lsfgOffPending_ = false; showNotice(L("Restart VeyAmux to turn Lossless Scaling off", "Genstart VeyAmux for at slå Lossless Scaling fra")); }
 }
 
 void PlayerBridge::restartApp() {

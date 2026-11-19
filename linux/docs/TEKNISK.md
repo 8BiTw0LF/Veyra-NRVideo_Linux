@@ -270,8 +270,13 @@ Menu → *Frame generation*:
   sit eget vindue via `LSFGVK_CONFIG`/`LSFGVK_PROFILE`. Din egen lsfg-vk-konfiguration røres ikke.
   - lsfg-vk 2 bruger `lsfg-vk.dll` (fra Lossless Scalings *lsfg-vk*-gren i Steam, fanen Betaer), ikke `Lossless.dll`.
   - **Fast 3×**: tre gange billedfrekvensen (60 → 180 fps). Kræver en skærm med mindst den frekvens.
-  - Til/fra-skift kræver genstart (knap i menuen), fordi laget indlæses ved opstart. Crasher VeyAmux under opstart med
-    lsfg-vk, slås Lossless Scaling automatisk fra, indtil du trykker *Prøv igen*.
+  - Slå til kræver genstart (knap i menuen), fordi laget indlæses ved opstart. **Slå fra** (Off, eller skift til FSR)
+    genstarter VeyAmux af sig selv med samme kilde (`--capture last` eller filen) og fuldskærm, uden lsfg-vk
+    (`PlayerBridge::restartWithSource`): lsfg-vk 2 kan ikke slås fra, mens det kører – `multiplier = 1` afvises
+    ("multiplier must be greater than 1"), og ved en ugyldig fil beholder laget den gamle; uden en matchende profil
+    fjernes vinduets swapchain-kontekst, og præsentationen fejler. 2× ↔ 3× hot-reloades. Af samme grund holder
+    Lossless Scaling ikke pause ved 120 Hz-kilder (kun FSR gør); en besked siger det én gang. Crasher VeyAmux under
+    opstart med lsfg-vk, slås Lossless Scaling automatisk fra, indtil du trykker *Prøv igen*.
   - VeyAmux indeholder/kopierer ingen lsfg-vk- eller Lossless Scaling-kode (lsfg-vk er CC BY-NC-ND 4.0) og bundler dem ikke.
   - Findes kun en ældre lsfg-vk (manifest uden `LSFGVK`, dvs. 1.x), henter VeyAmux selv lsfg-vk 2 på brugerens maskine
     (`src/LsfgInstall.cpp`): `https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz` via libcurl (kun https), tjekkes mod en

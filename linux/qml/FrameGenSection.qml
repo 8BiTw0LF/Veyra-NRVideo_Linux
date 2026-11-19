@@ -103,7 +103,7 @@ Column {
     Option { mode: 5; title: tr("fsrFg"); detail: tr("fsrFgHint") }
 
     Text { font.family: Theme.font;
-        visible: player.fgPaused && player.frameGenMode >= 2
+        visible: player.fgPaused && player.frameGenMode === 5   // lsfg-vk cannot pause (a notice says so)
         width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.accent3
         text: tr("fgPaused")
     }

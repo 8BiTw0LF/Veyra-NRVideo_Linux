@@ -133,7 +133,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 installeret",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 er installeret i din hjemmemappe (~/.local).",
   " · decoded on the GPU (VA-API)": " · afkodet på grafikkortet (VA-API)",
-  " · decoded on the CPU": " · afkodet på processoren"
+  " · decoded on the CPU": " · afkodet på processoren",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Slår Lossless Scaling fra: VeyAmux genstarter…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Genstart VeyAmux for at slå Lossless Scaling fra",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -269,7 +272,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 installiert",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 ist in deinem Home-Ordner installiert (~/.local).",
   " · decoded on the GPU (VA-API)": " · auf der GPU dekodiert (VA-API)",
-  " · decoded on the CPU": " · auf der CPU dekodiert"
+  " · decoded on the CPU": " · auf der CPU dekodiert",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Lossless Scaling wird ausgeschaltet: VeyAmux startet neu…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Starte VeyAmux neu, um Lossless Scaling auszuschalten",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120-Hz-Signal: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um sie zu stoppen"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -405,7 +411,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 instalado",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 está instalado en tu carpeta personal (~/.local).",
   " · decoded on the GPU (VA-API)": " · decodificado en la GPU (VA-API)",
-  " · decoded on the CPU": " · decodificado en la CPU"
+  " · decoded on the CPU": " · decodificado en la CPU",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Desactivando Lossless Scaling: VeyAmux se reinicia…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Reinicia VeyAmux para desactivar Lossless Scaling",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Señal de 120 Hz: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerla"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -541,7 +550,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 installé",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 est installé dans votre dossier personnel (~/.local).",
   " · decoded on the GPU (VA-API)": " · décodé sur le GPU (VA-API)",
-  " · decoded on the CPU": " · décodé sur le CPU"
+  " · decoded on the CPU": " · décodé sur le CPU",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Désactivation de Lossless Scaling : VeyAmux redémarre…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Redémarrez VeyAmux pour désactiver Lossless Scaling",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Signal 120 Hz : Lossless Scaling continue de générer des images. Réglez la génération d'images sur Désactivée pour l'arrêter"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -677,7 +689,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 installert",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 er installert i hjemmemappen din (~/.local).",
   " · decoded on the GPU (VA-API)": " · dekodet på grafikkortet (VA-API)",
-  " · decoded on the CPU": " · dekodet på prosessoren"
+  " · decoded on the CPU": " · dekodet på prosessoren",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Slår av Lossless Scaling: VeyAmux starter på nytt…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Start VeyAmux på nytt for å slå av Lossless Scaling",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe den"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -813,7 +828,10 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 установлен",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 установлен в вашу домашнюю папку (~/.local).",
   " · decoded on the GPU (VA-API)": " · декодируется на GPU (VA-API)",
-  " · decoded on the CPU": " · декодируется на CPU"
+  " · decoded on the CPU": " · декодируется на CPU",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Отключение Lossless Scaling: VeyAmux перезапускается…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Перезапустите VeyAmux, чтобы отключить Lossless Scaling",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Сигнал 120 Гц: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить её"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -949,6 +967,9 @@
   "lsfg-vk 2 installed": "lsfg-vk 2 installerat",
   "lsfg-vk 2 is installed in your home folder (~/.local).": "lsfg-vk 2 är installerat i din hemmapp (~/.local).",
   " · decoded on the GPU (VA-API)": " · avkodat på grafikkortet (VA-API)",
-  " · decoded on the CPU": " · avkodat på processorn"
+  " · decoded on the CPU": " · avkodat på processorn",
+  "Turning Lossless Scaling off: VeyAmux restarts…": "Stänger av Lossless Scaling: VeyAmux startar om…",
+  "Restart VeyAmux to turn Lossless Scaling off": "Starta om VeyAmux för att stänga av Lossless Scaling",
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling skapar fortfarande bilder. Sätt bildgenerering till Av för att stoppa den"
  }
 }

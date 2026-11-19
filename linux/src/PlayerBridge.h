@@ -522,6 +522,11 @@ private:
     bool psStart(const QString& id, QString& error);
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
+    QString openFile_;              // the video file that is open (to reopen it after a restart)
+    bool lsfgOffPending_ = false;   // a restart without lsfg-vk is on its way
+    bool lsfgHighNoticed_ = false;  // the 120 Hz hint for Lossless Scaling was shown
+    // restarts VeyAmux with the same source (and fullscreen) - used to take lsfg-vk off the window
+    void restartWithSource();
     lsfg::Detection lsfg_;
     bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false;
     QString lsfgInstall_, lsfgInstallText_;

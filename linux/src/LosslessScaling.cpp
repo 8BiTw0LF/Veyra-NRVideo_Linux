@@ -180,7 +180,7 @@ bool writeConfig(const Detection& d, int multiplier, bool performanceMode, doubl
        << "[[profile]]\n"
        << "name = " << tomlString(kProfileName) << "\n"
        << "active_in = [\"veyamux\"]\n"
-       << "multiplier = " << std::clamp(multiplier, 1, 8) << "\n"
+       << "multiplier = " << std::clamp(multiplier, 2, 8) << "\n"   // lsfg-vk 2 refuses 1
        << "flow_scale = " << QString::number(std::clamp(flowScale, 0.25, 1.0), 'f', 2) << "\n"
        << "performance_mode = " << (performanceMode ? "true" : "false") << "\n";
     // Rewrite in place (not via rename) so lsfg-vk's file watcher keeps seeing the same file and hot-reloads it.
