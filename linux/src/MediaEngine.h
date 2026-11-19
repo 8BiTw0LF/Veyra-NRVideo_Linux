@@ -43,7 +43,7 @@ struct EngineStats {
     uint64_t dropped = 0;
     int outW = 0, outH = 0;
     bool gpuActive = false;
-    std::string upError;       // last AMD FSR upscaling error (empty = fine; Lanczos is used meanwhile)
+    std::string upError;       // last AMD FSR upscaling error (empty = fine; SGSR is used meanwhile)
     float gpuMs = -1;          // measured GPU time (Vulkan timestamps), smoothed; -1 = unknown
     std::array<float, GpuTimer::kStages> gpuStages{};
 };

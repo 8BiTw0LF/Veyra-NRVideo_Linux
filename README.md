@@ -14,7 +14,7 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
   NV12/YUYV/UYVY/P010 (HDR).
 - **PlayStation Remote Play (PS5 / PS4):** play the console straight over the home network, no capture card needed,
   with all of VeyAmux's processing, the controller passed to the console and the delay shown in the overlay.
-- **Upscaling:** Lanczos, AMD FSR 1, NVIDIA Image Scaling and AMD FSR 3.1.6. **Noise reduction:** spatial and motion-compensated temporal.
+- **Upscaling:** Snapdragon Game Super Resolution (SGSR), AMD FSR 1, NVIDIA Image Scaling and AMD FSR 3.1.6. **Noise reduction:** spatial and motion-compensated temporal.
   Also sharpening, FXAA (Veyra's own shaders), **FSR 3.1.6 TAA** at native resolution, **anti-flicker** and colour controls.
 - **HDR:** HDR capture and HDR10/HLG files, tone-mapped with Veyra's BT.2390 functions. Experimental HDR output on
   KDE Plasma 6 / GNOME 48. **VRR pacing** for games below the signal rate.

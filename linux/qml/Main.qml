@@ -555,9 +555,9 @@ Window {
                         Text { font.family: Theme.font; text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
-                            // shown as Lanczos | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
+                            // shown as SGSR | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
                             readonly property var values: [0, 2, 1, 3]
-                            model: [t("lanczos"), "FSR 1", "FSR 3.1", "NIS"]
+                            model: ["SGSR", "FSR 1", "FSR 3.1", "NIS"]
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
@@ -568,7 +568,7 @@ Window {
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? t("fsrNativeAaHint") : t("fsr31Hint"))
                                      : player.upscaler === 2 ? t("fsr1Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
                                      : player.upscaler === 3 ? t("nisHint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
-                                                             : t("lanczosHint"))
+                                                             : t("sgsrHint"))
                         }
                     }
                     Column {

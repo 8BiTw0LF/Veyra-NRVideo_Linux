@@ -6,14 +6,14 @@
 //   1. a luma pyramid of the input (LxLuma); the previous frame's pyramid is kept,
 //   2. coarse-to-fine Lucas-Kanade motion estimation between the two pyramids (LxLkLevel): sub-pixel accurate from
 //      the second frame on (FidelityFX optical flow, used for frame generation, is whole-pixel and needs ~6 frames
-//      after every reset - measured on VeyAmux test clips it made FSR worse than Lanczos),
+//      after every reset - measured on VeyAmux test clips it made FSR worse than a Lanczos-3 upscaler),
 //   3. ffxFsr3UpscalerContextDispatch with a constant "infinitely far" depth -> the upscaled frame.
 // The history (previous output) lives inside the FSR context; reset=true after seeks, cuts and size changes.
 //
 // Measured on synthetic panning clips (640x360 -> 1280x720, PSNR against the true 1280x720 frames), FSR 3.1 stays
-// below VeyAmux's Lanczos: FSR was built for games, which jitter the camera every frame and supply exact motion; video
-// does neither, and even small motion errors soften the accumulated history. It is offered as an option, Lanczos is
-// the default. Test hooks: VEYAMUX_FSR_UP_CONSTMV="x,y[;x,y]" (known motion), VEYAMUX_FSR_UP_RCAS, VEYAMUX_FSR_UP_DEBUGVIEW.
+// below a frame-by-frame Lanczos-3 upscaler: FSR was built for games, which jitter the camera every frame and supply
+// exact motion; video does neither, and even small motion errors soften the accumulated history. It is offered as an
+// option; SGSR (frame by frame) is the default. Test hooks: VEYAMUX_FSR_UP_CONSTMV="x,y[;x,y]" (known motion), VEYAMUX_FSR_UP_RCAS, VEYAMUX_FSR_UP_DEBUGVIEW.
 #pragma once
 #include <mutex>
 #include "VkContext.h"

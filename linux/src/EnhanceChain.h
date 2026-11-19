@@ -1,5 +1,5 @@
 // VeyAmux for Linux - GPU enhancement chain built from the original Veyra (Windows) HLSL shaders (compiled to SPIR-V).
-//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [Lanczos or AMD FSR 3.1 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
+//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [SGSR, AMD FSR 1, NIS or AMD FSR 3.1 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
 #pragma once
 #include <chrono>
 #include <atomic>
@@ -23,13 +23,13 @@ namespace veyamux {
 enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
-// Upscaling method used when scale > 1. AmdFsr3 falls back to Lanczos if FidelityFX cannot run.
-enum class Upscaler { Lanczos = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3 };   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
+// Upscaling method used when scale > 1. AmdFsr3 falls back to SGSR if FidelityFX cannot run.
+enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3 };   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
 
 struct EnhanceSettings {
     bool enabled = true;
     float scale = 1.0f;       // output scale factor (>=1)
-    Upscaler upscaler = Upscaler::Lanczos;
+    Upscaler upscaler = Upscaler::Sgsr;
     bool fxaa = false;
     bool deflicker = false;   // anti-flicker: calms pixels that flicker between frames (LxDeflicker)
     // FSR 3.1 at the native size (scale 1): AMD's "native AA", i.e. temporal anti-aliasing

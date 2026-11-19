@@ -28,7 +28,7 @@ struct AaParams {
 };
 static_assert(sizeof(AaParams) == 64);
 struct ScaleParams { uint32_t sw, sh, ow, oh; float encodeSrgb, ditherStep, p2, p3; };
-struct LanczosParams { uint32_t sw, sh, dw, dh; };
+struct SgsrParams { uint32_t sw, sh, dw, dh; };
 struct EnhanceParams { uint32_t w, h; float sharpen, exposure, contrast, saturation, pad[2]; };
 } // namespace
 
@@ -70,7 +70,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -214,7 +214,7 @@ void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in,
     ctx_.computeBarrier();
 }
 
-// [FXAA] -> [Lanczos] -> [sharpen/grade] -> sRGB encode into out8_.
+// [FXAA] -> [upscale: SGSR / FSR 1 / NIS / FSR 3.1] -> [sharpen/grade] -> sRGB encode into out8_.
 void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const int w = w_, h = h_, ow = ow_, oh = oh_;
     const ImageRes* cur = start;
@@ -287,9 +287,9 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             if (!noRcas) run("LxFsr1", {&fin_}, {&up_}, &fp, sizeof fp, ow, oh, 16);
             done = true;
         }
-        if (!done) {
-            LanczosParams lp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
-            run("LxLanczos", {cur}, {&up_}, &lp, sizeof lp, ow, oh, 16);
+        if (!done) {   // SGSR (also when the chosen upscaler could not run)
+            SgsrParams sp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
+            run("LxSgsr", {cur}, {&up_}, &sp, sizeof sp, ow, oh, 16);
         }
         if (!skip) cur = &up_;
         timer_.mark(ctx_.active(), GpuTimer::Upscale);

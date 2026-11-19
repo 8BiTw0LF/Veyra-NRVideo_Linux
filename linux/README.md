@@ -49,7 +49,7 @@ VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch o
 **PS5 or PS4 over your home network** (PlayStation Remote Play, no capture card needed), from a **window or a whole
 screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
-- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Lanczos;
+- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Snapdragon Game Super Resolution (SGSR);
 - **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA or FSR 3.1.6 TAA;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
@@ -85,7 +85,7 @@ needed for its own frame generation**, and everything else works without it:
 |---|:---:|:---:|
 | Capture cards, video files, windows and screens | ✅ | ✅ |
 | PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
-| Upscaling: FSR 1, NIS, FSR 3.1.6, Lanczos | ✅ | ✅ |
+| Upscaling: SGSR, FSR 1, NIS, FSR 3.1.6 | ✅ | ✅ |
 | Noise reduction, anti-flicker, sharpness, anti-aliasing (FXAA, FSR 3.1.6 TAA), colour | ✅ | ✅ |
 | HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
 | Retro TV (CRT-Geom), pixel-perfect scaling | ✅ | ✅ |
@@ -147,12 +147,13 @@ needed for its own frame generation**, and everything else works without it:
 
 ### Picture
 - **Upscaling** 1.5× / 2× / 3×:
+  - **SGSR** (default): Qualcomm's Snapdragon Game Super Resolution, edge-adaptive upscaling frame by frame, no
+    added latency.
   - **AMD FSR 1**: edge-aware upscaling with sharpening, frame by frame, no added latency.
   - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
   - **AMD FSR 3.1.6**: temporal upscaling, fed by VeyAmux's own motion estimation. At **Native** it works as
     temporal anti-aliasing (TAA, AMD's "Native AA"): it calms flickering and crawling edges without enlarging the
     picture. Games that already use TAA mostly get softer.
-  - **Lanczos**: sharp and classic.
 - **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
 - **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by

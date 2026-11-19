@@ -30,7 +30,7 @@ VeyAmux udgives kun som AppImage (Flatpak-udgaven er fjernet efter 1.1).
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
+| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → **SGSR, AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX FSR 3.1.6 upscaler (SDK 2.4.0-effektkode i SDK 1.1.4-rammen) på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -126,7 +126,13 @@ som URL-browserkilde, og `/snapshot.jpg` giver det seneste billede.
 
 ## Opskalering
 Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
-- **Lanczos** (standard) – skarp klassisk skalering billede for billede, ingen ekstra forsinkelse.
+- **SGSR** (standard) – Snapdragon Game Super Resolution 1 (Qualcomm, BSD-3-Clause, `third_party/sgsr`, uændret
+  `sgsr1_mobile.h`) som compute shader (`shaders/LxSgsr.hlsl`), ét pass billede for billede, varianten med kantretning.
+  Bilineær base + en Lanczos-2-formet korrektion langs kanter ud fra 12 nabopunkter (Gather på den grønne kanal), klemt
+  til de 4 nærmeste punkter. Køres på √(lineært lys) og kvadreres tilbage; SGSR's `saturate` er erstattet med `max(·,0)`,
+  så HDR over 1 overlever. Målt 2× (800×450 → 1600×900 af et skærmbillede, PSNR mod originalen): SGSR 26,65 dB, den
+  tidligere Lanczos-3 26,53 dB, FSR 1 26,76 dB, NIS 25,46 dB – mindre ringning end Lanczos. Bruges også, når FSR 3.1
+  ikke kan starte. Afløste den tidligere Lanczos-3.
 - **AMD FSR 1** – EASU (kantadaptiv opskalering) + RCAS (skarphed, 0,5 stop; `VEYAMUX_FSR1_RCAS=<stop>`) fra FidelityFX
   SDK'ens `ffx_fsr1.h`, billede for billede (`shaders/LxFsr1.hlsl`), i gamma-2-domænet. Målt 2×: fine detaljer 32,2 dB /
   detaljegrad 0,93 (Lanczos 32,0 dB / 0,61), naturligt motiv 49,0 / 49,5 dB, vektorgrafik 35,6 / 37,3 dB – synligt
@@ -145,7 +151,7 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   **Målt resultat** (640×360 → 1280×720, PSNR mod de ægte 1280×720-billeder, panorering med skiftende sub-pixel-forskydning,
   software-GPU): naturligt motiv Lanczos 37,3 dB / FSR 3.1 30,0 dB (33,5 dB selv med perfekt kendt bevægelse); blødt motiv
   36,4 / 32,8 dB; meget detaljeret motiv 26,6 / 25,6 dB (27,2 dB med perfekt bevægelse – det eneste tilfælde, hvor FSR slår
-  Lanczos). Konklusion: på video er FSR 3.1 blødere end Lanczos; derfor er Lanczos standard. FSR 4.1.2 findes kun som lukkede
+  Lanczos). Konklusion: på video er FSR 3.1 blødere end Lanczos; derfor var Lanczos standard (nu SGSR). FSR 4.1.2 findes kun som lukkede
   Windows-DLL'er og kan ikke bruges i et Linux-program.
 
 ## Temaer
@@ -504,5 +510,5 @@ C capture · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
 `MediaEngine` (demux/video/lyd/render-tråde) → `PlayerBridge`/`VideoItem` (Qt/QML).
 Licens: GPL-3.0 (som det oprindelige Veyra-NRVideo, som VeyAmux bygger på). Tredjepart: se `THIRD_PARTY_NOTICES_LINUX.md`.
 
-Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> lanczos|fsr|fsr1|nis [skala]` (hele forbedringskæden, til
+Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> sgsr|fsr|fsr1|nis [skala]` (hele forbedringskæden, til
 PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjreduktion til).
