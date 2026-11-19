@@ -56,8 +56,10 @@ public:
         std::function<void()> onEnded;
         std::function<void(const std::string&)> onError;
         std::function<void(const std::string&)> onGpuMessage;
-        // Zero-copy live path: raw captured frame (YUYV/UYVY/NV12/RGBA), delivered on the capture thread.
-        std::function<void(RawFrame&&)> onLiveFrame;
+        // Zero-copy live path: raw captured frame (YUYV/UYVY/NV12/RGBA), delivered on the capture thread. The receiver
+        // swaps it with a frame it no longer needs, so the capture thread gets an already allocated buffer back (no new
+        // allocation and page faults for every picture: 12 MB per 4K NV12 frame).
+        std::function<void(RawFrame&)> onLiveFrame;
         // Audio as heard (48 kHz stereo s16, before volume), with the time its first sample plays. Recording tap.
         std::function<void(const int16_t*, int frames, std::chrono::steady_clock::time_point)> onAudio;
     };
@@ -103,10 +105,37 @@ private:
         std::mutex m; std::condition_variable cv;
         std::deque<Pkt> q; size_t bytes = 0; size_t dataCount = 0; bool abort = false;
     };
+    // Picture buffers are reused: a frame hands its buffer back to the pool when it is dropped, so playback does not
+    // allocate (and page-fault) 8-33 MB for every picture.
+    struct BufferPool {
+        std::mutex m;
+        std::vector<std::vector<uint8_t>> free;
+        std::vector<uint8_t> take(size_t bytes) {
+            std::vector<uint8_t> v;
+            {
+                std::lock_guard l(m);
+                for (size_t i = 0; i < free.size(); ++i)
+                    if (free[i].capacity() >= bytes) { v.swap(free[i]); free.erase(free.begin() + long(i)); break; }
+            }
+            v.resize(bytes);
+            return v;
+        }
+        void give(std::vector<uint8_t>&& v) {
+            if (v.capacity() == 0) return;
+            std::lock_guard l(m);
+            if (free.size() < 6) free.push_back(std::move(v));
+        }
+    };
     struct Frame {
         std::vector<uint8_t> rgba; int w = 0, h = 0; double pts = 0, aspect = 1; int serial = 0; bool eos = false;
         int hdr = 0;   // 0 SDR (rgba = RGBA8), 1 PQ, 2 HLG (rgba = RGBA64: 16-bit R'G'B' in BT.2020)
+        std::shared_ptr<BufferPool> pool;   // where rgba goes back to (empty: freed normally)
+        Frame() = default;
+        Frame(const Frame&) = delete;
+        Frame& operator=(const Frame&) = delete;
+        ~Frame() { if (pool) pool->give(std::move(rgba)); }
     };
+    std::shared_ptr<BufferPool> pool_ = std::make_shared<BufferPool>();
     struct Clock {
         std::mutex m; double pts = 0; std::chrono::steady_clock::time_point wall; bool running = false;
         void set(double p);

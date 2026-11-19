@@ -75,7 +75,8 @@ bool FrameDiff::changed(const uint8_t* luma, int w, int h, int stride, int step,
         // block counts as changed only clearly above it. Even a small moving element (a cursor, a spinner) changes
         // a few blocks a lot.
         const int bw = gw / 4, bh = gh / 4;
-        std::vector<float> blocks(size_t(bw) * bh);
+        std::vector<float>& blocks = blocks_;   // kept between frames: no allocation per picture
+        blocks.resize(size_t(bw) * bh);
         for (int by = 0; by < bh; ++by)
             for (int bx = 0; bx < bw; ++bx) {
                 int s = 0;
@@ -86,7 +87,8 @@ bool FrameDiff::changed(const uint8_t* luma, int w, int h, int stride, int step,
                     }
                 blocks[size_t(by) * bw + bx] = float(s) / 16.0f;
             }
-        std::vector<float> sorted = blocks;
+        std::vector<float>& sorted = sorted_;
+        sorted.assign(blocks.begin(), blocks.end());
         std::nth_element(sorted.begin(), sorted.begin() + long(sorted.size() / 2), sorted.end());
         const float noise = sorted[sorted.size() / 2];
         const float thr = std::max(1.5f, 3.0f * noise + 1.0f);

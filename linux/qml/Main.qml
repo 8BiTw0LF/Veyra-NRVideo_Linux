@@ -22,6 +22,7 @@ Window {
     readonly property bool compactMenu: handheld || Qt.application.arguments.indexOf("--compact-menu") >= 0 || screenMm < 260 || width < 1000
     property bool panelOpen: startPanel
     onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
+    Binding { target: player; property: "meterWanted"; value: win.panelOpen }   // the spectrum is only updated while it shows
     property bool controlsShown: true
     property bool scrubbing: false
     property real scrubValue: 0
@@ -110,16 +111,16 @@ Window {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 10
                 Repeater {
-                    model: [30, 60]
+                    model: [[720, 30], [720, 60], [1080, 30], [1080, 60]]
                     delegate: Rectangle {
-                        required property int modelData
+                        required property var modelData
                         width: 132; height: 38; radius: 19 * Theme.round
                         color: dmMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.accentLine
                         border.width: Math.max(1, Theme.edge)
                         Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
-                        Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: "Demo · " + modelData + " fps"; color: Theme.text
+                        Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: modelData[0] + "p · " + modelData[1] + " fps"; color: Theme.text
                             font.pixelSize: Theme.headCaps ? 10 : 14; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
-                        MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData) }
+                        MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData[1], modelData[0]) }
                     }
                 }
             }

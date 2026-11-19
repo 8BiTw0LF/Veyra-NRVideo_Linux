@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons, the demo buttons (30 and 60 fps), the four themes and the language choice">
+  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons, the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
@@ -102,9 +102,9 @@ needed for its own frame generation**, and everything else works without it:
 ## Features
 
 ### Sources
-- **Built-in demo (no capture card needed)**: *Demo · 30 fps* or *Demo · 60 fps* on the start screen starts
+- **Built-in demo (no capture card needed)**: *720p* or *1080p* at *30* or *60 fps* on the start screen starts
   **Abyssal Garden**, an underwater world with kelp forests, light shafts, a shipwreck and manta rays. It is rendered live
-  in 1080p on your graphics card and goes through VeyAmux exactly like a console's picture. So upscaling, noise
+  in 720p or 1080p on your graphics card and goes through VeyAmux exactly like a console's picture. So upscaling, noise
   reduction, Retro TV, frame generation, recording and streaming can all be tried on a moving 3D scene.
   - **Swim:** **W A S D**, **Q / E** down / up, **Shift** faster.
   - **Look around:** drag with the mouse.
@@ -349,7 +349,7 @@ controller sticks, triggers and **Y**
 | `--capture /dev/video0` | Start on that capture card. |
 | `--capture last` | Start on the last source (the card, even under a new `/dev/videoN`, or the last shared window). |
 | `--capture screencast` | Open the desktop's share dialog for a window or screen. |
-| `--capture demo:60` | Start the built-in demo (`demo:30` for 30 fps). |
+| `--capture demo:60` | Start the built-in demo (`demo:30` for 30 fps, `demo:60:720` for 720p). |
 | `--fullscreen` | Start fullscreen. |
 | `--panel` / `--dialog` | Start with the menu or the Capture dialog open. |
 | `--reset-ui` | Test the graphics path again (after a driver or desktop change). |

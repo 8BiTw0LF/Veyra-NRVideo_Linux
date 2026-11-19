@@ -449,7 +449,7 @@ int main(int argc, char** argv) {
                     else { p[0] = uint8_t(Y0); p[1] = uint8_t(U); p[2] = uint8_t(Y1); p[3] = uint8_t(V); }
                 }
             }
-            live->submit(std::move(f));
+            live->submit(f);
         });
         tick->start();
     }

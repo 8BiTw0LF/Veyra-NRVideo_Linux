@@ -335,13 +335,14 @@ void MediaEngine::captureLoop() {
             lastShown = clk::now();
         }
         if (toGpu) {
-            if (cb_.onLiveFrame) cb_.onLiveFrame(std::move(raw));
-            raw = RawFrame{};
+            if (cb_.onLiveFrame) cb_.onLiveFrame(raw);   // raw now holds a used buffer to fill next time
+            else raw = RawFrame{};
             continue;
         }
         auto fr = std::make_shared<Frame>();
         fr->rgba = std::move(rgba);
-        rgba = {};
+        fr->pool = pool_;
+        rgba = pool_->take(0);   // a used buffer (keeps its capacity) for the next picture
         fr->w = cap_->width(); fr->h = cap_->height();
         fr->aspect = double(fr->w) / fr->h;
         fr->serial = serial_.load();
@@ -606,7 +607,8 @@ void MediaEngine::videoLoop() {
         auto fr = std::make_shared<Frame>();
         const int bpp = hdr ? 8 : 4;
         fr->hdr = hdr;
-        fr->rgba.resize(size_t(w) * h * bpp);
+        fr->pool = pool_;
+        fr->rgba = pool_->take(size_t(w) * h * bpp);
         uint8_t* dst[4] = {fr->rgba.data(), nullptr, nullptr, nullptr};
         int dstStride[4] = {w * bpp, 0, 0, 0};
         sws_scale(sws, src->data, src->linesize, 0, h, dst, dstStride);

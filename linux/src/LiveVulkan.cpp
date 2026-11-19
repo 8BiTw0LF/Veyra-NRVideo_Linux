@@ -110,14 +110,14 @@ void LiveVulkan::setActive(bool on) {
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
 }
 
-void LiveVulkan::submit(RawFrame&& frame) {
+void LiveVulkan::submit(RawFrame& frame) {
     {
         std::lock_guard l(m_);
         const auto now = std::chrono::steady_clock::now();
         const double dt = std::chrono::duration<double, std::milli>(now - lastArrival_).count();
         lastArrival_ = now;
         if (dt > 4.0 && dt < 100.0) frameMs_ = 0.85 * frameMs_ + 0.15 * dt;
-        mailbox_ = std::move(frame);        // the newest frame always wins; an unrendered older one is simply replaced
+        std::swap(mailbox_, frame);         // the newest frame always wins; an unrendered older one goes back for reuse
         hasNew_ = true;
     }
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);

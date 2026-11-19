@@ -27,7 +27,7 @@ public:
     ~LiveVulkan() override;
 
     bool init(std::string& error);                         // load pipelines (call before the window renders)
-    void submit(veyamux::RawFrame&& frame);                  // capture thread
+    void submit(veyamux::RawFrame& frame);                   // capture thread; swaps: `frame` gets a used buffer back
     void setSettings(const veyamux::EnhanceSettings& s);
     void setActive(bool on);
     bool active() const { return active_.load(); }

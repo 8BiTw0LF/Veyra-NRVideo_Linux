@@ -107,6 +107,8 @@ struct Scene::Impl {
     std::vector<bool> bloomClear;
     WGPUBuffer readback = nullptr;
     uint32_t rowBytes = 0;
+    // how many tracked resources existed before the render targets: everything after these marks is size-dependent
+    size_t markViews = 0, markTextures = 0, markBuffers = 0, markBloomBG = 0;
 
     float UB[60]{}, UBS[60]{}, WT[4]{};
     std::array<uint8_t, CELLS> rowOrd{};
@@ -754,8 +756,9 @@ struct Scene::Impl {
         return lastError.empty() || (err = "GPU error: " + lastError, false);
     }
 
-    // ------------------------------------------------------------ render targets (fixed size)
+    // ------------------------------------------------------------ render targets (size-dependent)
     void targets() {
+        markViews = views.size(); markTextures = textures.size(); markBuffers = buffers.size(); markBloomBG = bloomBG.size();
         const auto RA = WGPUTextureUsage_RenderAttachment, TB = WGPUTextureUsage_TextureBinding;
         WGPUTexture tMS = tex(W, H, HDR, RA, 1, AA), tDp = tex(W, H, DEPTH, RA | TB, 1, AA);
         WGPUTexture tRes = tex(W, H, HDR, RA | TB), tRay = tex(W / 2, H / 2, HDR, RA | TB), tRay2 = tex(W / 2, H / 2, HDR, RA | TB);
@@ -785,6 +788,24 @@ struct Scene::Impl {
         rowBytes = (rowBytes + 255) & ~255u;
         readback = emptyBuf(size_t(rowBytes) * H, WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
         UB[52] = float(W); UB[53] = float(H); UB[54] = float(1.0 / W); UB[55] = float(1.0 / H);
+    }
+
+    // A new picture size without building the world again: the render targets are made anew.
+    void resizeTargets(int w, int h) {
+        wait();
+        for (auto* g : {bgBlur, bgRays, bgPost}) if (g) wgpuBindGroupRelease(g);
+        bgBlur = bgRays = bgPost = nullptr;
+        for (size_t i = markBloomBG; i < bloomBG.size(); i++) if (bloomBG[i]) wgpuBindGroupRelease(bloomBG[i]);
+        bloomBG.resize(markBloomBG);
+        bloomTarget.clear(); bloomClear.clear();
+        for (size_t i = markViews; i < views.size(); i++) wgpuTextureViewRelease(views[i]);
+        views.resize(markViews);
+        for (size_t i = markTextures; i < textures.size(); i++) { wgpuTextureDestroy(textures[i]); wgpuTextureRelease(textures[i]); }
+        textures.resize(markTextures);
+        for (size_t i = markBuffers; i < buffers.size(); i++) { wgpuBufferDestroy(buffers[i]); wgpuBufferRelease(buffers[i]); }
+        buffers.resize(markBuffers);
+        W = w; H = h;
+        targets();
     }
 
     // Draws the cells of a cell-sorted buffer that are in view and within [minD, maxD) as merged runs, nearest rows first.
@@ -977,6 +998,14 @@ bool Scene::frame(double dt, const Controls& in, std::vector<uint8_t>& rgba) {
     if (src) for (int y = 0; y < d->H; y++) std::memcpy(rgba.data() + size_t(y) * d->W * 4, src + size_t(y) * d->rowBytes, size_t(d->W) * 4);
     wgpuBufferUnmap(d->readback);
     return src != nullptr;
+}
+
+bool Scene::resize(int width, int height) {
+    width &= ~1; height &= ~1;
+    if (width == d->W && height == d->H) return true;
+    if (width < 64 || height < 64) return false;
+    d->resizeTargets(width, height);
+    return d->lastError.empty();
 }
 
 int Scene::width() const { return d->W; }

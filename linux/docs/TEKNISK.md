@@ -191,7 +191,7 @@ Forskelle fra originalen (billedet er det samme):
 - **Maske:** kun maske 1 er med.
 
 ## Demo-scene (Abyssal Garden)
-Kilden `demo:30` / `demo:60` er **Abyssal Garden** (https://github.com/Noniv/abyssal-garden, MIT, © 2026 Maksymilian
+Kilden `demo:<fps>[:<højde>]` (`demo:60`, `demo:30:720`) er **Abyssal Garden** (https://github.com/Noniv/abyssal-garden, MIT, © 2026 Maksymilian
 Dendura, commit `a596354`), oversat fra JavaScript/WebGPU til C++ i `src/abyssal/`.
 
 **Shaders og grafik**
@@ -212,8 +212,11 @@ Dendura, commit `a596354`), oversat fra JavaScript/WebGPU til C++ i `src/abyssal
   - Sammenlign de to mapper med `cmp`.
 
 **Billede og styring**
-- **Opløsning:** fast 1920×1080 (høj kvalitet: 4× MSAA, 4096-skyggekort, 34 lysstråle-trin). Dynamisk opløsning er
-  fjernet, så VeyAmux altid får samme størrelse.
+- **Opløsning:** 1920×1080 eller 1280×720, valgt på startskærmen (høj kvalitet: 4× MSAA, 4096-skyggekort, 34
+  lysstråle-trin). Dynamisk opløsning er fjernet, så VeyAmux får en fast størrelse pr. stream. Skift mellem 720p og
+  1080p bygger ikke verden igen: `Scene::resize` frigiver kun de størrelsesafhængige ressourcer (alt oprettet efter
+  mærkerne i `targets()`) og laver render-targets på ny. Mens størrelsen skifter, afleverer `readLatest` ingen billeder
+  af den gamle størrelse. `veyamux-abyssal-test <mappe> 1280 720 1920 1080` tester skiftet.
 - **Billedet til VeyAmux:** det læses tilbage som RGBA og afleveres som et capture-billede (`DemoSource.cpp`), så hele
   kæden virker.
 - **Billedhastighed:** 30 eller 60 fps, holdt af rendertråden.

@@ -30,6 +30,7 @@ public:
     void reset() { prev_.clear(); }
 private:
     std::vector<uint8_t> prev_, cur_;
+    std::vector<float> blocks_, sorted_;   // scratch, kept between frames
     int pw_ = 0, ph_ = 0;
 };
 

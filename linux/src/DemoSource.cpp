@@ -30,6 +30,8 @@ struct Engine {
     std::thread th;
     bool stop = false;
     int fps = 0;                       // 0: no stream open, nothing is rendered
+    int reqW = 1920, reqH = 1080;      // the size the open stream asked for
+    int frameW = 0, frameH = 0;        // the size of `frame`
     double prog = 0;
     std::string stageText;
     bool failed = false;
@@ -47,15 +49,18 @@ struct Engine {
 
     abyssal::Synth synth;
 
-    void publish(std::vector<uint8_t>& px) {
+    void publish(std::vector<uint8_t>& px, int w, int h) {
         std::lock_guard l(m);
         frame.swap(px);
+        frameW = w; frameH = h;
         serial++;
         frameTime = clk::now();
         cv.notify_all();
     }
     // the picture while the world is built: dark water with a progress bar
     void loadingFrame(double p) {
+        int kWidth, kHeight;
+        { std::lock_guard l(m); kWidth = reqW; kHeight = reqH; }
         std::vector<uint8_t> px(size_t(kWidth) * kHeight * 4);
         for (int y = 0; y < kHeight; y++) {
             const double g = double(y) / kHeight;
@@ -63,14 +68,14 @@ struct Engine {
             uint8_t* row = px.data() + size_t(y) * kWidth * 4;
             for (int x = 0; x < kWidth; x++) { row[x * 4] = r; row[x * 4 + 1] = gg; row[x * 4 + 2] = b; row[x * 4 + 3] = 255; }
         }
-        const int bw = 640, bh = 10, bx = (kWidth - bw) / 2, by = kHeight / 2 + 40;
+        const int bw = kWidth / 3, bh = std::max(6, kHeight / 108), bx = (kWidth - bw) / 2, by = kHeight / 2 + 40;
         for (int y = by; y < by + bh; y++)
             for (int x = bx; x < bx + bw; x++) {
                 uint8_t* q = px.data() + (size_t(y) * kWidth + x) * 4;
                 const bool on = x - bx < int(bw * std::clamp(p, 0.0, 1.0));
                 q[0] = on ? 120 : 20; q[1] = on ? 220 : 50; q[2] = on ? 230 : 64;
             }
-        publish(px);
+        publish(px, kWidth, kHeight);
     }
     abyssal::Controls controls() {
         std::lock_guard l(im);
@@ -88,7 +93,9 @@ struct Engine {
     void run() {
         abyssal::Scene scene;
         std::string err;
-        const bool ok = scene.init(kWidth, kHeight, [this](const char* what, double p) {
+        int w0, h0;
+        { std::lock_guard l(m); w0 = reqW; h0 = reqH; }
+        const bool ok = scene.init(w0, h0, [this](const char* what, double p) {
             { std::lock_guard l(m); prog = std::min(p, 0.99); stageText = what; }
             loadingFrame(p);
         }, err);
@@ -100,12 +107,17 @@ struct Engine {
         std::vector<uint8_t> px;
         clk::time_point last = clk::now(), next = last;
         for (;;) {
-            int f;
+            int f, rw, rh;
             {
                 std::unique_lock l(m);
                 cv.wait(l, [&] { return stop || fps > 0; });
                 if (stop) return;
-                f = fps;
+                f = fps; rw = reqW; rh = reqH;
+            }
+            if ((rw != scene.width() || rh != scene.height()) && !scene.resize(rw, rh)) {
+                std::lock_guard l(m);
+                failed = true; stageText = "The demo could not change its picture size"; cv.notify_all();
+                return;
             }
             const clk::time_point now = clk::now();
             double dt = std::chrono::duration<double>(now - last).count();
@@ -119,7 +131,7 @@ struct Engine {
             double x, y, z;
             scene.camera(x, y, z);
             synth.setCamera(x, y, z);
-            publish(px);
+            publish(px, scene.width(), scene.height());
             // pace to the chosen frame rate
             next += std::chrono::nanoseconds(int64_t(1e9 / f));
             const auto after = clk::now();
@@ -173,14 +185,21 @@ void audio(int16_t* out, int frames) {
 
 Stream::~Stream() { close(); }
 
-bool Stream::open(int fps, std::string& error) {
+bool Stream::open(int fps, int height, std::string& error) {
     close();
+    height_ = heightFor(height);
+    {   // the size first, so even the loading picture has it
+        Engine* e = engine();
+        std::lock_guard l(e->m);
+        e->reqW = widthFor(height_); e->reqH = height_;
+    }
     started = true;
     Engine* e = engine();
     std::lock_guard l(e->m);
     if (e->failed) { error = e->stageText; return false; }
     fps_ = fps == 30 ? 30 : 60;
     e->fps = fps_;
+    e->frame.clear();   // a picture of the old size is not handed out
     seen_ = 0;
     open_ = true;
     e->cv.notify_all();
@@ -200,11 +219,12 @@ Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& err
     Engine* e = engine();
     std::unique_lock l(e->m);
     if (!e->cv.wait_for(l, std::chrono::milliseconds(timeoutMs), [&] { return e->serial > seen_ || e->failed || e->stop; })) return Result::Timeout;
+    seen_ = e->serial;
+    if (e->frameW != width() || e->frameH != height_) return Result::Timeout;   // still the previous size
     if (e->failed) { error = e->stageText; return Result::Error; }
     if (e->stop) { error = "The demo stopped"; return Result::Error; }
-    seen_ = e->serial;
     out.fmt = RawFrame::RGBA;
-    out.w = kWidth; out.h = kHeight; out.stride = kWidth * 4;
+    out.w = e->frameW; out.h = e->frameH; out.stride = e->frameW * 4;
     out.repeat = false;
     out.captured = e->frameTime;
     out.data.swap(e->frame);   // the producer allocates a new one
@@ -232,7 +252,7 @@ std::string stage() { return {}; }
 bool failed() { return true; }
 void audio(int16_t* out, int frames) { std::memset(out, 0, size_t(frames) * 4); }
 Stream::~Stream() = default;
-bool Stream::open(int, std::string& error) { error = "This build has no demo scene"; return false; }
+bool Stream::open(int, int, std::string& error) { error = "This build has no demo scene"; return false; }
 void Stream::close() {}
 Stream::Result Stream::readLatest(RawFrame&, int, std::string& error) { error = "This build has no demo scene"; return Result::Error; }
 void shutdown() {}

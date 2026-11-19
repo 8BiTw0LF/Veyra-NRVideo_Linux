@@ -208,8 +208,7 @@ bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const 
 
 void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in, std::initializer_list<const ImageRes*> outs,
                        const void* ubo, uint32_t uboSize, int dw, int dh, int g) {
-    std::vector<const ImageRes*> a(in), b(outs);
-    ctx_.dispatch(kernel(k), a.data(), uint32_t(a.size()), b.data(), uint32_t(b.size()), ubo, uboSize, groups(dw, g),
+    ctx_.dispatch(kernel(k), in.begin(), uint32_t(in.size()), outs.begin(), uint32_t(outs.size()), ubo, uboSize, groups(dw, g),
                   groups(dh, g));
     ctx_.computeBarrier();
 }

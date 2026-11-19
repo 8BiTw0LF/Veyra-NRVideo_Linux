@@ -1,7 +1,7 @@
 // VeyAmux for Linux: Abyssal Garden demo scene, main.js - the renderer, camera and swimming (see AbyssalMath.h).
 //
 // The original WGSL shaders run unchanged through wgpu-native (WebGPU's C implementation on Vulkan). The picture is drawn
-// at a fixed size (1920x1080 at most) into an RGBA8 texture and read back, so VeyAmux can treat it like a capture card.
+// at a chosen size (1920x1080 at most, also 1280x720) into an RGBA8 texture and read back, so VeyAmux can treat it like a capture card.
 #pragma once
 #include <cstdint>
 #include <functional>
@@ -28,6 +28,8 @@ public:
     bool init(int width, int height, const std::function<void(const char*, double)>& progress, std::string& error);
     // Moves the camera by dt seconds and draws one frame into rgba (width*height*4, tightly packed).
     bool frame(double dt, const Controls& in, std::vector<uint8_t>& rgba);
+    // Another picture size (the render targets are made anew, the world stays). false: the GPU refused.
+    bool resize(int width, int height);
     int width() const;
     int height() const;
     // camera position and speed, for the sound

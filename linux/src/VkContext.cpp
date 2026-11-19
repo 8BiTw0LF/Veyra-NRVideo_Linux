@@ -448,8 +448,12 @@ void VkContext::dispatch(VkPipeline pipeline, const ImageRes* const* sampled, ui
     VkDescriptorSet set;
     if (vkAllocateDescriptorSets(device_, &ai, &set) != VK_SUCCESS) return;
 
-    std::vector<VkWriteDescriptorSet> w;
-    w.reserve(kSampledCount + kStorageCount + kSamplerCount + 1);
+    // fixed-size (no heap allocation per dispatch; ~20 dispatches per frame)
+    struct Writes {
+        VkWriteDescriptorSet a[kSampledCount + kStorageCount + kSamplerCount + 1];
+        uint32_t n = 0;
+        void push_back(const VkWriteDescriptorSet& x) { a[n++] = x; }
+    } w;
     VkDescriptorImageInfo si[kSampledCount], sti[kStorageCount], smp[kSamplerCount];
     for (uint32_t i = 0; i < kSampledCount; ++i) {
         const ImageRes* im = (i < sampledCount && sampled[i]) ? sampled[i] : nullptr;
@@ -502,7 +506,7 @@ void VkContext::dispatch(VkPipeline pipeline, const ImageRes* const* sampled, ui
     ub.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     ub.pBufferInfo = &bi;
     w.push_back(ub);
-    vkUpdateDescriptorSets(device_, uint32_t(w.size()), w.data(), 0, nullptr);
+    vkUpdateDescriptorSets(device_, w.n, w.a, 0, nullptr);
 
     vkCmdBindPipeline(active_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(active_, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout_, 0, 1, &set, 0, nullptr);

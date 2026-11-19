@@ -1,5 +1,6 @@
 // Abyssal Garden demo: builds the scene without VeyAmux and renders frames to PPM files (development test).
-//   veyamux-abyssal-test <out-dir> [width height]      ABYSSAL_DUMP=<dir> also writes the generated world
+//   veyamux-abyssal-test <out-dir> [width height [width2 height2]]   ABYSSAL_DUMP=<dir> also writes the generated world
+//   width2/height2: afterwards the picture size is changed (Scene::resize) and the first viewpoint drawn again
 #include "AbyssalAudio.h"
 #include "AbyssalScene.h"
 
@@ -32,6 +33,19 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 3; i++) scene.frame(1.0 / 60, c, rgba);
         std::printf("pose %d: %.1f ms per frame\n", pose + 1, std::chrono::duration<double, std::milli>(clk::now() - f0).count() / 3);
         FILE* f = std::fopen((out + "/pose" + std::to_string(pose + 1) + ".ppm").c_str(), "wb");
+        std::fprintf(f, "P6\n%d %d\n255\n", scene.width(), scene.height());
+        for (size_t i = 0; i < rgba.size(); i += 4) std::fwrite(&rgba[i], 1, 3, f);
+        std::fclose(f);
+    }
+    if (argc > 5) {   // change the picture size without building the world again
+        const auto r0 = clk::now();
+        if (!scene.resize(std::atoi(argv[4]), std::atoi(argv[5]))) { std::fprintf(stderr, "resize failed\n"); return 1; }
+        abyssal::Controls c;
+        c.pose = 0;
+        scene.frame(1.0 / 60, c, rgba);
+        std::printf("resized to %dx%d in %.1f ms (%zu bytes)\n", scene.width(), scene.height(),
+                    std::chrono::duration<double, std::milli>(clk::now() - r0).count(), rgba.size());
+        FILE* f = std::fopen((out + "/resized.ppm").c_str(), "wb");
         std::fprintf(f, "P6\n%d %d\n255\n", scene.width(), scene.height());
         for (size_t i = 0; i < rgba.size(); i += 4) std::fwrite(&rgba[i], 1, 3, f);
         std::fclose(f);
