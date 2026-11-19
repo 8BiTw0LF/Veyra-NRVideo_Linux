@@ -105,8 +105,13 @@ struct Stats {
     uint64_t framesLost = 0; // frames the network lost since the start
     bool ps5 = false;
     bool hdr = false;
+    bool hwDecode = false;   // decoded on the graphics card (VA-API)
 };
 Stats stats();
+// Development check of the video decoder without a console: decodes an H.264 / H.265 elementary stream file the way a
+// Remote Play stream is decoded (VA-API when available). veyamux-ps-decode-test.
+struct DecodeTest { int frames = 0, w = 0, h = 0; bool hw = false, p010 = false; int firstLuma = 0; double ms = 0; std::string error; };
+DecodeTest decodeTest(const std::string& file, bool hevc);
 // 48 kHz interleaved stereo (the audio thread of the capture, like demo::audio)
 void audio(int16_t* out, int frames);
 

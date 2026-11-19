@@ -342,6 +342,8 @@ void PlayerBridge::updateOverlay() {
             r += L("\ntotal ≈ %1 ms (+ console ~8 ms) · %2 Mbit/s · loss %3 %", "\ni alt ≈ %1 ms (+ konsol ~8 ms) · %2 Mbit/s · tab %3 %")
                      .arg(net + rp.decodeMs + vey, 0, 'f', 0).arg(rp.mbit, 0, 'f', 1).arg(rp.loss * 100.0, 0, 'f', 1);
             if (rp.framesLost) r += L(" · %1 frames lost", " · %1 billeder tabt").arg(rp.framesLost);
+            r += rp.hwDecode ? L(" · decoded on the GPU (VA-API)", " · afkodet på grafikkortet (VA-API)")
+                             : L(" · decoded on the CPU", " · afkodet på processoren");
             s += r;
         }
         overlayStats_ = s;
@@ -772,10 +774,18 @@ bool PlayerBridge::openPath(const QString& path) {
     demoActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
-    if (!engine_.open(path.toStdString(), err)) {
+    // the picture goes straight to the window's Vulkan frame when it can (VEYAMUX_FILE_GPU=0: the CPU way)
+    const bool zeroCopy = liveVk_ != nullptr && qEnvironmentVariable("VEYAMUX_FILE_GPU") != "0";
+    if (!engine_.open(path.toStdString(), err, zeroCopy)) {
         setStatus(translateMessage(QString::fromStdString(err)));
         emit mediaChanged();
         return false;
+    }
+    if (engine_.isRawLive()) {
+        qInfo("Video file: decoded pictures go straight to the GPU (%s decoding)", engine_.hwDecodeActive() ? "VA-API" : "software");
+        if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
+        liveVk_->setSettings(s_);
+        liveVk_->setActive(true);
     }
     updateLsfgMultiplier();
     engine_.setVolume(float(volume_));

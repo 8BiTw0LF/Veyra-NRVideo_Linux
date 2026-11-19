@@ -367,7 +367,11 @@ bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, l
 - **Vækning:** `chiaki_discovery_wakeup` med regist-nøglen som hex-tal, gentaget hvert 5. sekund, op til 40 s, indtil
   konsollen svarer "ready".
 - **Stream:** PS5 H.265 (HDR: H.265 10-bit → P010, som HDR-capture), PS4 H.264, 720p/1080p, 30/60 fps. Afkodes med
-  FFmpeg (software, slice-tråde, `LOW_DELAY`) og leveres som NV12/P010 til den samme GPU-vej som capture-kort. Lyd: Opus
+  FFmpeg + **VA-API** på grafikkortet (`LOW_DELAY`, `extra_hw_frames` 2; billedet hentes som NV12/P010 med
+  `av_hwframe_transfer_data` og rækkerne kopieres), ellers software med slice-tråde (U/V flettes på CPU'en). Kan VA-API
+  ikke aflevere et billede, skiftes til software fra næste nøglebillede. `VEYAMUX_PS_SWDECODE=1` tvinger software.
+  F3-overlayet viser hvilken. Billedbufferne genbruges (ingen 3–6 MB-allokering pr. billede). Afkoderen kan testes
+  uden konsol: `veyamux-ps-decode-test <fil.h264|fil.hevc>`. Leveres til den samme GPU-vej som capture-kort. Lyd: Opus
   → 48 kHz stereo i en kø på højst 120 ms, som lydtråden læser i stedet for PulseAudio-optagelse.
 - **Controller:** `GamepadInput::padState` (PlayStation-layout: evdev-knapper, D-pad, sticks, analoge triggere,
   DualSense/DS4-touchpadens klik fra dens egen evdev-enhed) → `chiaki_session_set_controller_state`, kun når menuen er
@@ -476,6 +480,18 @@ Samme princip som Windows-versionen: billedet forlader aldrig GPU'en. Rå YUYV/U
 forbedres i Vulkan *direkte i Qt's egen frame* (samme Vulkan-enhed, ingen readback, ingen CPU-konvertering), og V4L2-køen
 tømmes så kun det nyeste billede bruges ("mailbox"). Vsync er slået fra som standard (`VEYAMUX_VSYNC=1` slår det til).
 MJPEG dekodes stadig på CPU'en.
+- **Én kopi:** et råt V4L2-billede kopieres ikke ud af driverens buffer i capture-tråden. `RawFrame::ext` peger ind i
+  den mmap'ede buffer, og `RawFrame::hold` (shared_ptr med en deleter, der laver `VIDIOC_QBUF`) holder den fra driveren,
+  til billedet er erstattet; renderen kopierer den én gang direkte til Vulkans upload-buffer. Der bedes om 6 buffere
+  (renderen kan holde to: det nyeste og det viste); med færre end 5 kopieres som før. Mappingen og fd'en deles med de
+  holdte billeder (`CaptureSource::Mapping`): efter `close()` lægges en buffer ikke tilbage, og den unmappes først, når
+  det sidste billede er væk. `VEYAMUX_CAPTURE_COPY=1` bruger den gamle vej med kopi.
+- **Ingen allokering pr. billede:** capture-tråden og renderen bytter `RawFrame`-buffere (`LiveVulkan::submit` swapper).
+- **Videofiler** går samme vej (`MediaEngine::open(..., rawToGpu)`): afkodede billeder sendes til `onLiveFrame` i
+  takt med uret – 8-bit 4:2:0 limited range som NV12 (VA-API's NV12 kopieres som rækker, software via swscale),
+  PQ-HDR som P010, alt andet som RGBA (swscale med farverum som før). Ikke for HLG eller ikke-kvadratiske pixels (de
+  bruger den gamle vej med RGB-konvertering, offscreen-Vulkan og readback). Et spring i tidslinjen sætter
+  `RawFrame::reset`, så de temporale trin starter forfra. `VEYAMUX_FILE_GPU=0` bruger den gamle vej.
 Start-logik: programmet afprøver Vulkan-UI i en barneproces og gemmer resultatet; på Wayland prøves XWayland, før det
 falder tilbage til software. `VEYAMUX_UI=software|vulkan` tvinger valg, `--reset-ui` nulstiller det gemte valg.
 
@@ -502,7 +518,7 @@ nyeste billede bruges; derefter går det samme live-spor som et capture-kort (Ra
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
 `--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
-`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
+`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 
 ## Genvejstaster
 Mellemrum afspil/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volumen · F fuldskærm · E forbedring til/fra · P panel · M lyd fra · O åbn ·

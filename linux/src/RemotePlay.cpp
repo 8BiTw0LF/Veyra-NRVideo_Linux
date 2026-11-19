@@ -12,6 +12,7 @@ extern "C" {
 #include <chiaki/regist.h>
 #include <chiaki/session.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/hwcontext.h>
 #include <libavutil/pixdesc.h>
 }
 #include <curl/curl.h>
@@ -343,6 +344,12 @@ struct Stream::Impl {
     AVCodecContext* dec = nullptr;
     AVPacket* pkt = nullptr;
     AVFrame* frame = nullptr;
+    AVFrame* swFrame = nullptr;          // a VA-API picture copied to memory (NV12 / P010)
+    AVBufferRef* hwDevice = nullptr;
+    const AVCodec* codec = nullptr;
+    std::atomic<bool> hwActive{false};   // decoding on the graphics card (VA-API)
+    bool hwFailed = false;
+    RawFrame spare;                      // the buffer of the last picture handed out, reused for the next one
 
     std::mutex m;
     std::condition_variable cv;
@@ -371,6 +378,45 @@ struct Stream::Impl {
         if (dec) avcodec_free_context(&dec);
         if (pkt) av_packet_free(&pkt);
         if (frame) av_frame_free(&frame);
+        if (swFrame) av_frame_free(&swFrame);
+        if (hwDevice) av_buffer_unref(&hwDevice);
+    }
+
+    static AVPixelFormat pickVaapi(AVCodecContext*, const AVPixelFormat* fmts) {
+        for (const AVPixelFormat* p = fmts; *p != AV_PIX_FMT_NONE; ++p) if (*p == AV_PIX_FMT_VAAPI) return *p;
+        for (const AVPixelFormat* p = fmts; *p != AV_PIX_FMT_NONE; ++p) {
+            const AVPixFmtDescriptor* d = av_pix_fmt_desc_get(*p);
+            if (d && !(d->flags & AV_PIX_FMT_FLAG_HWACCEL)) return *p;
+        }
+        return AV_PIX_FMT_NONE;
+    }
+
+    // The decoder: VA-API on the graphics card when it can (much less CPU, important on a Steam Deck), else FFmpeg's
+    // software decoder with slice threads. VEYAMUX_PS_SWDECODE=1 forces software.
+    bool openDecoder(bool tryHw, std::string& error) {
+        if (dec) avcodec_free_context(&dec);
+        dec = avcodec_alloc_context3(codec);
+        dec->flags |= AV_CODEC_FLAG_LOW_DELAY;
+        dec->thread_type = FF_THREAD_SLICE;   // frame threads would add frames of delay
+        dec->thread_count = 0;
+        hwActive = false;
+        if (tryHw && !std::getenv("VEYAMUX_PS_SWDECODE")) {
+            if (!hwDevice) {
+                const char* dev = std::getenv("VEYAMUX_VAAPI_DEVICE");
+                if (av_hwdevice_ctx_create(&hwDevice, AV_HWDEVICE_TYPE_VAAPI, dev, nullptr, 0) < 0) hwDevice = nullptr;
+            }
+            if (hwDevice) {
+                dec->hw_device_ctx = av_buffer_ref(hwDevice);
+                dec->get_format = pickVaapi;
+                dec->extra_hw_frames = 2;
+            }
+        }
+        if (avcodec_open2(dec, codec, nullptr) < 0) {
+            if (tryHw && hwDevice) return openDecoder(false, error);
+            error = "Could not open the video decoder";
+            return false;
+        }
+        return true;
     }
 
     static bool videoCb(uint8_t* buf, size_t size, int32_t framesLost, bool, void* user) {
@@ -385,20 +431,37 @@ struct Stream::Impl {
         pkt->size = int(size);
         if (avcodec_send_packet(dec, pkt) < 0) return false;   // false: chiaki asks the console for a new key frame
         while (avcodec_receive_frame(dec, frame) == 0) {
+            const AVFrame* use = frame;
+            if (frame->format == AV_PIX_FMT_VAAPI) {
+                av_frame_unref(swFrame);
+                if (av_hwframe_transfer_data(swFrame, frame, 0) < 0) {
+                    // the graphics card cannot hand the picture over: software decoding from the next key frame on
+                    av_frame_unref(frame);
+                    std::string e;
+                    if (!hwFailed) { hwFailed = true; openDecoder(false, e); }
+                    return false;
+                }
+                hwActive = true;
+                use = swFrame;
+            }
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             const double o = decodeMs.load();
             decodeMs = o <= 0 ? ms : o + 0.1 * (ms - o);
-            deliver();
+            deliver(use);
+            av_frame_unref(frame);
         }
         return true;
     }
 
-    // planar YUV 4:2:0 -> NV12 / P010 (what VeyAmux's GPU path converts)
-    void deliver() {
+    // -> NV12 / P010 (what VeyAmux's GPU path converts): VA-API already gives NV12 / P010 (rows are copied), the
+    // software decoder gives planar YUV 4:2:0 (U and V are interleaved here)
+    void deliver(const AVFrame* frame) {
         const int w = frame->width, h = frame->height;
-        const bool ten = frame->format == AV_PIX_FMT_YUV420P10LE;
-        if (!ten && frame->format != AV_PIX_FMT_YUV420P && frame->format != AV_PIX_FMT_YUVJ420P) return;
+        const bool semi = frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_P010LE;
+        const bool ten = frame->format == AV_PIX_FMT_YUV420P10LE || frame->format == AV_PIX_FMT_P010LE;
+        if (!semi && !ten && frame->format != AV_PIX_FMT_YUV420P && frame->format != AV_PIX_FMT_YUVJ420P) return;
         RawFrame f;
+        { std::lock_guard l(m); f.data.swap(spare.data); }   // reuse a buffer: no 3-6 MB allocation per picture
         f.fmt = ten ? RawFrame::P010 : RawFrame::NV12;
         f.w = w; f.h = h;
         const int bpp = ten ? 2 : 1;
@@ -406,7 +469,11 @@ struct Stream::Impl {
         f.data.resize(size_t(f.stride) * h * 3 / 2);
         uint8_t* y = f.data.data();
         uint8_t* uv = y + size_t(f.stride) * h;
-        if (!ten) {
+        if (semi) {
+            const size_t row = size_t(w) * bpp;
+            for (int r = 0; r < h; ++r) std::memcpy(y + size_t(r) * f.stride, frame->data[0] + size_t(r) * frame->linesize[0], row);
+            for (int r = 0; r < h / 2; ++r) std::memcpy(uv + size_t(r) * f.stride, frame->data[1] + size_t(r) * frame->linesize[1], row);
+        } else if (!ten) {
             for (int r = 0; r < h; ++r) std::memcpy(y + size_t(r) * w, frame->data[0] + size_t(r) * frame->linesize[0], w);
             for (int r = 0; r < h / 2; ++r) {
                 const uint8_t* u = frame->data[1] + size_t(r) * frame->linesize[1];
@@ -429,7 +496,8 @@ struct Stream::Impl {
         }
         f.captured = std::chrono::steady_clock::now();
         std::lock_guard l(m);
-        latest = std::move(f);
+        std::swap(latest, f);
+        if (f.data.capacity() > spare.data.capacity()) spare.data.swap(f.data);   // an unread older picture: reuse it
         fresh = true;
         cv.notify_all();
     }
@@ -509,15 +577,12 @@ bool Stream::open(const std::string& path, std::string& error) {
     const bool ps5 = p->cfg.console.ps5;
     const bool hdr = ps5 && p->cfg.hdr;
 
-    const AVCodec* codec = avcodec_find_decoder(ps5 ? AV_CODEC_ID_HEVC : AV_CODEC_ID_H264);
-    if (!codec) { error = "This FFmpeg has no H.264/H.265 decoder"; return false; }
-    p->dec = avcodec_alloc_context3(codec);
-    p->dec->flags |= AV_CODEC_FLAG_LOW_DELAY;
-    p->dec->thread_type = FF_THREAD_SLICE;   // frame threads would add frames of delay
-    p->dec->thread_count = 0;
-    if (avcodec_open2(p->dec, codec, nullptr) < 0) { error = "Could not open the video decoder"; return false; }
+    p->codec = avcodec_find_decoder(ps5 ? AV_CODEC_ID_HEVC : AV_CODEC_ID_H264);
+    if (!p->codec) { error = "This FFmpeg has no H.264/H.265 decoder"; return false; }
+    if (!p->openDecoder(true, error)) return false;
     p->pkt = av_packet_alloc();
     p->frame = av_frame_alloc();
+    p->swFrame = av_frame_alloc();
 
     ChiakiConnectInfo ci{};
     p->hostStr = p->cfg.console.host;
@@ -573,8 +638,9 @@ Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& err
     std::unique_lock l(p_->m);
     p_->cv.wait_for(l, std::chrono::milliseconds(timeoutMs), [&] { return p_->fresh || p_->quit; });
     if (p_->fresh) {
-        out = std::move(p_->latest);
+        std::swap(out, p_->latest);
         p_->fresh = false;
+        if (p_->latest.data.capacity() > p_->spare.data.capacity()) p_->spare.data.swap(p_->latest.data);   // reused next time
         return Result::Frame;
     }
     if (p_->quit) { error = p_->quitReason; return Result::Error; }
@@ -588,6 +654,51 @@ std::string Stream::name() const { return p_ ? p_->cfg.console.name + " (Remote 
 
 bool active() { std::lock_guard l(g_activeM); return g_active != nullptr; }
 
+DecodeTest decodeTest(const std::string& file, bool hevc) {
+    DecodeTest t;
+    FILE* f = std::fopen(file.c_str(), "rb");
+    if (!f) { t.error = "cannot open " + file; return t; }
+    Stream::Impl s;
+    s.codec = avcodec_find_decoder(hevc ? AV_CODEC_ID_HEVC : AV_CODEC_ID_H264);
+    if (!s.codec || !s.openDecoder(true, t.error)) { std::fclose(f); return t; }
+    s.pkt = av_packet_alloc();
+    s.frame = av_frame_alloc();
+    s.swFrame = av_frame_alloc();
+    AVCodecParserContext* parser = av_parser_init(s.codec->id);
+    std::vector<uint8_t> in(1 << 16);
+    const auto t0 = std::chrono::steady_clock::now();
+    for (;;) {
+        const size_t n = std::fread(in.data(), 1, in.size(), f);
+        const uint8_t* d = in.data();
+        size_t left = n;
+        while (left > 0 || n == 0) {
+            uint8_t* out = nullptr;
+            int outSize = 0;
+            const int used = av_parser_parse2(parser, s.dec, &out, &outSize, d, int(left), AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
+            d += used; left -= size_t(used);
+            if (outSize > 0) {
+                std::vector<uint8_t> unit(out, out + outSize);   // chiaki hands over a writable buffer, as here
+                s.decode(unit.data(), unit.size());
+                std::lock_guard l(s.m);
+                if (s.fresh) {
+                    ++t.frames;
+                    t.w = s.latest.w; t.h = s.latest.h;
+                    t.p010 = s.latest.fmt == RawFrame::P010;
+                    if (t.frames == 1) t.firstLuma = s.latest.data.empty() ? 0 : s.latest.data[size_t(s.latest.stride) * (s.latest.h / 2) + size_t(s.latest.w / 2) * (t.p010 ? 2 : 1) + (t.p010 ? 1 : 0)];
+                    s.fresh = false;
+                }
+            }
+            if (n == 0) break;
+        }
+        if (n == 0) break;
+    }
+    t.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    t.hw = s.hwActive.load();
+    av_parser_close(parser);
+    std::fclose(f);
+    return t;
+}
+
 Stats stats() {
     std::lock_guard l(g_activeM);
     Stats st;
@@ -596,6 +707,7 @@ Stats stats() {
     st.active = true;
     st.rttMs = double(s->session.rtt_us) / 1000.0;
     st.decodeMs = s->decodeMs.load();
+    st.hwDecode = s->hwActive.load();
     st.mbit = s->session.stream_connection.measured_bitrate;
     st.loss = s->session.stream_connection.congestion_control.packet_loss;
     st.framesLost = s->framesLost.load();

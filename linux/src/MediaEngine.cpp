@@ -23,6 +23,7 @@ extern "C" {
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 namespace veyamux {
 namespace {
@@ -104,7 +105,7 @@ bool MediaEngine::openVideoDecoder(bool tryHw, std::string& error) {
     return true;
 }
 
-bool MediaEngine::open(const std::string& path, std::string& error) {
+bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGpu) {
     close();
     int r = avformat_open_input(&fmt_, path.c_str(), nullptr, nullptr);
     if (r < 0) { error = "Could not open the file: " + avErr(r); fmt_ = nullptr; return false; }
@@ -141,6 +142,13 @@ bool MediaEngine::open(const std::string& path, std::string& error) {
         const AVRational fr = av_guess_frame_rate(fmt_, st, nullptr);
         info_.fps = fr.den ? av_q2d(fr) : 0.0;
         info_.videoCodec = avcodec_get_name(st->codecpar->codec_id);
+        // straight to the GPU only with square pixels (the window shows the picture at its own aspect) and without
+        // HLG (the GPU path knows PQ only); everything else keeps the CPU conversion
+        const AVRational sar = st->sample_aspect_ratio.num ? st->sample_aspect_ratio : st->codecpar->sample_aspect_ratio;
+        const bool square = sar.num == 0 || sar.num == sar.den;
+        rawLive_ = rawToGpu && square && st->codecpar->color_trc != AVCOL_TRC_ARIB_STD_B67;
+    } else {
+        rawLive_ = false;
     }
     if (aIndex_ >= 0) {
         AVStream* st = fmt_->streams[aIndex_];
@@ -159,7 +167,7 @@ bool MediaEngine::open(const std::string& path, std::string& error) {
     }
 
     quit_ = false; eof_ = false; endedFired_ = false; playing_ = false;
-    serial_ = 1; seekReq_ = -1.0; seekTarget_ = 0.0; showOne_ = true;
+    serial_ = 1; seekReq_ = -1.0; seekTarget_ = 0.0; showOne_ = true; rawReset_ = true;
     vpkts_.abort = apkts_.abort = false;
     clock_.setRunning(false);
     clock_.set(0.0);
@@ -579,6 +587,59 @@ void MediaEngine::videoLoop() {
     bool hwTried = false;
     const double frameDur = info_.fps > 0 ? 1.0 / info_.fps : 1.0 / 30.0;
 
+    SwsContext* swsRaw = nullptr;
+    auto queueFrame = [&](std::shared_ptr<Frame> fr, int serial) {
+        std::unique_lock l(fq_m_);
+        fq_cv_.wait(l, [&] { return quit_ || int(frames_.size()) < kMaxVideoFrames || serial != serial_.load(); });
+        if (quit_) return;
+        if (serial == serial_.load()) frames_.push_back(std::move(fr));
+        fq_cv_.notify_all();
+    };
+    // Straight to the GPU (rawLive_): NV12 for 8-bit 4:2:0 in limited range (VA-API gives it as is), P010 for PQ HDR,
+    // RGBA for everything else (converted here as before). The GPU path assumes limited range and BT.709 from 720p up
+    // (BT.601 below), as for capture cards; other video goes the RGBA way.
+    auto deliverRaw = [&](AVFrame* src, double pts, int serial, int hdr) -> bool {
+        const int w = src->width & ~1, h = src->height & ~1;
+        const auto fmt = AVPixelFormat(src->format);
+        const bool limited = src->color_range != AVCOL_RANGE_JPEG && fmt != AV_PIX_FMT_YUVJ420P;
+        const bool hd = h >= 720 || w >= 1280;
+        const bool matrixOk = src->colorspace == AVCOL_SPC_UNSPECIFIED || (hd ? src->colorspace == AVCOL_SPC_BT709
+                              : (src->colorspace == AVCOL_SPC_BT470BG || src->colorspace == AVCOL_SPC_SMPTE170M));
+        const AVPixFmtDescriptor* d = av_pix_fmt_desc_get(fmt);
+        const bool yuv420 = d && !(d->flags & AV_PIX_FMT_FLAG_RGB) && d->log2_chroma_w == 1 && d->log2_chroma_h == 1;
+        auto fr = std::make_shared<Frame>();
+        fr->w = w; fr->h = h; fr->pts = pts; fr->serial = serial; fr->aspect = double(w) / h;
+        fr->pool = pool_;
+        AVPixelFormat dstFmt;
+        if (hdr == 1) { dstFmt = AV_PIX_FMT_P010LE; fr->fmt = RawFrame::P010; fr->stride = w * 2; fr->hdr = 1; }
+        else if (yuv420 && limited && matrixOk) { dstFmt = AV_PIX_FMT_NV12; fr->fmt = RawFrame::NV12; fr->stride = w; }
+        else { dstFmt = AV_PIX_FMT_RGBA; fr->fmt = RawFrame::RGBA; fr->stride = w * 4; }
+        const size_t bytes = fr->fmt == RawFrame::RGBA ? size_t(fr->stride) * h : size_t(fr->stride) * h * 3 / 2;
+        fr->rgba = pool_->take(bytes);
+        uint8_t* y = fr->rgba.data();
+        uint8_t* uv = y + size_t(fr->stride) * h;
+        if (fmt == dstFmt) {   // NV12 / P010 already (VA-API): copy the rows
+            const size_t row = size_t(w) * (dstFmt == AV_PIX_FMT_P010LE ? 2 : 1);
+            for (int r = 0; r < h; ++r) std::memcpy(y + size_t(r) * fr->stride, src->data[0] + size_t(r) * src->linesize[0], row);
+            for (int r = 0; r < h / 2; ++r) std::memcpy(uv + size_t(r) * fr->stride, src->data[1] + size_t(r) * src->linesize[1], row);
+        } else {
+            swsRaw = sws_getCachedContext(swsRaw, src->width, src->height, fmt, w, h, dstFmt, SWS_BILINEAR, nullptr, nullptr, nullptr);
+            if (!swsRaw) return false;
+            if (dstFmt == AV_PIX_FMT_RGBA) {
+                int cs = hd ? SWS_CS_ITU709 : SWS_CS_ITU601;
+                if (src->colorspace == AVCOL_SPC_BT709) cs = SWS_CS_ITU709;
+                else if (src->colorspace == AVCOL_SPC_BT470BG || src->colorspace == AVCOL_SPC_SMPTE170M) cs = SWS_CS_ITU601;
+                else if (src->colorspace == AVCOL_SPC_BT2020_NCL || src->colorspace == AVCOL_SPC_BT2020_CL) cs = SWS_CS_BT2020;
+                sws_setColorspaceDetails(swsRaw, sws_getCoefficients(cs), limited ? 0 : 1, sws_getCoefficients(SWS_CS_DEFAULT), 1, 0,
+                                         1 << 16, 1 << 16);
+            }
+            uint8_t* dst[4] = {y, dstFmt == AV_PIX_FMT_RGBA ? nullptr : uv, nullptr, nullptr};
+            int dstStride[4] = {fr->stride, dstFmt == AV_PIX_FMT_RGBA ? 0 : fr->stride, 0, 0};
+            sws_scale(swsRaw, src->data, src->linesize, 0, src->height, dst, dstStride);
+        }
+        queueFrame(std::move(fr), serial);
+        return true;
+    };
     auto deliver = [&](AVFrame* src) -> bool {
         // returns false when a fatal conversion problem occurred
         double pts;
@@ -604,6 +665,7 @@ void MediaEngine::videoLoop() {
         const int srcRange = src->color_range == AVCOL_RANGE_JPEG ? 1 : 0;
         sws_setColorspaceDetails(sws, sws_getCoefficients(cs), srcRange, sws_getCoefficients(SWS_CS_DEFAULT), 1, 0,
                                  1 << 16, 1 << 16);
+        if (rawLive_.load()) return deliverRaw(src, pts, serial, hdr);
         auto fr = std::make_shared<Frame>();
         const int bpp = hdr ? 8 : 4;
         fr->hdr = hdr;
@@ -615,11 +677,7 @@ void MediaEngine::videoLoop() {
         fr->w = w; fr->h = h; fr->pts = pts; fr->serial = serial;
         const AVRational sar = av_guess_sample_aspect_ratio(fmt_, fmt_->streams[vIndex_], src);
         fr->aspect = (sar.num > 0 && sar.den > 0) ? (double(w) * sar.num / sar.den) / h : double(w) / h;
-        std::unique_lock l(fq_m_);
-        fq_cv_.wait(l, [&] { return quit_ || int(frames_.size()) < kMaxVideoFrames || serial != serial_.load(); });
-        if (quit_) return true;
-        if (serial == serial_.load()) frames_.push_back(std::move(fr));
-        fq_cv_.notify_all();
+        queueFrame(std::move(fr), serial);
         return true;
     };
 
@@ -677,6 +735,7 @@ void MediaEngine::videoLoop() {
         drain();
     }
     sws_freeContext(sws);
+    sws_freeContext(swsRaw);
     av_frame_free(&f);
     av_frame_free(&sw);
 }
@@ -832,7 +891,7 @@ void MediaEngine::ensureGpu() {
 }
 
 void MediaEngine::renderLoop() {
-    startGpu();
+    if (!rawLive_.load()) startGpu();   // straight to the GPU: the window's Vulkan device does the work
     std::vector<uint8_t> out;
     // Timeline of the previous frame (render thread only): temporal passes reset across seeks and jumps.
     double prevPts = 0.0;
@@ -868,6 +927,20 @@ void MediaEngine::renderLoop() {
         const auto t0 = steady::now();
         bool done = false;
         int ow = f->w, oh = f->h;
+        if (rawLive_.load()) {   // the window's Vulkan frame does the work (LiveVulkan), as for a capture card
+            if (cb_.onLiveFrame) {
+                RawFrame r;
+                r.fmt = RawFrame::Fmt(f->fmt);
+                r.w = f->w; r.h = f->h; r.stride = f->stride;
+                r.captured = steady::now();
+                r.reset = std::exchange(rawReset_, false);
+                r.data = std::move(f->rgba);
+                cb_.onLiveFrame(r);
+                f->rgba = std::move(r.data);   // a used buffer: back to the pool with the frame
+            }
+            setStats(t0, ow, oh, true);
+            return true;
+        }
         // HDR frames always go through the GPU: they need tone mapping even with every enhancement off
         if (gpuReady_.load() && chain_ && (!s.isIdentity() || f->hdr)) {
             std::string err;
@@ -891,7 +964,8 @@ void MediaEngine::renderLoop() {
     };
     while (!quit_) {
         if (!playing_.load() && !showOne_.load()) {
-            if (redraw_.exchange(false) && lastFrame_) {
+            // (straight to the GPU: LiveVulkan redraws the paused picture itself when the settings change)
+            if (redraw_.exchange(false) && lastFrame_ && !rawLive_.load()) {
                 if (chain_) chain_->resetHistory();
                 present(lastFrame_);
             }
@@ -959,7 +1033,10 @@ void MediaEngine::renderLoop() {
         lastFrame_ = f;
         redraw_ = false;
         // Temporal passes (FSR upscaling, temporal denoising) must not blend across a seek or a jump in the timeline.
-        if (chain_ && (f->serial != prevSerial || gap <= 0.0 || gap > 1.0)) chain_->resetHistory();
+        if (f->serial != prevSerial || gap <= 0.0 || gap > 1.0) {
+            if (chain_) chain_->resetHistory();
+            rawReset_ = true;
+        }
         present(f, float(std::max(gap, 0.0) * 1000.0));
         prevPts = f->pts;
         prevSerial = f->serial;

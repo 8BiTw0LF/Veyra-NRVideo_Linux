@@ -155,6 +155,7 @@ void LiveVulkan::onBeforeRendering() {
     }
 
     const auto t0 = std::chrono::steady_clock::now();
+    if (current_.reset) { chain_->resetHistory(); current_.reset = false; }   // a video file was seeked
     LiveInput in;
     switch (current_.fmt) {
     case RawFrame::YUYV: in.fmt = LiveInput::YUYV; break;
@@ -163,8 +164,8 @@ void LiveVulkan::onBeforeRendering() {
     case RawFrame::P010: in.fmt = LiveInput::P010; break;
     default: in.fmt = LiveInput::RGBA; break;
     }
-    in.data = current_.data.data();
-    in.size = current_.data.size();
+    in.data = current_.bytes();
+    in.size = current_.size();
     in.w = current_.w; in.h = current_.h; in.stride = current_.stride;
     in.time = current_.captured.time_since_epoch().count() ? current_.captured : std::chrono::steady_clock::now();
 

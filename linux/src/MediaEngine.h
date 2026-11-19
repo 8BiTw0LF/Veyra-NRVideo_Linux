@@ -68,7 +68,10 @@ public:
     ~MediaEngine();
 
     void setCallbacks(Callbacks cb) { cb_ = std::move(cb); }
-    bool open(const std::string& path, std::string& error);
+    // rawToGpu: the pictures go to onLiveFrame as NV12 / P010 / RGBA, paced by the clock, and are processed in the
+    // window's own Vulkan frame (no conversion to RGB on the CPU and no read-back), like a capture card. Only for
+    // files it suits (square pixels, not HLG); isRawLive() tells whether it is used.
+    bool open(const std::string& path, std::string& error, bool rawToGpu = false);
     void close();
     bool isOpen() const { return fmt_ != nullptr || live_.load(); }
     bool isLive() const { return live_.load(); }
@@ -129,6 +132,8 @@ private:
     struct Frame {
         std::vector<uint8_t> rgba; int w = 0, h = 0; double pts = 0, aspect = 1; int serial = 0; bool eos = false;
         int hdr = 0;   // 0 SDR (rgba = RGBA8), 1 PQ, 2 HLG (rgba = RGBA64: 16-bit R'G'B' in BT.2020)
+        int fmt = 0;   // RawFrame::Fmt when the file goes straight to the GPU (rawLive_): RGBA, NV12 or P010 (PQ)
+        int stride = 0;
         std::shared_ptr<BufferPool> pool;   // where rgba goes back to (empty: freed normally)
         Frame() = default;
         Frame(const Frame&) = delete;
@@ -176,6 +181,7 @@ private:
     std::unique_ptr<CaptureSource> cap_;
     std::atomic<bool> live_{false};
     std::atomic<bool> rawLive_{false};
+    bool rawReset_ = true;   // render thread: the next picture handed to the GPU starts a new sequence
     std::atomic<bool> skipRepeats_{false};   // live: drop repeated pictures (frame generation or VRR pacing is on)
     std::atomic<bool> vrrPacing_{false};     // live: space the game's pictures evenly (VRR display)
     std::string capAudioSource_;

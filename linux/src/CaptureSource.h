@@ -4,6 +4,7 @@
 #include "ContentProbe.h"
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,15 @@ struct RawFrame {
     std::vector<uint8_t> data;
     int w = 0, h = 0, stride = 0;     // stride in bytes
     bool repeat = false;              // same picture as the previous delivered frame (game slower than the signal)
+    bool reset = false;               // a jump in the timeline (video file seek): temporal passes start over
+    // Capture cards (V4L2, raw formats): the picture is not copied out of the driver's buffer. `ext` points into it and
+    // `hold` keeps it from the driver until the frame is dropped (then it is queued again), so the renderer copies it
+    // once, straight into the GPU's upload buffer. `data` is unused then.
+    const uint8_t* ext = nullptr;
+    size_t extSize = 0;
+    std::shared_ptr<void> hold;
+    const uint8_t* bytes() const { return ext ? ext : data.data(); }
+    size_t size() const { return ext ? extSize : data.size(); }
     std::chrono::steady_clock::time_point captured{};   // when the driver finished receiving it (V4L2 timestamp)
 };
 
@@ -102,6 +112,16 @@ private:
     uint32_t fourcc_ = 0;
     int rawStride_ = 0;
     std::vector<Buf> bufs_;
+    // the mappings and the device, shared with the frames that still hold a buffer (RawFrame::hold): unmapped when
+    // the last one is gone; a buffer handed back after close() is not queued again
+    struct Mapping {
+        std::mutex m;
+        int fd = -1;
+        bool live = true;
+        std::vector<Buf> bufs;
+        ~Mapping();
+    };
+    std::shared_ptr<Mapping> map_;
     bool streaming_ = false;
     int w_ = 0, h_ = 0; double fps_ = 0; std::string card_;
     FrameConverter conv_;

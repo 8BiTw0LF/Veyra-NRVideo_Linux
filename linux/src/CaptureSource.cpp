@@ -357,7 +357,8 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     if (!conv_.init(mode.fourcc, w_, h_, int(fmt.fmt.pix.bytesperline ? fmt.fmt.pix.bytesperline : w_ * 2), error)) { close(); return false; }
 
     v4l2_requestbuffers req{};
-    req.count = 4; req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; req.memory = V4L2_MEMORY_MMAP;
+    // 6: the renderer may hold two (the newest and the one on screen) without starving the card
+    req.count = 6; req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; req.memory = V4L2_MEMORY_MMAP;
     if (xioctl(fd_, VIDIOC_REQBUFS, &req) != 0 || req.count < 2) { error = "The device does not support memory-mapped streaming"; close(); return false; }
     bufs_.resize(req.count);
     for (uint32_t i = 0; i < req.count; ++i) {
@@ -372,7 +373,14 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (xioctl(fd_, VIDIOC_STREAMON, &type) != 0) { error = std::string("VIDIOC_STREAMON: ") + std::strerror(errno); close(); return false; }
     streaming_ = true;
+    map_ = std::make_shared<Mapping>();
+    map_->fd = fd_;
+    map_->bufs = bufs_;   // the mapping now belongs to map_ (unmapped with it)
     return true;
+}
+
+CaptureSource::Mapping::~Mapping() {
+    for (auto& b : bufs) if (b.start) munmap(b.start, b.length);
 }
 
 void CaptureSource::close() {
@@ -380,8 +388,10 @@ void CaptureSource::close() {
     demo_.reset();
     ps_.reset();
     if (fd_ < 0) return;
+    if (map_) { std::lock_guard l(map_->m); map_->live = false; }   // buffers still held are not queued again
     if (streaming_) { int type = V4L2_BUF_TYPE_VIDEO_CAPTURE; xioctl(fd_, VIDIOC_STREAMOFF, &type); streaming_ = false; }
-    for (auto& b : bufs_) if (b.start) munmap(b.start, b.length);
+    if (map_) map_.reset();   // unmapped when the last held frame is gone
+    else for (auto& b : bufs_) if (b.start) munmap(b.start, b.length);
     bufs_.clear();
     ::close(fd_);
     fd_ = -1;
@@ -490,6 +500,9 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
 }
 
 CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    out.hold.reset();   // a driver buffer this (recycled) frame still held goes back to the card
+    out.ext = nullptr;
+    out.extSize = 0;
     if (ps_) {
         out.repeat = false;
         const auto r = ps_->readLatest(out, timeoutMs, error);
@@ -536,7 +549,21 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
             if (len >= need) {
                 out.fmt = fourcc_ == V4L2_PIX_FMT_YUYV ? RawFrame::YUYV : fourcc_ == V4L2_PIX_FMT_UYVY ? RawFrame::UYVY
                         : p010 ? RawFrame::P010 : RawFrame::NV12;
-                out.data.assign(src, src + need);
+                // no copy here: the renderer copies straight from the driver's buffer into the GPU upload buffer
+                // (only with enough buffers: the renderer may hold two, the card must keep at least three)
+                static const bool forceCopy = std::getenv("VEYAMUX_CAPTURE_COPY") != nullptr;   // the old way, to compare
+                if (bufs_.size() < 5 || !map_ || forceCopy) {
+                    out.data.assign(src, src + need);
+                } else {
+                    out.ext = src;
+                    out.extSize = need;
+                    auto map = map_;
+                    v4l2_buffer keep = b;
+                    out.hold = std::shared_ptr<void>(nullptr, [map, keep](void*) mutable {
+                        std::lock_guard l(map->m);
+                        if (map->live) xioctl(map->fd, VIDIOC_QBUF, &keep);
+                    });
+                }
                 out.w = w_; out.h = h_; out.stride = rawStride_;
                 // luma bytes for repeat detection: NV12 every byte, YUYV every 2nd, UYVY every 2nd from 1, P010 the high bytes
                 const int step = fourcc_ == V4L2_PIX_FMT_NV12 ? 1 : 2, off = (fourcc_ == V4L2_PIX_FMT_UYVY || p010) ? 1 : 0;
@@ -554,7 +581,7 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
             }
         }
     }
-    xioctl(fd_, VIDIOC_QBUF, &b);
+    if (!out.hold) xioctl(fd_, VIDIOC_QBUF, &b);   // a held buffer is queued again when its frame is dropped
     return res;
 }
 
