@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
+  Upscaling (SGSR · FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
   HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
   live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · one-click Steam
   shortcut with artwork · 8 languages
@@ -25,18 +25,27 @@
 
 ---
 
-## New in 1.3
+## New in 1.4
 
-- **Native + FSR 3.1 (TAA):** AMD FSR 3.1.6 as anti-aliasing at the source resolution, without upscaling. Choose
-  Upscale *Native* and Method *FSR 3.1*.
-- **Anti-flicker:** calms pixels that flicker between frames (thin lines, fences, foliage, distant detail). Nothing else
-  is touched, and there is no added delay.
-- **Add to Steam, all by itself:** VeyAmux closes Steam, adds itself with a cover, a background and a logo for the
-  library, and starts Steam again.
-- **lsfg-vk 2 installed automatically:** if only an older lsfg-vk (1.x) is found, VeyAmux downloads the official
-  lsfg-vk 2 and installs it in your home folder (old files are kept in a backup folder).
+- **SGSR upscaling:** Qualcomm's Snapdragon Game Super Resolution replaces Lanczos as the default method. It sharpens
+  edges while it scales, with less ringing around text and edges, and no added delay.
+- **Abyssal Garden in 720p:** the demo now runs in 720p or 1080p, at 30 or 60 fps. 720p is ideal for trying upscaling.
+- **Faster everywhere:**
+  - **PlayStation Remote Play** is decoded on the graphics card (VA-API), which saves a lot of CPU, especially on a
+    Steam Deck.
+  - **Video files** go straight to the graphics card like a capture card, without RGB conversion on the CPU.
+  - **Capture cards** need one copy less per picture.
+  - Picture buffers are reused instead of allocated for every frame.
+- **Lossless Scaling Off really turns it off:** VeyAmux restarts without lsfg-vk on the same source (lsfg-vk 2 cannot
+  be switched off while it runs).
 
-[All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
+New in 1.3: FSR 3.1.6 TAA at native resolution, anti-flicker, *Add to Steam* with library artwork and the automatic
+lsfg-vk 2 install. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
+
+<p align="center">
+  <img src="docs/images/sgsr.png" width="900" alt="A menu screenshot at full size, and the same picture at half size scaled back up 2x with Lanczos (1.3) and with SGSR (1.4)">
+  <br><sub>Half the resolution, scaled back up 2×: Lanczos (1.3) and SGSR (1.4) next to the full-size original.</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/steam-artwork.jpg" width="640" alt="VeyAmux's Steam library artwork: the background with the logo over it, the portrait cover and the wide cover">

@@ -12,7 +12,7 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
 
 - **Capture cards with very low latency:** V4L2 → Vulkan in the UI's own frame, with no copy back to the CPU. Supports
   NV12/YUYV/UYVY/P010 (HDR).
-- **PlayStation Remote Play (PS5 / PS4):** play the console straight over the home network, no capture card needed,
+- **PlayStation Remote Play (PS5 / PS4):** play the console straight over the home network, no capture card needed, decoded on the GPU,
   with all of VeyAmux's processing, the controller passed to the console and the delay shown in the overlay.
 - **Upscaling:** Snapdragon Game Super Resolution (SGSR), AMD FSR 1, NVIDIA Image Scaling and AMD FSR 3.1.6. **Noise reduction:** spatial and motion-compensated temporal.
   Also sharpening, FXAA (Veyra's own shaders), **FSR 3.1.6 TAA** at native resolution, **anti-flicker** and colour controls.
@@ -25,7 +25,9 @@ run it. Nothing to install, and it runs on most distributions (developed on Bazz
   **OBS browser source.** **Profiles** per capture signal. **Steam shortcut in one click** (Steam is closed and restarted for you, with cover art), start on capture-card
   plug-in, frame-time overlay. **Automatic updates** through Gear Lever / AppImageUpdate.
 
-**New in VeyAmux 1.3:** FSR 3.1.6 TAA, anti-flicker, Add to Steam with library artwork, automatic lsfg-vk 2 install.
+**New in VeyAmux 1.4:** SGSR upscaling replaces Lanczos, the Abyssal Garden demo in 720p, Remote Play decoded on the GPU
+(VA-API), video files straight to the GPU, one copy less from capture cards, and Lossless Scaling *Off* now really
+turns it off.
 
 **[⬇ Download the latest VeyAmux AppImage](../../releases/latest)** · [Linux README and install guide](linux/README.md) ·
 [technical notes (Danish)](linux/docs/TEKNISK.md)
@@ -35,7 +37,7 @@ chmod +x VeyAmux-x86_64.AppImage && ./VeyAmux-x86_64.AppImage
 ```
 
 <p align="center">
-  <img src="linux/docs/images/start.png" width="480" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons">
+  <img src="linux/docs/images/start.png" width="480" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons and the 720p / 1080p demo buttons">
   <img src="linux/docs/images/remote-play.png" width="380" alt="VeyAmux's PlayStation Remote Play window">
 </p>
 
