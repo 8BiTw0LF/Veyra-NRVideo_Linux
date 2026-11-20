@@ -25,22 +25,23 @@
 
 ---
 
-## New in 1.4
+## New in 1.5
 
-- **SGSR upscaling:** Qualcomm's Snapdragon Game Super Resolution replaces Lanczos as the default method. It sharpens
-  edges while it scales, with less ringing around text and edges, and no added delay.
-- **Abyssal Garden in 720p:** the demo now runs in 720p or 1080p, at 30 or 60 fps. 720p is ideal for trying upscaling.
-- **Faster everywhere:**
-  - **PlayStation Remote Play** is decoded on the graphics card (VA-API), which saves a lot of CPU, especially on a
-    Steam Deck.
-  - **Video files** go straight to the graphics card like a capture card, without RGB conversion on the CPU.
-  - **Capture cards** need one copy less per picture.
-  - Picture buffers are reused instead of allocated for every frame.
-- **Lossless Scaling Off really turns it off:** VeyAmux restarts without lsfg-vk on the same source (lsfg-vk 2 cannot
-  be switched off while it runs).
+- **Smoother Lossless Scaling:**
+  - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of
+    33/33, and frame generation keeps that judder. VeyAmux first moves each picture to an even rhythm. This costs one
+    refresh of delay, about 17 ms at 60 Hz. Based on PushFPS via Veyra-NRVideo 2.2.0.
+  - **VRR warning:** if Adaptive Sync is on in KDE, VeyAmux warns you, because lsfg-vk 2 needs a fixed refresh rate to
+    space its frames evenly.
+- **Sharp in any window size:** the finished picture is resampled to exactly the pixels it covers in the window, and
+  then drawn 1:1. Before, it was stretched bilinearly. It is sharper when enlarged and has no crawling lines when
+  shrunk.
+- **Lock the HUD** (AMD FSR frame generation, optional): still text, maps and gauges no longer warp in the generated
+  frames.
 
-New in 1.3: FSR 3.1.6 TAA at native resolution, anti-flicker, *Add to Steam* with library artwork and the automatic
-lsfg-vk 2 install. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
+New in 1.4: SGSR upscaling instead of Lanczos, Abyssal Garden in 720p, VA-API for PlayStation Remote Play, and *Off*
+really turns Lossless Scaling off. New in 1.3: FSR 3.1.6 TAA at native resolution, anti-flicker, *Add to Steam* with
+library artwork and the automatic lsfg-vk 2 install. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
 
 <p align="center">
   <img src="docs/images/sgsr.png" width="900" alt="A menu screenshot at full size, and the same picture at half size scaled back up 2x with Lanczos (1.3) and with SGSR (1.4)">
@@ -338,6 +339,7 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 | "lsfg-vk is not installed" or an old 1.x | Press *Install lsfg-vk 2* in the menu, or install it by hand (step 3) and run `lsfg-vk-cli healthcheck`. |
 | Frame generation turned off after a crash | Press *Try again* in the menu. To start without lsfg-vk: `VEYAMUX_LSFG=0 ./VeyAmux-x86_64.AppImage` |
 | Motion does not look smoother | The display's refresh rate must match (see step 4). Log: `~/.config/VeyAmux/lsfg-vk.log` |
+| Lossless Scaling stutters or the picture seems to come and go | Turn VRR off (KDE: *Display & Monitor → Adaptive sync: Never*); VeyAmux warns when it is on. With a game locked to 30 fps, also turn on *Even out frame pacing*. |
 | "Device or resource busy" | Another program (or a hung VeyAmux) uses the capture card. VeyAmux retries for 5 seconds and shows which program holds it. |
 | No 4K @ 60 HDR mode | Many cards only send HDR (P010) at 4K30 or 1440p60 over USB. Use 4K60 NV12 (SDR), 1440p60 P010 with upscaling, or 4K30 P010 with frame generation. |
 | HDR games look washed out | Choose a **P010 (HDR)** mode under Capture (C), and set *HDR capture: source peak brightness* to the game's HDR calibration. |

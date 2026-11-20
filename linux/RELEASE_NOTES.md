@@ -1,39 +1,24 @@
-## VeyAmux-V.1.4
+## VeyAmux-V.1.5
 
-### SGSR replaces Lanczos
-**SGSR** (Qualcomm's Snapdragon Game Super Resolution, open source) is the new default upscaling method, in place of
-Lanczos. It sharpens edges while it scales, gives less ringing around text and edges, and adds no delay. It is also used
-whenever AMD FSR 3.1 cannot start. If you used Lanczos before, you now get SGSR automatically.
+### Smoother Lossless Scaling
+- **Even out frame pacing** (optional, under Frame generation): many games locked to 30 fps show their pictures unevenly,
+  for example 17 ms and 50 ms apart instead of 33 and 33. Frame generation then keeps that judder. VeyAmux now moves each
+  picture to an even rhythm before frame generation. This costs one refresh of delay, about 17 ms at 60 Hz. The
+  frame-time overlay (F3) shows how many pictures were moved. Based on PushFPS's frame pacing repair, by way of
+  Veyra-NRVideo 2.2.0 (GPL-3.0-or-later).
+- **VRR warning:** lsfg-vk 2 needs a fixed refresh rate to space its frames evenly. If Adaptive Sync (VRR) is on in KDE,
+  VeyAmux now shows a warning in the menu and a notice when you choose Lossless Scaling. Set *Adaptive sync* to
+  *Never* under *Display & Monitor*.
 
-### Abyssal Garden in 720p
-The demo on the start screen now has four buttons: **720p** or **1080p**, at **30** or **60 fps**. 720p is ideal for
-trying upscaling. Switching between them does not build the underwater world again. From a terminal, use
-`--capture demo:60:720`.
+### Sharp in any window size
+The finished picture is now resampled to exactly the pixels it covers in the window, and then drawn 1:1. Before, Qt
+stretched it with a simple bilinear filter. It is sharper when the picture is enlarged, and thin lines and text no
+longer crawl when it is shrunk (for example 4K in a 1440p window). In fullscreen at the source's own size, nothing
+changes. To compare with the old way, start VeyAmux with `VEYAMUX_NO_FIT=1`.
 
-### Faster
-- **PlayStation Remote Play:** the console's picture is decoded on the graphics card (VA-API) instead of the CPU, which
-  helps most on a Steam Deck. The frame-time overlay (F3) shows which one is used. If the graphics card cannot, VeyAmux
-  switches to the CPU by itself.
-- **Video files:** the pictures go straight to the graphics card, the same way as a capture card's. There is no
-  conversion to RGB on the CPU and no reading the picture back. HLG video and video with non-square pixels still use
-  the old way.
-- **Capture cards:** one copy less per picture, which saves about 2 ms of CPU time for each 4K picture. VeyAmux now asks
-  the card for 6 buffers.
-- **Less work for every picture:** picture buffers are reused instead of allocated anew, and the sound spectrum is only
-  updated while the menu is open.
-
-### Fixes
-- **Lossless Scaling:** setting frame generation to **Off** (or switching to FSR) did not turn Lossless Scaling off,
-  because lsfg-vk 2 cannot be switched off while it runs. Now VeyAmux restarts by itself without lsfg-vk, on the same
-  capture card or video file and in fullscreen if you were. Switching between 2× and 3× still happens at once.
-- **Lossless Scaling at 120 Hz:** lsfg-vk cannot pause, so VeyAmux now says so once instead of claiming that frame
-  generation is paused. AMD FSR frame generation still pauses by itself.
-
-### If something does not work
-Each new path can be turned off when you start VeyAmux from a terminal:
-- `VEYAMUX_CAPTURE_COPY=1`: capture cards copy as before.
-- `VEYAMUX_PS_SWDECODE=1`: Remote Play is decoded on the CPU.
-- `VEYAMUX_FILE_GPU=0`: video files use the old way.
+### Lock the HUD (AMD FSR frame generation)
+A new option keeps still text, maps and gauges from warping in the generated frames. It takes still, sharp-edged pixels
+from the real frame. Based on PushFPS, by way of Veyra-NRVideo 2.2.0.
 
 ### Download
 Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. It can update itself through the
