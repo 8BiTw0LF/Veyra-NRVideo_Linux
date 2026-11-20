@@ -97,15 +97,32 @@ Column {
         title: tr("lsPerf"); detail: tr("lsPerfHint").replace("%1", player.lsfgFlowPercent)
         checked: player.lsfgPerformance; onToggled: (v) => player.lsfgPerformance = v
     }
+    Text { font.family: Theme.font;   // VRR on in the desktop: lsfg-vk 2 cannot pace its frames
+        visible: player.lsfgVrrWarning
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.warn
+        text: tr("lsVrrWarn").replace("%1", player.vrrScreens)
+    }
 
     // AMD FSR 3.1.6 frame generation inside VeyAmux (free, open source); can be chosen next to Lossless Scaling
     Text { font.family: Theme.font; text: "AMD FSR 3.1.6"; color: Theme.label; font.pixelSize: 16; font.weight: Font.Medium; topPadding: 4 }
     Option { mode: 5; title: tr("fsrFg"); detail: tr("fsrFgHint") }
+    SubToggle {   // still HUD pixels (text, map, gauges) come from the real frame in generated frames
+        visible: player.frameGenMode === 5
+        title: tr("hudLock"); detail: tr("hudLockHint")
+        checked: player.hudLock; onToggled: (v) => player.hudLock = v
+    }
 
     Text { font.family: Theme.font;
         visible: player.fgPaused && player.frameGenMode === 5   // lsfg-vk cannot pause (a notice says so)
         width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.accent3
         text: tr("fgPaused")
+    }
+
+    // frame pacing repair: even out a locked game's uneven pictures before frame generation (capture and Remote Play)
+    SubToggle {
+        visible: player.frameGenMode !== 0
+        title: tr("pacingRepair"); detail: tr("pacingRepairHint")
+        checked: player.pacingRepair; onToggled: (v) => player.pacingRepair = v
     }
 
     // Lossless Scaling status / actions

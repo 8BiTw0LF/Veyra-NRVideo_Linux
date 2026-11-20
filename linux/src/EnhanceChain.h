@@ -40,6 +40,11 @@ struct EnhanceSettings {
     bool hdrOut = false;      // HDR display output (scRGB swapchain): out8_ holds PQ-coded light instead of sRGB
     float displayPeak = 1000.0f;   // HDR output: brightest level of the display in nits (HDR sources are mapped to it)
     bool vrr = false;         // live: show the game's own pictures at an even pace (for VRR displays; frame generation off)
+    bool pacingRepair = false;
+    // live: the exact pixel size the picture covers in the window (0 = unknown / pixel-perfect): the finished picture is
+    // resampled to it (LxFit, Catmull-Rom) so Qt draws it 1:1 instead of stretching it bilinearly
+    int fitW = 0, fitH = 0;
+    bool hudLock = false;     // FSR frame generation: still HUD pixels in generated frames come from the real frame   // live with frame generation: re-time a locked game's unevenly shown pictures (MediaEngine)
     int fxaaQuality = 1;      // 0 medium, 1 high, 2 ultra (VeyAmux AaFxaa3/4/5)
     float sharpen = 0.0f;     // 0..1
     float exposure = 0.0f;    // EV
@@ -163,9 +168,11 @@ private:
     uint32_t pqFrame_ = 0;
     void retire(ImageRes& img);
     void collectRetired();
-    bool ensureLive(int w, int h, int ow, int oh, std::string& error);
+    bool ensureLive(int w, int h, int ow, int oh, std::string& error, int dw = 0, int dh = 0);
     bool loadKernel(const std::string& name, std::string& error);
-    bool ensureResources(int w, int h, int ow, int oh, std::string& error);
+    bool ensureResources(int w, int h, int ow, int oh, std::string& error, int dw = 0, int dh = 0);
+    int dw_ = 0, dh_ = 0;   // out8_'s size: the window fit (LxFit) or ow x oh
+    ImageRes pre8_;         // the finished picture at ow x oh before LxFit (only when dw/dh differ)
     void releaseResources();
     VkPipeline kernel(const char* name) const;
 
@@ -182,6 +189,10 @@ private:
     BufferRes nisStaging_;
     bool recordNis(const ImageRes& src, int w, int h, int ow, int oh);
     ImageRes fgOut_, disp_;
+    // HUD lock (LxHudUpdate / LxHudCompose): per-pixel state, the previous real frame (ping-pong), the composed frame
+    ImageRes hudState_, hudPrev_[2], hudOut_;
+    int hudCur_ = 0;
+    bool hudLock_ = false, hudReset_ = true;
     bool fgActive_ = false, fgRealPending_ = false, fgReset_ = true;
     std::string fgError_;
     bool recordFg(VkCommandBuffer cb);

@@ -184,6 +184,23 @@ private:
     bool rawReset_ = true;   // render thread: the next picture handed to the GPU starts a new sequence
     std::atomic<bool> skipRepeats_{false};   // live: drop repeated pictures (frame generation or VRR pacing is on)
     std::atomic<bool> vrrPacing_{false};     // live: space the game's pictures evenly (VRR display)
+    // Frame pacing repair (FramePacingRepair.h): a game locked to 30 fps often shows its pictures 17/50 ms apart
+    // instead of 33/33; frame generation (Lossless Scaling above all, which works at the moment of presenting)
+    // keeps that judder. With it on, every new picture is handed on at its place on an even grid, one capture
+    // refresh later than the grid line so no picture is due before it arrived (costs that one refresh of delay).
+    std::atomic<bool> pacingRepair_{false};
+    std::atomic<bool> pacingReset_{true};
+    std::thread pacer_;
+    std::mutex pace_m_; std::condition_variable pace_cv_;
+    struct Paced { std::chrono::steady_clock::time_point due; RawFrame frame; };
+    std::deque<Paced> paced_;
+    std::vector<RawFrame> paceSpare_;       // used buffers handed back to the capture thread
+    std::atomic<uint64_t> pacedRepaired_{0}, pacedTotal_{0};
+    void pacerLoop();
+public:
+    // live: share of new pictures the pacing repair moved (last few seconds), -1 when it is off
+    double pacingRepairShare();
+private:
     std::string capAudioSource_;
     std::string capPath_;          // for reconnecting after the card drops out or stalls on a signal change
     CaptureMode capMode_{};

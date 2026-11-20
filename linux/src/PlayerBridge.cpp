@@ -24,6 +24,7 @@
 #include <QVariantMap>
 #include <QSettings>
 #include <QIcon>
+#include "DisplayVrr.h"
 #include "LsfgInstall.h"
 #include "SteamShortcut.h"
 #include "Watcher.h"
@@ -331,6 +332,16 @@ void PlayerBridge::updateOverlay() {
         if (liveVulkanActive() && liveVk_->pipelineMs() > 0) s += L(" · delay %1 ms", " · forsinkelse %1 ms").arg(liveVk_->pipelineMs(), 0, 'f', 1);
         const auto st = engine_.stats();
         if (st.dropped) s += L(" · %1 dropped", " · %1 tabt").arg(st.dropped);
+        if (engine_.isLive() && s_.pacingRepair && s_.frameGen != veyamux::FrameGenMode::Off) {
+            if (!pacingClock_.isValid() || pacingClock_.elapsed() >= 1000) {
+                pacingShown_ = engine_.pacingRepairShare();
+                pacingClock_.start();
+            }
+            if (pacingShown_ >= 0)
+                s += L("\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)",
+                       "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)")
+                         .arg(int(std::lround(pacingShown_ * 100)));
+        }
         // Remote Play: the delay from the console, as far as it can be measured (the console's own encoding cannot;
         // a PS5 / PS4 typically needs 5-10 ms for it)
         if (const auto rp = veyamux::remoteplay::stats(); rp.active) {
@@ -586,6 +597,8 @@ void PlayerBridge::loadSettings() {
     s_.displayPeak = float(std::clamp(q.value("enh/displayPeak", 1000).toInt(), 203, 10000));
     hdrOutWanted_ = q.value("enh/hdrOut", false).toBool();
     s_.vrr = q.value("enh/vrr", false).toBool();
+    s_.pacingRepair = q.value("enh/pacingRepair", false).toBool();
+    s_.hudLock = q.value("enh/hudLock", false).toBool();
     // Default: Lossless Scaling 2x. The old in-app modes (1 AMD FSR / RIFE, 4 RIFE + Lossless Scaling) become 2x.
     {
         int fg = std::clamp(q.value("enh/frameGenMode", 2).toInt(), 0, 5);
@@ -849,6 +862,8 @@ void PlayerBridge::setFrameGenMode(int v) {
         lsfg::writeConfig(lsfg_, lsfgMultiplier_, lsfgPerformance_, lsfgFlowScale());
     }
     applyEnhance();
+    if (isLs && !wasLs) { vrrNoticed_ = false; checkDesktopVrr(); }   // the desktop's VRR may have changed meanwhile
+    else emit lsfgChanged();   // lsfgVrrWarning follows the mode
     // lsfg-vk 2 cannot be switched off while it runs (a multiplier of 1 is refused and the old config stays; without
     // a matching profile the window stops presenting): VeyAmux starts again without it, on the same source.
     if (lsfgActive_ && !isLs && !lsfgOffPending_) {
@@ -1216,6 +1231,7 @@ void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashe
     lsfgActive_ = lsfgActive;
     lsfgCrashed_ = lsfgCrashed;
     refreshLsfg();
+    if (s_.lsfgFg()) checkDesktopVrr();
     if (lsfgActive_) {
         lsfgMultiplier_ = s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : (s_.lsfgFg() ? 2 : 1);
         runClock_.start();
@@ -1223,6 +1239,21 @@ void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashe
         connect(t, &QTimer::timeout, this, &PlayerBridge::updateLsfgLog);
         t->start(1500);
     }
+}
+
+// The desktop's VRR setting (KDE: kscreen-doctor). Asked at start and whenever Lossless Scaling is chosen, since the
+// user may have changed it meanwhile; a notice comes once per run when both are on.
+void PlayerBridge::checkDesktopVrr() {
+    veyamux::display::queryVrr(this, [this](veyamux::display::Vrr v, QString screens) {
+        desktopVrr_ = v == veyamux::display::Vrr::On;
+        vrrScreens_ = screens;
+        emit lsfgChanged();
+        if (lsfgVrrWarning() && !vrrNoticed_) {
+            vrrNoticed_ = true;
+            showNotice(L("VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings",
+                         "VRR (adaptiv synkronisering) er slået til: Lossless Scaling kan ikke lægge sine billeder jævnt. Sæt Adaptiv synkronisering til Aldrig i skærmindstillingerne"));
+        }
+    });
 }
 
 void PlayerBridge::refreshLsfg() {

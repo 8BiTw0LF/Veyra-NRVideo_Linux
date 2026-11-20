@@ -1,4 +1,5 @@
 #include "MediaEngine.h"
+#include "FramePacingRepair.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
 
@@ -189,7 +190,8 @@ void MediaEngine::joinAll() {
     }
     { std::lock_guard l(gate_m_); gate_cv_.notify_all(); }
     { std::lock_guard l(fq_m_); fq_cv_.notify_all(); }
-    for (std::thread* t : {&demux_, &vdec_, &adec_, &render_, &capThread_, &capAudioThread_})
+    { std::lock_guard l(pace_m_); pace_cv_.notify_all(); }
+    for (std::thread* t : {&demux_, &vdec_, &adec_, &render_, &capThread_, &capAudioThread_, &pacer_})
         if (t->joinable()) t->join();
 }
 
@@ -266,12 +268,15 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     rawLive_ = rawToGpu;
     playing_ = true;
     capThread_ = std::thread([this] { captureLoop(); });
+    if (rawToGpu) pacer_ = std::thread([this] { pacerLoop(); });
     if (!rawToGpu) render_ = std::thread([this] { renderLoop(); });
     if (!audioSource.empty()) capAudioThread_ = std::thread([this] { captureAudioLoop(); });
     return true;
 }
 
 void MediaEngine::captureLoop() {
+    FramePacingRepair repair;
+    auto lastPaced = std::chrono::steady_clock::time_point{};
     std::vector<uint8_t> rgba;
     RawFrame raw;
     int idle = 0;
@@ -343,6 +348,29 @@ void MediaEngine::captureLoop() {
             lastShown = clk::now();
         }
         if (toGpu) {
+            if (pacingRepair_.load() && skipRepeats_.load() && cb_.onLiveFrame) {
+                // even out a locked game's uneven showing: hand the picture to the pacer thread with its due time
+                if (pacingReset_.exchange(false)) repair.reset();
+                const double fps = cap_->fps() > 1.0 ? cap_->fps() : 60.0;
+                const int64_t transport = int64_t(1e7 / fps);   // one capture refresh, 100 ns
+                const auto captured = raw.captured.time_since_epoch().count() ? raw.captured : clk::now();
+                const int64_t sample = std::chrono::duration_cast<std::chrono::nanoseconds>(captured.time_since_epoch()).count() / 100;
+                const bool boundary = clk::now() - lastPaced > std::chrono::milliseconds(500);   // a stall or a pause
+                const auto res = repair.apply(sample, sample, transport, boundary);
+                lastPaced = clk::now();
+                ++pacedTotal_;
+                if (res.repaired) ++pacedRepaired_;
+                // + one refresh: the grid line may lie up to one refresh before the arrival
+                const auto due = captured + std::chrono::nanoseconds((res.shift + transport) * 100);
+                std::lock_guard l(pace_m_);
+                while (paced_.size() >= 2) paced_.pop_front();   // never pile up: latency first
+                paced_.push_back({due, std::move(raw)});
+                raw = RawFrame{};
+                if (!paceSpare_.empty()) { raw = std::move(paceSpare_.back()); paceSpare_.pop_back(); }
+                pace_cv_.notify_all();
+                continue;
+            }
+            pacingReset_ = true;
             if (cb_.onLiveFrame) cb_.onLiveFrame(raw);   // raw now holds a used buffer to fill next time
             else raw = RawFrame{};
             continue;
@@ -508,6 +536,8 @@ void MediaEngine::setEnhance(const EnhanceSettings& s) {
     // game's own pictures, evenly spaced, and let a VRR display follow them).
     skipRepeats_ = s.frameGen != FrameGenMode::Off || s.vrr;
     vrrPacing_ = s.vrr && s.frameGen == FrameGenMode::Off;
+    const bool rep = s.pacingRepair && s.frameGen != FrameGenMode::Off;
+    if (rep != pacingRepair_.exchange(rep)) pacingReset_ = true;
     redraw_ = true;   // repaint the current frame with the new settings while paused
     std::lock_guard l(gate_m_);
     gate_cv_.notify_all();
@@ -1043,6 +1073,33 @@ void MediaEngine::renderLoop() {
         showOne_ = false;
     }
     lastFrame_.reset();
+}
+
+// Hands paced pictures (see pacingRepair_) to the GPU path at their due time.
+void MediaEngine::pacerLoop() {
+    std::unique_lock l(pace_m_);
+    while (!quit_) {
+        if (paced_.empty()) { pace_cv_.wait_for(l, std::chrono::milliseconds(100)); continue; }
+        const auto due = paced_.front().due;
+        if (std::chrono::steady_clock::now() < due) {
+            pace_cv_.wait_until(l, std::min(due, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)));
+            continue;
+        }
+        RawFrame f = std::move(paced_.front().frame);
+        paced_.pop_front();
+        l.unlock();
+        if (cb_.onLiveFrame) cb_.onLiveFrame(f);   // f now holds a used buffer
+        f.hold.reset(); f.ext = nullptr;           // a driver buffer goes back to the card
+        l.lock();
+        if (paceSpare_.size() < 3) paceSpare_.push_back(std::move(f));
+    }
+    paced_.clear();
+}
+
+double MediaEngine::pacingRepairShare() {
+    if (!pacingRepair_.load()) return -1.0;
+    const uint64_t t = pacedTotal_.exchange(0), r = pacedRepaired_.exchange(0);
+    return t ? double(r) / double(t) : 0.0;
 }
 
 } // namespace veyamux

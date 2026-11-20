@@ -68,14 +68,26 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         }
         QRectF pr;
         if (player_->pixelDisplay() && pixelRect(this, sz, pr)) {
+            lv->setDisplayFit(QSize());
             node->setFiltering(QSGTexture::Nearest);
             node->setRect(pr);
         } else {
-            node->setFiltering(QSGTexture::Linear);
             const double a = player_->videoAspect() > 0 ? player_->videoAspect() : double(sz.width()) / sz.height();
             double w = width(), h = width() / a;
             if (h > height()) { h = height(); w = h * a; }
-            node->setRect(QRectF((width() - w) / 2, (height() - h) / 2, w, h));
+            // the chain resamples the picture to exactly the pixels it covers (LxFit), then it is drawn 1:1 and sharp;
+            // until that size arrives (a frame after a resize) Qt stretches it as before
+            const qreal dpr = window() ? window()->effectiveDevicePixelRatio() : 1.0;
+            const QSize fit(int(std::lround(w * dpr)) & ~1, int(std::lround(h * dpr)) & ~1);
+            lv->setDisplayFit(fit);
+            if (sz == fit) {
+                const qreal x = std::floor((width() * dpr - fit.width()) / 2) / dpr, y = std::floor((height() * dpr - fit.height()) / 2) / dpr;
+                node->setFiltering(QSGTexture::Nearest);
+                node->setRect(QRectF(x, y, fit.width() / dpr, fit.height() / dpr));
+            } else {
+                node->setFiltering(QSGTexture::Linear);
+                node->setRect(QRectF((width() - w) / 2, (height() - h) / 2, w, h));
+            }
         }
         // the texture's content changed (new picture in the same image): lets a layer above re-render (HDR output)
         if (player_->hdrOutputActive()) node->markDirty(QSGNode::DirtyMaterial);

@@ -231,6 +231,17 @@ Dendura, commit `a596354`), oversat fra JavaScript/WebGPU til C++ i `src/abyssal
   kilden `@demo`, så lydmåler, optagelse og stream får den.
 - Konvolutions-efterklangen på 5 s er erstattet af en Freeverb-agtig efterklang med samme hendøen.
 
+## Skalering til vinduet (LxFit)
+Kædens resultat er kildens størrelse × den valgte faktor. Før strakte Qt det til vinduet med én bilineær sample: blødt
+ved forstørrelse, og ved formindskelse (2× af 1080p i et 1440p-vindue) sprang den pixels over, så tynde linjer og tekst
+flimrede. Nu fortæller `VideoItem` præcis hvor mange skærmpixels billedet dækker (`LiveVulkan::setDisplayFit`, med
+devicePixelRatio), og kæden laver et sidste pass `shaders/LxFit.hlsl` til den størrelse; Qt tegner det så 1:1 (Nearest,
+pixeljusteret). Samme fremgangsmåde som Veyra-NRVideo 2.2.0's "精细送显缩放": Catmull-Rom; ved forstørrelse 4×4 og klemt
+til de 2×2 nærmeste (ingen ringning), ved formindskelse bredes kernen med formindskelsesfaktoren pr. akse (højst 4:1).
+Kører på de kodede værdier (sRGB, eller PQ ved HDR-output). `out8_` får vinduets størrelse og `pre8_` holder billedet før
+LxFit; FSR frame generation, optagelse, stream og skærmbilleder bruger det tilpassede billede. Ikke ved pixel-perfekt
+(heltalsforstørrelse, skarpt). `VEYAMUX_NO_FIT=1` giver den gamle bilineære strækning.
+
 ## Pixel-perfekt skalering
 Under Retro TV. To dele:
 - **Visning** (`VideoItem`): billedet forstørres med et helt tal `k = floor(min(vinduesbredde/b, vindueshøjde/h))` med
@@ -391,11 +402,34 @@ bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, l
   - **Konsollens indkodning** kan ikke måles og vises som "+ konsol ~8 ms".
 - Fejlsøgning: `VEYAMUX_PS_LOG=1` viser hele chiakis log.
 
+## Retter billedrytmen (frame pacing repair)
+Menu → *Frame generation* → *Ret billedrytmen* (`enh/pacingRepair`, slået fra). `src/FramePacingRepair.h` er taget fra
+Veyra-NRVideo 2.2.0, som har den fra PushFPS (GPL-3.0-or-later, DosukaSOL og PushFPS-bidragyderne), uændret bortset fra
+namespace. Mange konsolspil låst til 30 fps viser billederne 17/50 ms i stedet for 33/33; frame generation – især
+Lossless Scaling, der arbejder ved præsentationen – arver det ujævne. Med frame generation til og gentagne billeder
+smidt væk lægger reparationen en mindste kvadraters linje gennem de seneste 16 nye billeders ankomsttider og giver hvert
+billede sin plads på en jævn rytme (højst én capture-opdatering fra ankomsten; kun når mønstret kan forklares som en
+låst billedhastighed, ellers urørt). VeyAmux kan ikke vise et billede før det ankommer, så tiden får + én
+capture-opdatering (`MediaEngine`: capture-tråden giver billedet til en pacer-tråd med forfaldstid; højst 2 i kø). Målt
+på et 17/50-mønster: billederne afleveres 32,6–33,8 ms fra hinanden, aldrig før ankomst. F3 viser andelen flyttede
+billeder.
+
+## VRR-advarsel ved Lossless Scaling
+lsfg-vk 2 har kun pacing-tilstanden `none`: det rigtige og det genererede billede præsenteres lige efter hinanden med
+tvunget FIFO, og skærmens faste opdatering skal lægge dem jævnt; lsfg-vk's fejlsøgningsguide siger "Disable VRR". Med
+VRR (KDE: Adaptiv synkronisering *Automatisk* = til i fuldskærm) klumper de sig sammen. `src/DisplayVrr.cpp` læser
+`kscreen-doctor -o` (KDE; "Vrr: Automatic/Always/Never" pr. tændt skærm, AppImage'ens Qt-miljø fjernet) ved start og
+hver gang Lossless Scaling vælges; er VRR til, vises en advarsel i Lossless Scaling-afsnittet og én besked. Andre
+skriveborde: ukendt, ingen advarsel.
+
 ## Gratis frame generation (AMD FSR 3.1.6)
-Tilstand 5 (`enh/frameGenMode=5`, vises altid ved siden af Lossless Scaling; med lsfg-vk indlæst sættes dets multiplier til 1): `src/FsrFrameGen.cpp` – FidelityFX optical
+Tilstand 5 (`enh/frameGenMode=5`, vises altid ved siden af Lossless Scaling; med lsfg-vk indlæst genstarter VeyAmux uden det): `src/FsrFrameGen.cpp` – FidelityFX optical
 flow + frame interpolation (FSR 3.1.6-effektkode fra SDK 2.4.0 i SDK 1.1.4-rammen, MIT; se `third_party/fidelityfx/VEYAMUX_README.md`) på det færdige billede, med VeyAmux' egen bevægelsesestimering som
 "spil-bevægelsesvektorer", konstant uendelig dybde, beskyttelse af statiske elementer (`LxStatic`) og skarphed i fine
-detaljer (`LxDetail`). Kun capture-vejen: det genererede billede kopieres til et visningsbillede med det samme, det
+detaljer (`LxDetail`). **Lås HUD'en** (`enh/hudLock`, slået fra): `shaders/LxHudUpdate.hlsl` / `LxHudCompose.hlsl`
+(fra Veyra 2.2.0 / PushFPS, GPL-3.0-or-later) lærer pr. pixel, hvor længe den har stået stille, og dens kontrast til
+naboerne; i det genererede billede tages pixels, der har stået stille ca. et sekund og ligger på en kant, fra det rigtige
+billede, så tekst, kort og målere ikke vrider sig. Kun capture-vejen: det genererede billede kopieres til et visningsbillede med det samme, det
 rigtige et halvt capture-interval senere (`EnhanceChain::recordShowReal`, `QTimer` → `update()`). Testet: et objekt der
 flytter 8 px pr. billede placeres præcist 4 px i mellembilledet. 120 Hz-reglen gælder også her.
 (Byggefejl rettet: komponenterne skal defineres som `FFX_FI`/`FFX_OF`, ellers er shader-blobbene tomme.)

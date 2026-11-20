@@ -47,6 +47,7 @@ EnhanceChain::~EnhanceChain() {
     ctx_.destroy(nisStaging_);
     ctx_.destroy(fgOut_);
     ctx_.destroy(disp_);
+    for (ImageRes* i : {&hudState_, &hudPrev_[0], &hudPrev_[1], &hudOut_}) ctx_.destroy(*i);
     nrMotion_.reset();
     releaseResources();
     for (auto& r : retired_) ctx_.destroy(r.img);
@@ -70,7 +71,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker", "LxFit", "LxHudUpdate", "LxHudCompose"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -95,7 +96,7 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 }
 
 void EnhanceChain::releaseResources() {
-    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1]}) ctx_.destroy(*i);
+    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1], &pre8_}) ctx_.destroy(*i);
     nrHistory_ = false;
     dfHistory_ = false;
     if (liveMode_) retire(out8_); else ctx_.destroy(out8_);
@@ -104,11 +105,12 @@ void EnhanceChain::releaseResources() {
     ctx_.destroy(staging_);
     ctx_.destroy(staging16_);
     ctx_.destroy(readback_);
-    w_ = h_ = ow_ = oh_ = 0;
+    w_ = h_ = ow_ = oh_ = dw_ = dh_ = 0;
 }
 
-bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& error) {
-    if (w == w_ && h == h_ && ow == ow_ && oh == oh_ && src_.image) return true;
+bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& error, int dw, int dh) {
+    if (dw <= 0 || dh <= 0) { dw = ow; dh = oh; }
+    if (w == w_ && h == h_ && ow == ow_ && oh == oh_ && dw == dw_ && dh == dh_ && src_.image) return true;
     vkDeviceWaitIdle(ctx_.device());
     releaseResources();
     const VkImageUsageFlags upl = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
@@ -118,8 +120,9 @@ bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& er
     luma_ = ctx_.createImage(w, h, ctx_.lumaFormat(), kWork);
     up_ = ctx_.createImage(ow, oh, kLinearFmt, kWork);
     fin_ = ctx_.createImage(ow, oh, kLinearFmt, kWork);
-    out8_ = ctx_.createImage(ow, oh, VK_FORMAT_R8G8B8A8_UNORM,
+    out8_ = ctx_.createImage(dw, dh, VK_FORMAT_R8G8B8A8_UNORM,
                              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    if (dw != ow || dh != oh) pre8_ = ctx_.createImage(ow, oh, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     ++liveGen_;
     staging_ = ctx_.createBuffer(VkDeviceSize(w) * h * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
     readback_ = ctx_.createBuffer(VkDeviceSize(ow) * oh * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
@@ -129,7 +132,7 @@ bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& er
         releaseResources();
         return false;
     }
-    w_ = w; h_ = h; ow_ = ow; oh_ = oh;
+    w_ = w; h_ = h; ow_ = ow; oh_ = oh; dw_ = dw; dh_ = dh;
     return true;
 }
 
@@ -216,6 +219,7 @@ void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in,
 // [FXAA] -> [upscale: SGSR / FSR 1 / NIS / FSR 3.1] -> [sharpen/grade] -> sRGB encode into out8_.
 void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const int w = w_, h = h_, ow = ow_, oh = oh_;
+    const bool fitting = pre8_.image && (dw_ != ow || dh_ != oh);
     const ImageRes* cur = start;
     const bool temporalNr = s.enabled && (s.denoise == Denoise::Temporal || s.denoise == Denoise::Both);
     const bool deflicker = s.enabled && s.deflicker;
@@ -304,10 +308,14 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     if (s.hdrOut) {   // HDR display: PQ-coded light (1.0 in the working image = frameNits_ nits)
         struct { uint32_t w, h; float nits; uint32_t frame, wide, p0, p1, p2; } pp{uint32_t(ow), uint32_t(oh), frameNits_, uint32_t(++pqFrame_),
                                                                              frame2020_ ? 1u : 0u, 0, 0, 0};
-        run("LxPqOut", {cur}, {&out8_}, &pp, sizeof pp, ow, oh, 16);
+        run("LxPqOut", {cur}, {fitting ? &pre8_ : &out8_}, &pp, sizeof pp, ow, oh, 16);
     } else {
         ScaleParams sp{uint32_t(ow), uint32_t(oh), uint32_t(ow), uint32_t(oh), 1.0f, 0.0f, 0, 0};
-        run("ScaleBlit", {cur}, {&out8_}, &sp, sizeof sp, ow, oh, 16);
+        run("ScaleBlit", {cur}, {fitting ? &pre8_ : &out8_}, &sp, sizeof sp, ow, oh, 16);
+    }
+    if (fitting) {   // to the window's exact pixel size (Qt then draws it 1:1)
+        struct { uint32_t sw, sh, dw, dh; } fp{uint32_t(ow), uint32_t(oh), uint32_t(dw_), uint32_t(dh_)};
+        run("LxFit", {&pre8_}, {&out8_}, &fp, sizeof fp, dw_, dh_, 16);
     }
     timer_.mark(ctx_.active(), GpuTimer::Finish);
 }
@@ -398,12 +406,13 @@ void EnhanceChain::collectRetired() {
     }
 }
 
-bool EnhanceChain::ensureLive(int w, int h, int ow, int oh, std::string& error) {
+bool EnhanceChain::ensureLive(int w, int h, int ow, int oh, std::string& error, int dw, int dh) {
     const VkDeviceSize need = VkDeviceSize(w) * h * 4;
-    if (liveW_ == w && liveH_ == h && w_ == w && h_ == h && ow_ == ow && oh_ == oh && out8_.image && liveStagingSize_ >= need)
+    if (dw <= 0 || dh <= 0) { dw = ow; dh = oh; }
+    if (liveW_ == w && liveH_ == h && w_ == w && h_ == h && ow_ == ow && oh_ == oh && dw_ == dw && dh_ == dh && out8_.image && liveStagingSize_ >= need)
         return true;
     liveMode_ = true;
-    if (!ensureResources(w, h, ow, oh, error)) return false;     // also recreates out8_ (old one retired)
+    if (!ensureResources(w, h, ow, oh, error, dw, dh)) return false;     // also recreates out8_ (old one retired)
     rawPacked_ = ctx_.createImage(uint32_t(w / 2), uint32_t(h), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     rawY_ = ctx_.createImage(uint32_t(w), uint32_t(h), VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     rawUV_ = ctx_.createImage(uint32_t(w / 2), uint32_t(h / 2), VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -423,7 +432,14 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     frameMs_ = frameMs;
     int ow, oh;
     outputSize(in.w, in.h, s, ow, oh);
-    if (!ensureLive(in.w, in.h, ow, oh, error)) return false;
+    // the window fit (not for pixel-perfect: the display enlarges by whole numbers, sharp)
+    int dw = 0, dh = 0;
+    static const bool noFit = std::getenv("VEYAMUX_NO_FIT") != nullptr;   // the old bilinear stretch, to compare
+    if (!noFit && s.fitW >= 16 && s.fitH >= 16 && !s.pixelActive() && (std::abs(s.fitW - ow) > 1 || std::abs(s.fitH - oh) > 1)) {
+        dw = s.fitW & ~1; dh = s.fitH & ~1;
+    }
+    if (!ensureLive(in.w, in.h, ow, oh, error, dw, dh)) return false;
+    hudLock_ = s.hudLock;
     collectRetired();
     if (in.fmt == LiveInput::P010 && !rawY16_.image) {   // HDR capture: 16-bit planes, created on first use
         const VkImageUsageFlags u = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -613,17 +629,19 @@ bool EnhanceChain::recordFg(VkCommandBuffer cb) {
                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         fgOut_ = ctx_.createImage(out8_.width, out8_.height, VK_FORMAT_R8G8B8A8_UNORM, u);
         disp_ = ctx_.createImage(out8_.width, out8_.height, VK_FORMAT_R8G8B8A8_UNORM, u);
+        for (ImageRes* i : {&hudState_, &hudPrev_[0], &hudPrev_[1], &hudOut_}) retire(*i), *i = ImageRes{};
         if (!fgOut_.image || !disp_.image) { fgError_ = "Out of GPU memory for frame generation"; return false; }
         ctx_.transitionToGeneral(fgOut_.image);
         fgReset_ = true;
         ++liveGen_;
     }
-    if (!fgActive_) { fgActive_ = true; fgReset_ = true; ++liveGen_; }
+    if (!fgActive_) { fgActive_ = true; fgReset_ = true; ++liveGen_; if (std::getenv("VEYAMUX_DEBUG_FG")) std::fprintf(stderr, "FG: on (%ux%u, HUD lock %d)\n", out8_.width, out8_.height, int(hudLock_)); }
     if (!fg_) fg_ = std::make_unique<FsrFrameGen>(ctx_, dir_);
     ctx_.computeBarrier();
     const bool reset = fgReset_;
     std::string err;
     if (!fg_->record(cb, out8_, fgOut_, reset, frameMs_, err)) {
+        if (std::getenv("VEYAMUX_DEBUG_FG") && err != fgError_) std::fprintf(stderr, "FG: %s\n", err.c_str());
         fgError_ = err;
         fgActive_ = fgRealPending_ = false;
         ++liveGen_;
@@ -631,7 +649,38 @@ bool EnhanceChain::recordFg(VkCommandBuffer cb) {
     }
     fgError_.clear();
     fgReset_ = false;
-    copyToDisplay(cb, reset ? out8_ : fgOut_);
+    const ImageRes* shown = &fgOut_;
+    if (hudLock_) {
+        // HUD lock: learn which pixels stand still with an edge (from the real frames), then take those pixels of the
+        // generated frame from the real one, so text, maps and gauges do not warp
+        const uint32_t w = out8_.width, h = out8_.height;
+        if (!hudState_.image) {
+            hudState_ = ctx_.createImage(w, h, kLinearFmt, kWork);
+            const VkImageUsageFlags u = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            hudPrev_[0] = ctx_.createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, u);
+            hudPrev_[1] = ctx_.createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, u);
+            hudOut_ = ctx_.createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, u);
+            for (ImageRes* i : {&hudState_, &hudPrev_[0], &hudPrev_[1], &hudOut_}) if (i->image) ctx_.transitionToGeneral(i->image);
+            hudReset_ = true;
+        }
+        if (hudState_.image && hudPrev_[0].image && hudPrev_[1].image && hudOut_.image) {
+            ctx_.computeBarrier();
+            const int prev = hudCur_;
+            hudCur_ ^= 1;
+            struct { uint32_t w, h, reset, pq; } up{w, h, (reset || hudReset_) ? 1u : 0u, outPq_ ? 1u : 0u};
+            run("LxHudUpdate", {&out8_, &hudPrev_[prev]}, {&hudState_, &hudPrev_[hudCur_]}, &up, sizeof up, int(w), int(h), 16);
+            hudReset_ = false;
+            if (!reset) {
+                struct { uint32_t w, h, p0, p1; } cp{w, h, 0, 0};
+                run("LxHudCompose", {&fgOut_, &out8_, &hudState_}, {&hudOut_}, &cp, sizeof cp, int(w), int(h), 16);
+                shown = &hudOut_;
+            }
+            ctx_.computeBarrier();
+        }
+    } else {
+        hudReset_ = true;
+    }
+    copyToDisplay(cb, reset ? out8_ : *shown);
     fgRealPending_ = !reset;
     return true;
 }

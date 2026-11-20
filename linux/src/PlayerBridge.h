@@ -121,6 +121,12 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool inGamescope READ inGamescope CONSTANT)
     Q_PROPERTY(bool gamescopeRestart READ gamescopeRestart NOTIFY enhanceChanged)
     Q_PROPERTY(bool vrr READ vrr WRITE setVrr NOTIFY enhanceChanged)
+    // frame pacing repair for frame generation (MediaEngine / FramePacingRepair.h)
+    Q_PROPERTY(bool pacingRepair READ pacingRepair WRITE setPacingRepair NOTIFY enhanceChanged)
+    Q_PROPERTY(bool hudLock READ hudLock WRITE setHudLock NOTIFY enhanceChanged)
+    // the desktop has VRR on for a screen while Lossless Scaling is chosen: lsfg-vk 2 cannot pace its frames then
+    Q_PROPERTY(bool lsfgVrrWarning READ lsfgVrrWarning NOTIFY lsfgChanged)
+    Q_PROPERTY(QString vrrScreens READ vrrScreens NOTIFY lsfgChanged)
     Q_PROPERTY(bool vrrRestartNeeded READ vrrRestartNeeded NOTIFY enhanceChanged)
     Q_PROPERTY(int denoiseStrength READ denoiseStrength WRITE setDenoiseStrength NOTIFY enhanceChanged)
     Q_PROPERTY(int fxaaQuality READ fxaaQuality WRITE setFxaaQuality NOTIFY enhanceChanged)
@@ -209,6 +215,17 @@ public:
     int hdrPeak() const { return int(std::lround(s_.hdrPeak)); }
     void setHdrPeak(int v) { s_.hdrPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/hdrPeak", hdrPeak()); applyEnhance(); }
     bool vrr() const { return s_.vrr; }
+    bool pacingRepair() const { return s_.pacingRepair; }
+    bool hudLock() const { return s_.hudLock; }
+    void setHudLock(bool v) { s_.hudLock = v; QSettings().setValue("enh/hudLock", v); applyEnhance(); }
+    void setPacingRepair(bool v) { s_.pacingRepair = v; QSettings().setValue("enh/pacingRepair", v); applyEnhance(); }
+    bool lsfgVrrWarning() const { return desktopVrr_ && s_.lsfgFg(); }
+    QString vrrScreens() const { return vrrScreens_; }
+    Q_INVOKABLE void checkDesktopVrr();
+    bool desktopVrr_ = false, vrrNoticed_ = false;
+    QString vrrScreens_;
+    QElapsedTimer pacingClock_;
+    double pacingShown_ = -1;
     void setVrr(bool v) { s_.vrr = v; QSettings().setValue("enh/vrr", v); applyEnhance(); }
     // vsync is chosen at start: VRR mode with frame generation off wants it on
     bool vrrRestartNeeded() const { return (s_.vrr && s_.frameGen == veyamux::FrameGenMode::Off) != vrrAtStart_; }

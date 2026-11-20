@@ -136,7 +136,9 @@
   " · decoded on the CPU": " · afkodet på processoren",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Slår Lossless Scaling fra: VeyAmux genstarter…",
   "Restart VeyAmux to turn Lossless Scaling off": "Genstart VeyAmux for at slå Lossless Scaling fra",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (adaptiv synkronisering) er slået til: Lossless Scaling kan ikke lægge sine billeder jævnt. Sæt Adaptiv synkronisering til Aldrig i skærmindstillingerne",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -275,7 +277,9 @@
   " · decoded on the CPU": " · auf der CPU dekodiert",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Lossless Scaling wird ausgeschaltet: VeyAmux startet neu…",
   "Restart VeyAmux to turn Lossless Scaling off": "Starte VeyAmux neu, um Lossless Scaling auszuschalten",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120-Hz-Signal: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um sie zu stoppen"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120-Hz-Signal: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um sie zu stoppen",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (Adaptive Sync) ist an: Lossless Scaling kann seine Bilder nicht gleichmäßig takten. Stelle Adaptive Sync in den Anzeigeeinstellungen auf Nie",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nBildtakt glätten: %1 % der Bilder in einen gleichmäßigen Takt verschoben (+1 Bildwiederholung Latenz)"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -414,7 +418,9 @@
   " · decoded on the CPU": " · decodificado en la CPU",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Desactivando Lossless Scaling: VeyAmux se reinicia…",
   "Restart VeyAmux to turn Lossless Scaling off": "Reinicia VeyAmux para desactivar Lossless Scaling",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Señal de 120 Hz: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerla"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Señal de 120 Hz: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerla",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (Adaptive Sync) está activado: Lossless Scaling no puede repartir sus fotogramas uniformemente. Pon Adaptive Sync en Nunca en los ajustes de pantalla",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nCorrección de ritmo: %1 % de los fotogramas movidos a un ritmo uniforme (+1 refresco de retardo)"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -553,7 +559,9 @@
   " · decoded on the CPU": " · décodé sur le CPU",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Désactivation de Lossless Scaling : VeyAmux redémarre…",
   "Restart VeyAmux to turn Lossless Scaling off": "Redémarrez VeyAmux pour désactiver Lossless Scaling",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Signal 120 Hz : Lossless Scaling continue de générer des images. Réglez la génération d'images sur Désactivée pour l'arrêter"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Signal 120 Hz : Lossless Scaling continue de générer des images. Réglez la génération d'images sur Désactivée pour l'arrêter",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "Le VRR (Adaptive Sync) est activé : Lossless Scaling ne peut pas cadencer ses images régulièrement. Réglez Adaptive Sync sur Jamais dans les paramètres d'affichage",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nRégularisation du rythme : %1 % des images déplacées sur un rythme régulier (+1 rafraîchissement de latence)"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -692,7 +700,9 @@
   " · decoded on the CPU": " · dekodet på prosessoren",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Slår av Lossless Scaling: VeyAmux starter på nytt…",
   "Restart VeyAmux to turn Lossless Scaling off": "Start VeyAmux på nytt for å slå av Lossless Scaling",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe den"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe den",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (adaptiv synkronisering) er på: Lossless Scaling kan ikke fordele bildene sine jevnt. Sett adaptiv synkronisering til Aldri i skjerminnstillingene",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nJevnet bildetakt: %1 % av bildene flyttet til en jevn takt (+1 skjermoppdatering forsinkelse)"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -831,7 +841,9 @@
   " · decoded on the CPU": " · декодируется на CPU",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Отключение Lossless Scaling: VeyAmux перезапускается…",
   "Restart VeyAmux to turn Lossless Scaling off": "Перезапустите VeyAmux, чтобы отключить Lossless Scaling",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Сигнал 120 Гц: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить её"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Сигнал 120 Гц: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить её",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (Adaptive Sync) включён: Lossless Scaling не может равномерно выводить кадры. Установите адаптивную синхронизацию в «Никогда» в настройках дисплея",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nВыравнивание темпа: %1 % кадров перенесено в ровный ритм (+1 обновление экрана задержки)"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -970,6 +982,8 @@
   " · decoded on the CPU": " · avkodat på processorn",
   "Turning Lossless Scaling off: VeyAmux restarts…": "Stänger av Lossless Scaling: VeyAmux startar om…",
   "Restart VeyAmux to turn Lossless Scaling off": "Starta om VeyAmux för att stänga av Lossless Scaling",
-  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling skapar fortfarande bilder. Sätt bildgenerering till Av för att stoppa den"
+  "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling skapar fortfarande bilder. Sätt bildgenerering till Av för att stoppa den",
+  "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (adaptiv synkronisering) är på: Lossless Scaling kan inte fördela sina bilder jämnt. Sätt adaptiv synkronisering till Aldrig i skärminställningarna",
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nJämnad bildtakt: %1 % av bilderna flyttade till en jämn takt (+1 skärmuppdatering fördröjning)"
  }
 }

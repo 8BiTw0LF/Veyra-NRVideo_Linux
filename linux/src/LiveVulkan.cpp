@@ -91,6 +91,13 @@ QString LiveVulkan::lastError() const {
     return QString::fromStdString(error_);
 }
 
+void LiveVulkan::setDisplayFit(QSize px) {
+    if (px.width() == fitW_.load() && px.height() == fitH_.load()) return;
+    fitW_ = px.width(); fitH_ = px.height();
+    { std::lock_guard l(m_); redraw_ = true; }   // draw the current picture again at the new size
+    QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
+}
+
 void LiveVulkan::setSettings(const EnhanceSettings& s) {
     {
         std::lock_guard l(m_);
@@ -175,6 +182,7 @@ void LiveVulkan::onBeforeRendering() {
     std::string err;
     double frameMs;
     { std::lock_guard l(m_); frameMs = frameMs_; }
+    s.fitW = fitW_.load(); s.fitH = fitH_.load();   // the window's pixel size for the picture (VideoItem)
     bool ok = cb && *cb && chain_->recordLive(*cb, win_->graphicsStateInfo().currentFrameSlot, in, s, err, float(frameMs));
     win_->endExternalCommands();
     if (!ok) {

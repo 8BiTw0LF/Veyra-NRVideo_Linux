@@ -34,6 +34,9 @@ public:
 
     uint64_t imageHandle() const { return image_.load(); }  // VkImage as integer (published by the render thread)
     QSize imageSize() const { return QSize(imgW_.load(), imgH_.load()); }
+    // The exact pixel size the picture covers in the window (VideoItem, GUI thread); the chain resamples to it.
+    void setDisplayFit(QSize px);
+    std::atomic<int> fitW_{0}, fitH_{0};
     uint64_t generation() const { return gen_.load(); }
     double lastMs() const { return lastMs_.load(); }
     // VeyAmux's share of the latency: capture driver timestamp -> GPU work done (smoothed), 0 = unknown

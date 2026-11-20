@@ -183,16 +183,25 @@ needed for its own frame generation**, and everything else works without it:
 ### Frame generation
 - **Lossless Scaling** *Fixed 2×* and *Fixed 3×* through lsfg-vk, for VeyAmux's window only. VeyAmux finds Lossless
   Scaling in all Steam libraries (Flatpak included), writes its own lsfg-vk profile and leaves your other lsfg-vk
-  settings alone. It has a *performance mode* and an automatic flow scale.
+  settings alone. It has a *performance mode* and an automatic flow scale. If VRR (Adaptive Sync) is on in KDE,
+  VeyAmux warns you: lsfg-vk 2 needs a fixed refresh to space its frames evenly.
 - **AMD FSR 3.1.6 2× (free)**: frame generation inside VeyAmux (open source, any GPU, capture cards). It sits next to
   the Lossless Scaling modes, so you can switch between them. The motion is estimated from the pictures, so the quality is below Lossless Scaling, and the real
-  frame is shown half a frame later.
+  frame is shown half a frame later. *Lock the HUD* keeps still text, maps and gauges from warping in the generated
+  frames.
 - **Smarter input**: a 30 fps game in a 60 Hz signal repeats every picture. VeyAmux drops the repeats, so frame
   generation turns 30 distinct frames into smooth 60.
-- **120 Hz rule**: when the capture runs at about 120 fps, frame generation pauses (doubling would only add latency) and
-  resumes below 80 fps.
+- **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of 33/33,
+  and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first (costs one refresh of delay,
+  about 17 ms at 60 Hz).
+- **120 Hz rule**: when the capture runs at about 120 fps, AMD FSR frame generation pauses (doubling would only add
+  latency) and resumes below 80 fps.
 - **VRR mode**: with frame generation off, VeyAmux shows the game's own frames at an even pace (e.g. 45 fps), so a VRR
   display can follow the game.
+
+### Sharp in any window size
+The finished picture is resampled to exactly the pixels it covers in the window (Catmull-Rom, wider when shrinking), so
+it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no crawling lines when shrunk.
 
 ### HDR
 - **HDR capture (P010)** and **HDR video files** (HDR10 / PQ and HLG) are tone-mapped properly for an SDR screen (BT.2390,
