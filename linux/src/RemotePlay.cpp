@@ -6,6 +6,7 @@ extern "C" {
 #include <chiaki/base64.h>
 #include <chiaki/common.h>
 #include <chiaki/discovery.h>
+#include <netdb.h>
 #include <chiaki/discoveryservice.h>
 #include <chiaki/log.h>
 #include <chiaki/opusdecoder.h>
@@ -75,6 +76,7 @@ std::mutex g_discM;
 ChiakiLog g_discLog;
 std::unique_ptr<ChiakiDiscoveryService> g_disc;
 std::vector<Console> g_consoles;
+std::vector<std::string> g_manual;
 
 void discoveryCb(ChiakiDiscoveryHost* hosts, size_t count, void*) {
     std::vector<Console> list;
@@ -126,10 +128,32 @@ void startDiscovery() {
         }
         freeifaddrs(ifs);
     }
+    // addresses typed in by hand: asked directly
+    for (const std::string& h : g_manual) {
+        addrinfo hints{}, *res = nullptr;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        if (getaddrinfo(h.c_str(), nullptr, &hints, &res) != 0 || !res) continue;
+        sockaddr_storage s{};
+        std::memcpy(&s, res->ai_addr, sizeof(sockaddr_in));
+        bc.push_back(s);
+        freeaddrinfo(res);
+    }
     o.broadcast_addrs = bc.empty() ? nullptr : bc.data();
     o.broadcast_num = bc.size();
     auto svc = std::make_unique<ChiakiDiscoveryService>();
     if (chiaki_discovery_service_init(svc.get(), &o, &g_discLog) == CHIAKI_ERR_SUCCESS) g_disc = std::move(svc);
+}
+
+void setManualHosts(const std::vector<std::string>& hosts) {
+    bool running;
+    {
+        std::lock_guard l(g_discM);
+        if (hosts == g_manual) return;
+        g_manual = hosts;
+        running = g_disc != nullptr;
+    }
+    if (running) { stopDiscovery(); startDiscovery(); }
 }
 
 void stopDiscovery() {
@@ -297,7 +321,11 @@ bool registerConsole(const Console& c, const std::string& accountIdBase64, uint3
         return false;
     }
     out.id = c.id;
-    out.name = w.host.server_nickname[0] ? std::string(w.host.server_nickname) : c.name;
+    if (out.id.empty()) {   // registered by address: the console's MAC, written like discovery's host id
+        static const char* hx = "0123456789ABCDEF";
+        for (uint8_t b : w.host.server_mac) { out.id += hx[b >> 4]; out.id += hx[b & 15]; }
+    }
+    out.name = w.host.server_nickname[0] ? std::string(w.host.server_nickname) : (c.name.empty() ? c.host : c.name);
     out.host = c.host;
     out.ps5 = chiaki_target_is_ps5(w.host.target);
     out.target = int(w.host.target);

@@ -46,6 +46,22 @@ QStringList registeredIds() {
     return q.childGroups();
 }
 
+// consoles typed in by address: "address|ps5" (ps5 = 1 / 0)
+struct Manual { QString host; bool ps5; };
+QList<Manual> manualHosts() {
+    QList<Manual> out;
+    for (const QString& e : QSettings().value("ps/manualHosts").toStringList()) {
+        const QStringList p = e.split('|');
+        if (!p.isEmpty() && !p[0].isEmpty()) out << Manual{p[0], p.value(1) != "0"};
+    }
+    return out;
+}
+void pushManualHosts() {
+    std::vector<std::string> v;
+    for (const Manual& m : manualHosts()) v.push_back(m.host.toStdString());
+    rp::setManualHosts(v);
+}
+
 const rp::Console* findSeen(const std::vector<rp::Console>& list, const std::string& id) {
     for (const auto& c : list) if (c.id == id) return &c;
     return nullptr;
@@ -93,7 +109,48 @@ QVariantList PlayerBridge::psConsoles() const {
         m["passcode"] = QString();
         out << m;
     }
+    // addresses typed in that no console has answered from yet (and no registered console uses)
+    for (const Manual& mh : manualHosts()) {
+        bool known = false;
+        for (const QVariant& v : out) if (v.toMap().value("host").toString() == mh.host) known = true;
+        if (known) continue;
+        QVariantMap m;
+        m["id"] = "ip:" + mh.host;
+        m["name"] = mh.host;
+        m["host"] = mh.host;
+        m["ps5"] = mh.ps5;
+        m["registered"] = false;
+        m["found"] = false;
+        m["ready"] = false;
+        m["app"] = QString();
+        m["passcode"] = QString();
+        m["manual"] = true;
+        out << m;
+    }
     return out;
+}
+
+bool PlayerBridge::psAddHost(const QString& address, bool ps5) {
+    QString a = address.trimmed();
+    a.remove(QRegularExpression("^[a-z]+://")).remove(QRegularExpression("[:/].*$"));   // "http://x/" or "x:9295"
+    static const QRegularExpression ok(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$"));
+    if (!ok.match(a).hasMatch()) { psSay(L("Type the console's IP address, for example 192.168.1.50", "Skriv konsollens IP-adresse, for eksempel 192.168.1.50"), true); return false; }
+    QStringList list;
+    for (const Manual& m : manualHosts()) if (m.host != a) list << m.host + "|" + (m.ps5 ? "1" : "0");
+    list << a + "|" + (ps5 ? "1" : "0");
+    QSettings().setValue("ps/manualHosts", list);
+    pushManualHosts();
+    rp::startDiscovery();
+    psSay(L("Asking %1 directly. If it answers, it shows its name and state", "Spørger %1 direkte. Hvis den svarer, vises dens navn og tilstand").arg(a), false);
+    return true;
+}
+
+void PlayerBridge::psRemoveHost(const QString& address) {
+    QStringList list;
+    for (const Manual& m : manualHosts()) if (m.host != address) list << m.host + "|" + (m.ps5 ? "1" : "0");
+    QSettings().setValue("ps/manualHosts", list);
+    pushManualHosts();
+    emit psChanged();
 }
 
 bool PlayerBridge::psHasAccount() const { return !QSettings().value("ps/accountId").toString().isEmpty(); }
@@ -133,6 +190,7 @@ void PlayerBridge::psRun(const QString& busy, std::function<void(QString&, bool&
 // ------------------------------------------------------------------ discovery
 
 void PlayerBridge::psStartSearch() {
+    pushManualHosts();
     rp::startDiscovery();
     if (!psTimer_) {
         psTimer_ = new QTimer(this);
@@ -186,8 +244,16 @@ void PlayerBridge::psRegister(const QString& id, const QString& pin) {
     if (digits.size() != 8) { psSay(L("The PIN has 8 digits", "PIN-koden har 8 cifre"), true); return; }
     const auto seen = rp::consoles();
     const rp::Console* c = findSeen(seen, id.toStdString());
-    if (!c) { psSay(L("The console is not on the network any more", "Konsollen er ikke på netværket længere"), true); return; }
-    const rp::Console console = *c;
+    rp::Console console;
+    if (c) {
+        console = *c;
+    } else if (id.startsWith("ip:")) {   // typed in, not answering the search: register straight at the address
+        console.host = id.mid(3).toStdString();
+        for (const Manual& m : manualHosts()) if (m.host == id.mid(3)) console.ps5 = m.ps5;
+    } else {
+        psSay(L("The console is not on the network any more", "Konsollen er ikke på netværket længere"), true);
+        return;
+    }
     const std::string account = QSettings().value("ps/accountId").toString().toStdString();
     if (account.empty()) { psSay(L("Log in to PlayStation Network first", "Log ind på PlayStation Network først"), true); return; }
     const uint32_t p = digits.toUInt();
@@ -195,7 +261,7 @@ void PlayerBridge::psRegister(const QString& id, const QString& pin) {
         rp::Registered r;
         std::string e;
         if (rp::registerConsole(console, account, p, r, e)) {
-            QMetaObject::invokeMethod(this, [r] { saveConsole(r); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, [this, r] { saveConsole(r); emit psChanged(); }, Qt::QueuedConnection);
             msg = L("Registered: ", "Registreret: ") + QString::fromStdString(r.name);
         } else {
             msg = translateMessage(QString::fromStdString(e));

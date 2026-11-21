@@ -252,7 +252,13 @@ var strings = {
         "startPsSub": "Remote Play over your home network",
         "startFile": "Video file",
         "startFileSub": "Or drop a file anywhere here",
-        "useUncompressed": "Choose the uncompressed mode"
+        "useUncompressed": "Choose the uncompressed mode",
+        "psManualTitle": "Add a console by IP address",
+        "psManualHint": "If the console is not found (another network, a VPN, Wi-Fi isolation, or a firewall that drops its answer), type its IP address. On the PS5: Settings → Network → Connection Status → View Connection Status; on the PS4: Settings → Network → View Connection Status.",
+        "psAddHost": "Add",
+        "psRemoveHost": "Remove",
+        "psManualWaiting": "Asked directly, no answer yet",
+        "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
         "open": "Åbn fil",
@@ -499,7 +505,13 @@ var strings = {
         "startPsSub": "Remote Play over dit hjemmenetværk",
         "startFile": "Videofil",
         "startFileSub": "Eller slip en fil et vilkårligt sted her",
-        "useUncompressed": "Vælg den ukomprimerede tilstand"
+        "useUncompressed": "Vælg den ukomprimerede tilstand",
+        "psManualTitle": "Tilføj en konsol med IP-adresse",
+        "psManualHint": "Hvis konsollen ikke bliver fundet (et andet netværk, en VPN, Wi-Fi-isolering eller en firewall der stopper svaret), så skriv dens IP-adresse. På PS5: Indstillinger → Netværk → Forbindelsesstatus → Vis forbindelsesstatus; på PS4: Indstillinger → Netværk → Vis forbindelsesstatus.",
+        "psAddHost": "Tilføj",
+        "psRemoveHost": "Fjern",
+        "psManualWaiting": "Spurgt direkte, intet svar endnu",
+        "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
         "open": "Datei öffnen",
@@ -746,7 +758,13 @@ var strings = {
         "startPsSub": "Remote Play über dein Heimnetz",
         "startFile": "Videodatei",
         "startFileSub": "Oder eine Datei irgendwo hier ablegen",
-        "useUncompressed": "Den unkomprimierten Modus wählen"
+        "useUncompressed": "Den unkomprimierten Modus wählen",
+        "psManualTitle": "Konsole per IP-Adresse hinzufügen",
+        "psManualHint": "Wenn die Konsole nicht gefunden wird (anderes Netz, VPN, WLAN-Isolierung oder eine Firewall, die ihre Antwort verwirft), gib ihre IP-Adresse ein. PS5: Einstellungen → Netzwerk → Verbindungsstatus → Verbindungsstatus anzeigen; PS4: Einstellungen → Netzwerk → Verbindungsstatus anzeigen.",
+        "psAddHost": "Hinzufügen",
+        "psRemoveHost": "Entfernen",
+        "psManualWaiting": "Direkt gefragt, noch keine Antwort",
+        "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
         "open": "Abrir archivo",
@@ -993,7 +1011,13 @@ var strings = {
         "startPsSub": "Juego remoto por tu red doméstica",
         "startFile": "Archivo de vídeo",
         "startFileSub": "O suelta un archivo en cualquier parte",
-        "useUncompressed": "Elegir el modo sin comprimir"
+        "useUncompressed": "Elegir el modo sin comprimir",
+        "psManualTitle": "Añadir una consola por dirección IP",
+        "psManualHint": "Si no se encuentra la consola (otra red, una VPN, aislamiento Wi-Fi o un cortafuegos que descarta su respuesta), escribe su dirección IP. En la PS5: Ajustes → Red → Estado de la conexión → Ver estado de la conexión; en la PS4: Ajustes → Red → Ver estado de la conexión.",
+        "psAddHost": "Añadir",
+        "psRemoveHost": "Quitar",
+        "psManualWaiting": "Preguntada directamente, aún sin respuesta",
+        "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
         "open": "Ouvrir un fichier",
@@ -1240,7 +1264,13 @@ var strings = {
         "startPsSub": "Lecture à distance sur votre réseau",
         "startFile": "Fichier vidéo",
         "startFileSub": "Ou déposez un fichier n'importe où ici",
-        "useUncompressed": "Choisir le mode non compressé"
+        "useUncompressed": "Choisir le mode non compressé",
+        "psManualTitle": "Ajouter une console par adresse IP",
+        "psManualHint": "Si la console n'est pas trouvée (autre réseau, VPN, isolation Wi-Fi ou pare-feu qui bloque sa réponse), saisissez son adresse IP. Sur PS5 : Paramètres → Réseau → État de la connexion → Afficher l'état de la connexion ; sur PS4 : Paramètres → Réseau → Afficher l'état de la connexion.",
+        "psAddHost": "Ajouter",
+        "psRemoveHost": "Retirer",
+        "psManualWaiting": "Interrogée directement, pas encore de réponse",
+        "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
         "open": "Öppna fil",
@@ -1487,7 +1517,13 @@ var strings = {
         "startPsSub": "Remote Play över ditt hemnätverk",
         "startFile": "Videofil",
         "startFileSub": "Eller släpp en fil var som helst här",
-        "useUncompressed": "Välj det okomprimerade läget"
+        "useUncompressed": "Välj det okomprimerade läget",
+        "psManualTitle": "Lägg till en konsol med IP-adress",
+        "psManualHint": "Om konsolen inte hittas (ett annat nätverk, en VPN, Wi-Fi-isolering eller en brandvägg som stoppar svaret), skriv in dess IP-adress. På PS5: Inställningar → Nätverk → Anslutningsstatus → Visa anslutningsstatus; på PS4: Inställningar → Nätverk → Visa anslutningsstatus.",
+        "psAddHost": "Lägg till",
+        "psRemoveHost": "Ta bort",
+        "psManualWaiting": "Tillfrågad direkt, inget svar än",
+        "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
         "open": "Åpne fil",
@@ -1734,7 +1770,13 @@ var strings = {
         "startPsSub": "Remote Play over hjemmenettverket",
         "startFile": "Videofil",
         "startFileSub": "Eller slipp en fil hvor som helst her",
-        "useUncompressed": "Velg den ukomprimerte modusen"
+        "useUncompressed": "Velg den ukomprimerte modusen",
+        "psManualTitle": "Legg til en konsoll med IP-adresse",
+        "psManualHint": "Hvis konsollen ikke blir funnet (et annet nettverk, en VPN, Wi-Fi-isolering eller en brannmur som stopper svaret), skriv inn IP-adressen. På PS5: Innstillinger → Nettverk → Tilkoblingsstatus → Vis tilkoblingsstatus; på PS4: Innstillinger → Nettverk → Vis tilkoblingsstatus.",
+        "psAddHost": "Legg til",
+        "psRemoveHost": "Fjern",
+        "psManualWaiting": "Spurt direkte, ikke svar ennå",
+        "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
         "open": "Открыть файл",
@@ -1981,6 +2023,12 @@ var strings = {
         "startPsSub": "Дистанционная игра по домашней сети",
         "startFile": "Видеофайл",
         "startFileSub": "Или перетащите файл в любое место",
-        "useUncompressed": "Выбрать режим без сжатия"
+        "useUncompressed": "Выбрать режим без сжатия",
+        "psManualTitle": "Добавить консоль по IP-адресу",
+        "psManualHint": "Если консоль не находится (другая сеть, VPN, изоляция Wi-Fi или брандмауэр, отбрасывающий её ответ), введите её IP-адрес. На PS5: Настройки → Сеть → Статус соединения → Показать статус соединения; на PS4: Настройки → Сеть → Показать статус соединения.",
+        "psAddHost": "Добавить",
+        "psRemoveHost": "Удалить",
+        "psManualWaiting": "Запрошена напрямую, ответа пока нет",
+        "psManualRegister": "Её можно зарегистрировать, даже если она не отвечает на поиск."
     }
 };

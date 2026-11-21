@@ -126,12 +126,12 @@ Item {
                                 width: parent.width; height: 30
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - 120
+                                    width: parent.width - (row.modelData.manual === true ? 230 : 120)
                                     Text { font.family: Theme.font; width: parent.width; elide: Text.ElideRight; color: Theme.heading; font.pixelSize: 15; font.weight: Font.Medium
                                         text: row.modelData.name + "  ·  " + (row.modelData.ps5 ? "PS5" : "PS4") }
                                     Text { font.family: Theme.font; width: parent.width; elide: Text.ElideRight; font.pixelSize: 12
                                         color: row.modelData.ready ? Theme.ok : Theme.muted
-                                        text: (!row.modelData.found ? tr("psNotFound") : row.modelData.ready ? tr("psReady") : tr("psRest"))
+                                        text: (row.modelData.manual ? tr("psManualWaiting") : !row.modelData.found ? tr("psNotFound") : row.modelData.ready ? tr("psReady") : tr("psRest"))
                                               + (row.modelData.app ? "  ·  " + row.modelData.app : "") + "  ·  " + row.modelData.host }
                                 }
                                 Btn {
@@ -141,17 +141,24 @@ Item {
                                     onClicked: { player.psConnect(row.modelData.id) }
                                 }
                                 Btn {
+                                    id: regBtn
                                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                                     visible: !row.modelData.registered
                                     text: tr("psRegister"); enabled: player.psHasAccount && !dlg.busy
                                     onClicked: dlg.selId = row.open ? "" : row.modelData.id
+                                }
+                                Btn {   // an address typed in: take it away again
+                                    anchors { right: regBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    visible: row.modelData.manual === true
+                                    text: tr("psRemoveHost"); danger: true
+                                    onClicked: { dlg.selId = ""; player.psRemoveHost(row.modelData.host) }
                                 }
                             }
                             // registration: the PIN from the console
                             Column {
                                 visible: row.open && !row.modelData.registered
                                 width: parent.width; spacing: 8
-                                Hint { text: row.modelData.ps5 ? tr("psPinHintPs5") : tr("psPinHintPs4") }
+                                Hint { text: (row.modelData.ps5 ? tr("psPinHintPs5") : tr("psPinHintPs4")) + (row.modelData.manual ? " " + tr("psManualRegister") : "") }
                                 Row {
                                     spacing: 8
                                     Field { id: pinIn; width: 160; placeholder: "12345678"; maxLength: 9
@@ -171,6 +178,20 @@ Item {
                             }
                         }
                     }
+                }
+
+                // ---- a console by its IP address (the search does not reach it, or a firewall drops its answer)
+                Section { text: tr("psManualTitle") }
+                Hint { text: tr("psManualHint") }
+                Row {
+                    id: manualRow
+                    spacing: 8
+                    property bool ps5: true
+                    Field { id: ipIn; width: Math.min(220, col.width - 300); placeholder: "192.168.1.50"; maxLength: 253
+                        onAccepted: if (player.psAddHost(text, manualRow.ps5)) text = "" }
+                    Segmented { width: 150; model: ["PS5", "PS4"]; current: manualRow.ps5 ? 0 : 1; onPicked: (i) => manualRow.ps5 = i === 0 }
+                    Btn { text: tr("psAddHost"); enabled: ipIn.text.trim() !== ""
+                        onClicked: if (player.psAddHost(ipIn.text, manualRow.ps5)) ipIn.text = "" }
                 }
 
                 // ---- picture

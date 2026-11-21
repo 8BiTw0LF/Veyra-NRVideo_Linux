@@ -336,7 +336,9 @@
   "Downloading VeyAmux %1…": "VeyAmux %1 wird heruntergeladen…",
   "Downloading VeyAmux %1… %2 %": "VeyAmux %1 wird heruntergeladen… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 ist installiert. Es startet beim nächsten Mal, oder starte jetzt neu.",
-  "The update failed: ": "Das Update ist fehlgeschlagen: "
+  "The update failed: ": "Das Update ist fehlgeschlagen: ",
+  "Type the console's IP address, for example 192.168.1.50": "Gib die IP-Adresse der Konsole ein, zum Beispiel 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "%1 wird direkt gefragt. Wenn sie antwortet, erscheinen ihr Name und Zustand"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -534,7 +536,9 @@
   "Downloading VeyAmux %1…": "Descargando VeyAmux %1…",
   "Downloading VeyAmux %1… %2 %": "Descargando VeyAmux %1… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 está instalado. Se iniciará la próxima vez, o reinicia ahora.",
-  "The update failed: ": "La actualización falló: "
+  "The update failed: ": "La actualización falló: ",
+  "Type the console's IP address, for example 192.168.1.50": "Escribe la dirección IP de la consola, por ejemplo 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "Preguntando directamente a %1. Si responde, se muestran su nombre y estado"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -732,7 +736,9 @@
   "Downloading VeyAmux %1…": "Téléchargement de VeyAmux %1…",
   "Downloading VeyAmux %1… %2 %": "Téléchargement de VeyAmux %1… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 est installé. Il démarrera la prochaine fois, ou redémarrez maintenant.",
-  "The update failed: ": "La mise à jour a échoué : "
+  "The update failed: ": "La mise à jour a échoué : ",
+  "Type the console's IP address, for example 192.168.1.50": "Saisissez l'adresse IP de la console, par exemple 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "Interrogation directe de %1. Si elle répond, son nom et son état s'affichent"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -930,7 +936,9 @@
   "Downloading VeyAmux %1…": "Laster ned VeyAmux %1…",
   "Downloading VeyAmux %1… %2 %": "Laster ned VeyAmux %1… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 er installert. Den starter neste gang, eller start på nytt nå.",
-  "The update failed: ": "Oppdateringen mislyktes: "
+  "The update failed: ": "Oppdateringen mislyktes: ",
+  "Type the console's IP address, for example 192.168.1.50": "Skriv konsollens IP-adresse, for eksempel 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "Spør %1 direkte. Hvis den svarer, vises navn og tilstand"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1128,7 +1136,9 @@
   "Downloading VeyAmux %1…": "Загрузка VeyAmux %1…",
   "Downloading VeyAmux %1… %2 %": "Загрузка VeyAmux %1… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 установлена. Она запустится в следующий раз, или перезапустите сейчас.",
-  "The update failed: ": "Обновление не удалось: "
+  "The update failed: ": "Обновление не удалось: ",
+  "Type the console's IP address, for example 192.168.1.50": "Введите IP-адрес консоли, например 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "Запрашиваю %1 напрямую. Если консоль ответит, появятся её имя и состояние"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1326,6 +1336,8 @@
   "Downloading VeyAmux %1…": "Laddar ner VeyAmux %1…",
   "Downloading VeyAmux %1… %2 %": "Laddar ner VeyAmux %1… %2 %",
   "VeyAmux %1 is installed. It starts the next time, or restart now.": "VeyAmux %1 är installerat. Det startar nästa gång, eller starta om nu.",
-  "The update failed: ": "Uppdateringen misslyckades: "
+  "The update failed: ": "Uppdateringen misslyckades: ",
+  "Type the console's IP address, for example 192.168.1.50": "Skriv konsolens IP-adress, till exempel 192.168.1.50",
+  "Asking %1 directly. If it answers, it shows its name and state": "Frågar %1 direkt. Om den svarar visas dess namn och läge"
  }
 }

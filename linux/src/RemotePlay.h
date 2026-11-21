@@ -39,6 +39,10 @@ struct Registered {          // what registration returns; stored by the caller
 };
 
 // ---- discovery (background; the list is refreshed every half second while it runs)
+// Addresses typed in by hand (IPv4 or a host name): asked directly as well as by broadcast. For a console that the
+// broadcast does not reach (another subnet, a VPN, Wi-Fi isolation) or whose answer a firewall drops (an answer to a
+// broadcast is not seen as a reply by the connection tracking; one to a direct question is). Restarts a running search.
+void setManualHosts(const std::vector<std::string>& hosts);
 void startDiscovery();
 void stopDiscovery();
 std::vector<Console> consoles();
@@ -48,7 +52,8 @@ std::vector<Console> consoles();
 std::string psnLoginUrl();
 bool psnAccountId(const std::string& redirectUrl, std::string& accountIdBase64, std::string& error);
 
-// ---- registration (blocking, up to ~30 s): `pin` = the 8 digits the console shows
+// ---- registration (blocking, up to ~30 s): `pin` = the 8 digits the console shows. A console that never answered the
+// search can be registered by its address: id empty, ps5 as chosen; the id is then the console's MAC from the answer.
 bool registerConsole(const Console& c, const std::string& accountIdBase64, uint32_t pin, Registered& out,
                      std::string& error);
 

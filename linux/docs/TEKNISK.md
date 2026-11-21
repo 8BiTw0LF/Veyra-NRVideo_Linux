@@ -571,6 +571,12 @@ nyeste billede bruges; derefter går det samme live-spor som et capture-kort (Ra
 - **Tjek min opsætning** og **ydelsesrapport**: `src/PlayerBridgeSetup.cpp`.
 - **Over skærmens frekvens** (`checkOverRefresh`): advarsel når spillets fps × multiplikator > skærmens Hz × 1,05 i 3 s.
 
+## Remote Play: konsol via IP-adresse
+`ps/manualHosts` (`adresse|1/0` for PS5/PS4) lægges som ekstra (unicast) adresser i chiaki-ng's discovery
+(`setManualHosts`), så konsollen spørges direkte. Svaret på en direkte forespørgsel er et rigtigt svar for
+connection tracking (en firewall slipper det igennem), hvad svaret på en broadcast ikke er. Svarer den aldrig, kan den
+registreres direkte på adressen (`psRegister("ip:<adresse>")`); id'et bliver så konsollens MAC fra registreringen.
+
 ## Opdatering inde fra appen
 `src/AppUpdate.cpp`: spørger `api.github.com/repos/8BiTw0LF/VeyAmux/releases/latest`, henter `VeyAmux-x86_64.AppImage`
 til `$APPIMAGE.download`, tjekker GitHubs SHA-256 for filen (ellers SHA-1 fra `.zsync`), gør den kørbar og `rename()`r

@@ -516,7 +516,11 @@ public slots:
     Q_INVOKABLE void psRegister(const QString& id, const QString& pin);
     Q_INVOKABLE void psSetPasscode(const QString& id, const QString& passcode);
     Q_INVOKABLE void psForget(const QString& id);
-    Q_INVOKABLE void psConnect(const QString& id);   // wakes the console if needed, then starts Remote Play
+    Q_INVOKABLE void psConnect(const QString& id);
+    // a console by its IP address (when the search does not find it): asked directly; it can be registered even if it
+    // does not answer the search. ps5: the console type, used only until it answers.
+    Q_INVOKABLE bool psAddHost(const QString& address, bool ps5);
+    Q_INVOKABLE void psRemoveHost(const QString& address);   // wakes the console if needed, then starts Remote Play
     // the controller, PlayStation layout (Gamepad -> RemotePlay); idle while the menu is open
     void psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
 
