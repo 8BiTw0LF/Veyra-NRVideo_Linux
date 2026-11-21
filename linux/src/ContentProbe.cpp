@@ -1,5 +1,7 @@
 #include "ContentProbe.h"
 
+#include <cstring>
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -105,10 +107,56 @@ bool FrameDiff::changed(const uint8_t* luma, int w, int h, int stride, int step,
     return changed;
 }
 
-void ContentProbe::feed(const uint8_t* luma, int w, int h, int stride, int step, Clock::time_point t) {
+bool PictureCompare::changed(const uint8_t* luma, int w, int h, int stride, int step) {
+    if (!luma || w < 16 || h < 16) { lastDiff_ = 0; return true; }
+    const bool fresh = rw_ != w || rh_ != h || ref_.size() != size_t(w) * h;
+    const int tol = tolerance(w, h);
+    int diff = 0;
+    if (!fresh) {
+        for (int y = 0; y < h && diff <= tol; ++y) {   // stops at the first row past the tolerance: a new picture
+            const uint8_t* s = luma + size_t(y) * size_t(stride);
+            const uint8_t* r = ref_.data() + size_t(y) * w;
+            int n = 0;
+            if (step == 1) {
+                // unsigned bytes and a byte counter per 255 samples: the compiler turns this into wide SIMD
+                for (int x0 = 0; x0 < w; x0 += 255) {
+                    const int x1 = std::min(w, x0 + 255);
+                    uint8_t c = 0;
+                    for (int x = x0; x < x1; ++x) {
+                        const uint8_t a = s[x], b = r[x];
+                        const uint8_t d = uint8_t(a > b ? a - b : b - a);
+                        c += uint8_t(d > kBand);
+                    }
+                    n += c;
+                }
+            } else {
+                for (int x = 0; x < w; ++x) {
+                    const int d = int(s[size_t(x) * step]) - int(r[x]);
+                    n += (d > kBand) | (d < -kBand);
+                }
+            }
+            diff += n;
+        }
+    }
+    lastDiff_ = diff;
+    const bool isNew = fresh || diff > tol;
+    if (isNew) {   // the reference is the last new picture, so a slow change adds up past the band
+        ref_.resize(size_t(w) * h);
+        rw_ = w; rh_ = h;
+        for (int y = 0; y < h; ++y) {
+            const uint8_t* s = luma + size_t(y) * size_t(stride);
+            uint8_t* r = ref_.data() + size_t(y) * w;
+            if (step == 1) std::memcpy(r, s, size_t(w));
+            else for (int x = 0; x < w; ++x) r[x] = s[size_t(x) * step];
+        }
+    }
+    return isNew;
+}
+
+void ContentProbe::feed(const uint8_t* luma, int w, int h, int stride, int step, Clock::time_point t, int known) {
     if (!luma || w < 16 || h < 16) return;
     std::lock_guard l(m_);
-    const bool changed = diff_.changed(luma, w, h, stride, step, true);
+    const bool changed = known >= 0 ? known != 0 : diff_.changed(luma, w, h, stride, step, true);
     pw_ = w;
     all_.push_back(t);
     if (changed) changed_.push_back(t);

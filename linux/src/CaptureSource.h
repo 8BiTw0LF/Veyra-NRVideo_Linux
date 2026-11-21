@@ -126,7 +126,9 @@ private:
     int w_ = 0, h_ = 0; double fps_ = 0; std::string card_;
     FrameConverter conv_;
     ContentProbe probe_;
-    FrameDiff delivered_;             // repeat detection against the last frame handed out
+    FrameDiff delivered_;             // repeat detection against the last frame handed out (compressed / RGBA)
+    PictureCompare rawCompare_;       // uncompressed formats: every buffer the card delivers against the last new picture
+    bool newSinceDelivered_ = true;   // a new picture came since the last frame handed out (it is not a repeat)
     bool lastRepeat_ = false;
     void probeRaw(const v4l2_buffer& b);
     void probeRgba(const std::vector<uint8_t>& rgba);

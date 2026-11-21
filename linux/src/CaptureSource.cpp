@@ -284,6 +284,8 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     close();
     probe_.reset();
     delivered_.reset();
+    rawCompare_.reset();
+    newSinceDelivered_ = true;
     if (isRemotePlay(path)) {
         auto s = std::make_unique<remoteplay::Stream>();
         if (!s->open(path, error)) return false;
@@ -410,10 +412,20 @@ void CaptureSource::probeRaw(const v4l2_buffer& b) {
     if ((b.flags & V4L2_BUF_FLAG_ERROR) || b.index >= bufs_.size()) return;
     const auto* src = static_cast<const uint8_t*>(bufs_[b.index].start);
     if (!src || rawStride_ <= 0) return;
-    if (fourcc_ == V4L2_PIX_FMT_NV12) { if (b.bytesused >= size_t(rawStride_) * h_) probe_.feed(src, w_, h_, rawStride_, 1, captureTime(b)); }
-    else if (fourcc_ == V4L2_PIX_FMT_YUYV) { if (b.bytesused >= size_t(rawStride_) * h_) probe_.feed(src, w_, h_, rawStride_, 2, captureTime(b)); }
-    else if (fourcc_ == V4L2_PIX_FMT_UYVY) { if (b.bytesused >= size_t(rawStride_) * h_) probe_.feed(src + 1, w_, h_, rawStride_, 2, captureTime(b)); }
-    else if (fourcc_ == V4L2_PIX_FMT_P010) { if (b.bytesused >= size_t(rawStride_) * h_) probe_.feed(src + 1, w_, h_, rawStride_, 2, captureTime(b)); }   // high byte of 16-bit luma
+    if (b.bytesused < size_t(rawStride_) * h_) return;
+    const uint8_t* luma = nullptr;
+    int step = 2;
+    if (fourcc_ == V4L2_PIX_FMT_NV12) { luma = src; step = 1; }
+    else if (fourcc_ == V4L2_PIX_FMT_YUYV) luma = src;
+    else if (fourcc_ == V4L2_PIX_FMT_UYVY || fourcc_ == V4L2_PIX_FMT_P010) luma = src + 1;   // P010: high byte of 16-bit luma
+    if (!luma) return;
+    // every buffer (also ones dropped for latency) is compared once, in full, against the last new picture; the result
+    // feeds the measured picture rate and decides whether the next frame handed out is a repeat (readLatest)
+    static const bool sparse = std::getenv("VEYAMUX_DEDUP_SPARSE") != nullptr;   // the old sparse grid, to compare
+    if (sparse) { probe_.feed(luma, w_, h_, rawStride_, step, captureTime(b)); return; }
+    const bool isNew = rawCompare_.changed(luma, w_, h_, rawStride_, step);
+    newSinceDelivered_ = newSinceDelivered_ || isNew;
+    probe_.feed(luma, w_, h_, rawStride_, step, captureTime(b), isNew ? 1 : 0);
     // compressed/RGB formats are probed after conversion (probeRgba)
 }
 
@@ -567,7 +579,9 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
                 out.w = w_; out.h = h_; out.stride = rawStride_;
                 // luma bytes for repeat detection: NV12 every byte, YUYV every 2nd, UYVY every 2nd from 1, P010 the high bytes
                 const int step = fourcc_ == V4L2_PIX_FMT_NV12 ? 1 : 2, off = (fourcc_ == V4L2_PIX_FMT_UYVY || p010) ? 1 : 0;
-                out.repeat = !delivered_.changed(src + off, w_, h_, rawStride_, step, true);
+                static const bool sparse = std::getenv("VEYAMUX_DEDUP_SPARSE") != nullptr;
+                if (sparse) out.repeat = !delivered_.changed(src + off, w_, h_, rawStride_, step, true);
+                else { out.repeat = !newSinceDelivered_; newSinceDelivered_ = false; }   // see probeRaw
                 res = Result::Frame;
             }
         } else {

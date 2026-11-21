@@ -51,6 +51,8 @@ public:
     void setStream(int maxHeight, std::function<void(QImage, int)> sink);
     // Recording: maxHeight -1 = off, 0 = original. The sink gets every displayed picture as NV12 (worker thread).
     void setRecord(int maxHeight, std::function<void(veyamux::EnhanceChain::RecFrame&&)> sink);
+    // Comparison clips (EnhanceChain::setCompare): 0 off, 1 split, 2 side by side, 3 vertical, 4 reveal; labels RGBA8888.
+    void setCompare(int mode, const QImage& labelOriginal = QImage(), const QImage& labelVeyamux = QImage());
     // The next displayed picture at full size, delivered once to the callback (worker thread).
     void requestScreenshot(std::function<void(QImage)> cb);
     QString lastError() const;

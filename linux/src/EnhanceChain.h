@@ -45,7 +45,11 @@ struct EnhanceSettings {
     // resampled to it (LxFit, Catmull-Rom) so Qt draws it 1:1 instead of stretching it bilinearly
     int fitW = 0, fitH = 0;
     bool hudLock = false;     // FSR frame generation: still HUD pixels in generated frames come from the real frame   // live with frame generation: re-time a locked game's unevenly shown pictures (MediaEngine)
-    int fxaaQuality = 1;      // 0 medium, 1 high, 2 ultra (VeyAmux AaFxaa3/4/5)
+    int fxaaQuality = 1;      // 0 medium, 1 high, 2 ultra (VeyAmux AaFxaa3/4/5; SMAA medium / high / ultra)
+    bool smaa = false;        // anti-aliasing with SMAA 1x instead of FXAA (when fxaa is on)
+    // Colour effects (Veyra's ColorDetail): fine texture, midtone clarity, dehaze; -1..1, 0 = off
+    float texture = 0.0f, clarity = 0.0f, dehaze = 0.0f;
+    bool detailActive() const { return texture != 0.0f || clarity != 0.0f || dehaze != 0.0f; }
     float sharpen = 0.0f;     // 0..1
     float exposure = 0.0f;    // EV
     float contrast = 1.0f;
@@ -70,7 +74,7 @@ struct EnhanceSettings {
     bool isIdentity() const {
         return !retroTv && !pixelPerfect && (!enabled || (scale <= 1.001f && !fxaa && !deflicker && upscaler != Upscaler::AmdFsr3 &&
                             denoise == Denoise::Off && sharpen <= 0.001f && exposure == 0.0f &&
-                            contrast == 1.0f && saturation == 1.0f));
+                            contrast == 1.0f && saturation == 1.0f && !detailActive()));
     }
 };
 
@@ -127,6 +131,12 @@ public:
     struct RecFrame { std::vector<uint8_t> nv12; int w = 0, h = 0; std::chrono::steady_clock::time_point t{}; };
     void setRecordMaxHeight(int h) { recMaxH_ = h; }
     void pollRecord(std::vector<RecFrame>& out);
+    // Comparison clips (live path, while recording): the recorded picture is the original next to VeyAmux's.
+    // mode 0 off, 1 split, 2 side by side, 3 vertical 1080x1920, 4 reveal (a sweeping line). Labels: RGBA8 pictures
+    // (sRGB, straight alpha) drawn over the clip; empty = none. Any thread.
+    void setCompare(int mode) { cmpMode_ = mode; cmpStart_ = std::chrono::steady_clock::now(); }
+    int compareMode() const { return cmpMode_.load(); }
+    void setCompareLabels(std::vector<uint8_t> a, int aw, int ah, std::vector<uint8_t> b, int bw, int bh);
     // Screenshot (live path): the next displayed image is copied at full size; pollScreenshot() returns it once.
     void requestScreenshot() { shotWanted_ = true; }
     bool pollScreenshot(StreamFrame& out);
@@ -151,7 +161,15 @@ private:
     RecSlot rec_[kRecSlots];
     std::atomic<int> recMaxH_{-1};
     uint64_t recSeq_ = 0;
-    void recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t);
+    void recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t, bool keepSize = false);
+    std::atomic<int> cmpMode_{0};
+    std::atomic<std::chrono::steady_clock::time_point> cmpStart_{};
+    std::mutex cmpM_;
+    struct Label { std::vector<uint8_t> rgba; int w = 0, h = 0; };
+    Label cmpLabNew_[2];
+    bool cmpLabDirty_ = false;
+    ImageRes cmp_, cmpLab_[2];
+    const ImageRes* recordCompare(int mode);
     StreamSlot shot_;
     std::atomic<bool> shotWanted_{false};
     void recordShot(VkCommandBuffer cb, const ImageRes& src);
@@ -186,6 +204,12 @@ private:
     std::unique_ptr<FsrFrameGen> fg_;
     uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)
+    // SMAA 1x: edges, blending weights (source size) and the two lookup tables
+    ImageRes smaaEdges_, smaaWeights_, smaaArea_, smaaSearch_;
+    bool ensureSmaa(int w, int h);
+    // colour effects: the low-resolution base (ping-pong) and the result at the output size
+    ImageRes detLow_[2], detOut_;
+    const ImageRes* recordDetail(const ImageRes* in, const EnhanceSettings& s, int ow, int oh);
     BufferRes nisStaging_;
     bool recordNis(const ImageRes& src, int w, int h, int ow, int oh);
     ImageRes fgOut_, disp_;

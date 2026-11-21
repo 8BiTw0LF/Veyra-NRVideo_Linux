@@ -1,4 +1,5 @@
 #include "EnhanceChain.h"
+#include "SmaaLookupTables.h"
 #include "../third_party/nis/NIS_Config.h"
 #include <algorithm>
 #include <cmath>
@@ -43,6 +44,10 @@ EnhanceChain::~EnhanceChain() {
     fsrUp_.reset();
     fg_.reset();
     ctx_.destroy(nisScale_);
+    ctx_.destroy(smaaArea_);
+    ctx_.destroy(smaaSearch_);
+    ctx_.destroy(cmpLab_[0]);
+    ctx_.destroy(cmpLab_[1]);
     ctx_.destroy(nisUsm_);
     ctx_.destroy(nisStaging_);
     ctx_.destroy(fgOut_);
@@ -71,7 +76,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker", "LxFit", "LxHudUpdate", "LxHudCompose"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker", "LxFit", "LxHudUpdate", "LxHudCompose", "AaSmaaEdges", "AaSmaaWeightsMEDIUM", "AaSmaaWeightsHIGH", "AaSmaaWeightsULTRA", "AaSmaaBlend", "ColorDetailReduce", "ColorDetailBlur", "ColorDetailApply", "LxCompare"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
@@ -96,7 +101,7 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 }
 
 void EnhanceChain::releaseResources() {
-    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1], &pre8_}) ctx_.destroy(*i);
+    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1], &pre8_, &cmp_, &smaaEdges_, &smaaWeights_, &detLow_[0], &detLow_[1], &detOut_}) ctx_.destroy(*i);
     nrHistory_ = false;
     dfHistory_ = false;
     if (liveMode_) retire(out8_); else ctx_.destroy(out8_);
@@ -185,10 +190,18 @@ bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const 
 
     auto post = [&](const ImageRes* start, BufferRes& dstBuf) {
         recordPost(start, s);
+        // test hook (veyamux-upscale-test): the comparison picture instead of the finished one
+        const ImageRes* shown = &out8_;
+        if (const int cm = cmpMode_.load(); cm > 0) {
+            if (const ImageRes* c = recordCompare(cm)) {
+                shown = c; ow = int(c->width); oh = int(c->height); outW = ow; outH = oh;
+                if (dstBuf.size < VkDeviceSize(ow) * oh * 4) { ctx_.destroy(dstBuf); dstBuf = ctx_.createBuffer(VkDeviceSize(ow) * oh * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true); }
+            }
+        }
         VkBufferImageCopy rb{};
         rb.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         rb.imageExtent = {uint32_t(ow), uint32_t(oh), 1};
-        vkCmdCopyImageToBuffer(cmd, out8_.image, VK_IMAGE_LAYOUT_GENERAL, dstBuf.buffer, 1, &rb);
+        vkCmdCopyImageToBuffer(cmd, shown->image, VK_IMAGE_LAYOUT_GENERAL, dstBuf.buffer, 1, &rb);
         ctx_.computeBarrier();
         timer_.mark(cmd, GpuTimer::Output);
     };
@@ -229,7 +242,21 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     else dfHistory_ = false;
     if (s.enabled && s.denoise != Denoise::Off) { cur = recordDenoise(cur, s, mv); timer_.mark(ctx_.active(), GpuTimer::Denoise); }
     else nrHistory_ = false;
-    if (s.enabled && s.fxaa) {
+    if (s.enabled && s.fxaa && s.smaa && ensureSmaa(w, h)) {
+        // SMAA 1x: luma edges, blending weights from the area / search tables, neighbourhood blend (linear colour)
+        static constexpr float kThreshold[3] = {0.1f, 0.1f, 0.05f};   // medium / high / ultra (iryoku/smaa presets)
+        static constexpr const char* kWeights[3] = {"AaSmaaWeightsMEDIUM", "AaSmaaWeightsHIGH", "AaSmaaWeightsULTRA"};
+        const int q = std::clamp(s.fxaaQuality, 0, 2);
+        AaParams ap{};
+        ap.width = w; ap.height = h; ap.invW = 1.0f / w; ap.invH = 1.0f / h; ap.workingToWhite = 1.0f;
+        ap.threshold = kThreshold[q]; ap.strength = 1.0f;
+        run("AaLuma", {cur}, {&luma_}, &ap, sizeof ap, w, h, 8);
+        run("AaSmaaEdges", {&luma_}, {&smaaEdges_}, &ap, sizeof ap, w, h, 8);
+        run(kWeights[q], {&smaaEdges_, &smaaArea_, &smaaSearch_}, {&smaaWeights_}, &ap, sizeof ap, w, h, 8);
+        run("AaSmaaBlend", {cur, &smaaWeights_}, {&linB_}, &ap, sizeof ap, w, h, 8);
+        cur = &linB_;
+        timer_.mark(ctx_.active(), GpuTimer::AntiAlias);
+    } else if (s.enabled && s.fxaa) {
         AaParams ap{};
         ap.width = w; ap.height = h; ap.invW = 1.0f / w; ap.invH = 1.0f / h; ap.workingToWhite = 1.0f;
         ap.threshold = 0.1f; ap.strength = 1.0f;
@@ -299,6 +326,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     } else {
         upHistory_ = false;
     }
+    if (s.enabled && s.detailActive() && !s.pixelActive()) cur = recordDetail(cur, s, ow, oh);
     if (s.enabled && ((s.sharpen > 0.001f && !s.retroTv && !s.pixelActive()) || s.exposure != 0.0f || s.contrast != 1.0f || s.saturation != 1.0f)) {
         EnhanceParams ep{uint32_t(ow), uint32_t(oh), (s.retroTv || s.pixelActive()) ? 0.0f : s.sharpen, s.exposure, s.contrast, s.saturation, {0, 0}};
         run("LxEnhance", {cur}, {&fin_}, &ep, sizeof ep, ow, oh, 16);
@@ -318,6 +346,60 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         run("LxFit", {&pre8_}, {&out8_}, &fp, sizeof fp, dw_, dh_, 16);
     }
     timer_.mark(ctx_.active(), GpuTimer::Finish);
+}
+
+bool EnhanceChain::ensureSmaa(int w, int h) {
+    if (!kernel("AaSmaaEdges") || !kernel("AaSmaaBlend")) return false;
+    if (!smaaArea_.image) {   // the precomputed lookup tables, once
+        smaaArea_ = ctx_.createImage(smaa::kAreaTexWidth, smaa::kAreaTexHeight, VK_FORMAT_R8G8_UNORM,
+                                     VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        smaaSearch_ = ctx_.createImage(smaa::kSearchTexWidth, smaa::kSearchTexHeight, VK_FORMAT_R8_UNORM,
+                                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        if (!ctx_.uploadImage(smaaArea_, smaa::kAreaTex, smaa::kAreaTexPitch) ||
+            !ctx_.uploadImage(smaaSearch_, smaa::kSearchTex, smaa::kSearchTexPitch)) {
+            ctx_.destroy(smaaArea_);
+            ctx_.destroy(smaaSearch_);
+            return false;
+        }
+    }
+    if (smaaEdges_.image && int(smaaEdges_.width) == w && int(smaaEdges_.height) == h) return true;
+    ctx_.destroy(smaaEdges_);
+    ctx_.destroy(smaaWeights_);
+    smaaEdges_ = ctx_.createImage(uint32_t(w), uint32_t(h), VK_FORMAT_R16G16_SFLOAT, kWork);
+    smaaWeights_ = ctx_.createImage(uint32_t(w), uint32_t(h), VK_FORMAT_R8G8B8A8_UNORM, kWork);
+    if (!smaaEdges_.image || !smaaWeights_.image) { ctx_.destroy(smaaEdges_); ctx_.destroy(smaaWeights_); return false; }
+    return true;
+}
+
+// Texture / clarity / dehaze (Veyra's ColorDetail, three small passes): block statistics at about 135 rows, a
+// separable blur of them, then the apply at the output size. The base spans 2-3 % of the picture height.
+const ImageRes* EnhanceChain::recordDetail(const ImageRes* in, const EnhanceSettings& s, int ow, int oh) {
+    const uint32_t block = uint32_t(std::clamp(oh / 135, 4, 32));
+    const uint32_t lw = (uint32_t(ow) + block - 1) / block, lh = (uint32_t(oh) + block - 1) / block;
+    if (!detOut_.image || int(detOut_.width) != ow || int(detOut_.height) != oh || detLow_[0].width != lw || detLow_[0].height != lh) {
+        for (ImageRes* i : {&detLow_[0], &detLow_[1], &detOut_}) ctx_.destroy(*i);
+        detLow_[0] = ctx_.createImage(lw, lh, kLinearFmt, kWork);
+        detLow_[1] = ctx_.createImage(lw, lh, kLinearFmt, kWork);
+        detOut_ = ctx_.createImage(uint32_t(ow), uint32_t(oh), kLinearFmt, kWork);
+        if (!detLow_[0].image || !detLow_[1].image || !detOut_.image) {
+            for (ImageRes* i : {&detLow_[0], &detLow_[1], &detOut_}) ctx_.destroy(*i);
+            return in;
+        }
+    }
+    // the working image's 1.0 is frameNits_ (SDR white, or the display's level with HDR output): scene units have 1.0 = SDR white
+    const float toScene = frameNits_ / 203.0f;
+    struct { uint32_t sw, sh, lw, lh, block; float toScene, p0, p1; } rp{uint32_t(ow), uint32_t(oh), lw, lh, block, toScene, 0, 0};
+    run("ColorDetailReduce", {in}, {&detLow_[0]}, &rp, sizeof rp, int(lw), int(lh), 8);
+    struct { uint32_t w, h; int32_t sx, sy; float p0, p1, p2, p3; } bp{lw, lh, 1, 0, 0, 0, 0, 0};
+    run("ColorDetailBlur", {&detLow_[0]}, {&detLow_[1]}, &bp, sizeof bp, int(lw), int(lh), 8);
+    bp.sx = 0; bp.sy = 1;
+    run("ColorDetailBlur", {&detLow_[1]}, {&detLow_[0]}, &bp, sizeof bp, int(lw), int(lh), 8);
+    const float ring = float(std::max(1, (oh + 540) / 1080)) * 2.0f;
+    struct { uint32_t w, h, lw, lh; float block, toScene, tex, clar, dehaze, ring, p0, p1; } ap{
+        uint32_t(ow), uint32_t(oh), lw, lh, float(block), toScene, std::clamp(s.texture, -1.0f, 1.0f),
+        std::clamp(s.clarity, -1.0f, 1.0f), std::clamp(s.dehaze, -1.0f, 1.0f), ring, 0, 0};
+    run("ColorDetailApply", {in, &detLow_[0]}, {&detOut_}, &ap, sizeof ap, ow, oh, 16);
+    return &detOut_;
 }
 
 // Noise levels (perceptual units, sqrt of linear light) for light / medium / strong.
@@ -521,7 +603,12 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     recordPost(&lin_, s);
     // OBS stream copy of the displayed image
     if (streamMaxH_.load() >= 0) { recordStream(cb, out8_, 0); timer_.mark(cb, GpuTimer::Output); }
-    if (recMaxH_.load() >= 0) recordRec(cb, out8_, in.time);
+    if (recMaxH_.load() >= 0) {
+        const int cm = cmpMode_.load();
+        const ImageRes* c = cm > 0 ? recordCompare(cm) : nullptr;
+        if (c) recordRec(cb, *c, in.time, cm == 3);   // vertical clips keep their 1080x1920
+        else recordRec(cb, out8_, in.time);
+    }
     if (shotWanted_.exchange(false)) recordShot(cb, out8_);
 
     // FSR frame generation: the generated frame goes to the display image now, the real one half a frame later.
@@ -756,9 +843,57 @@ void EnhanceChain::pollStream(std::vector<StreamFrame>& out) {
 
 // ------------------------------------------------------------------ recording / screenshot readback
 
-void EnhanceChain::recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t) {
+void EnhanceChain::setCompareLabels(std::vector<uint8_t> a, int aw, int ah, std::vector<uint8_t> b, int bw, int bh) {
+    std::lock_guard l(cmpM_);
+    cmpLabNew_[0] = {std::move(a), aw, ah};
+    cmpLabNew_[1] = {std::move(b), bw, bh};
+    cmpLabDirty_ = true;
+}
+
+// The comparison picture (LxCompare): the original (lin_, the last real frame before any enhancement) beside the
+// finished one (out8_). Null when it cannot be made (then the normal picture is recorded).
+const ImageRes* EnhanceChain::recordCompare(int mode) {
+    if (!kernel("LxCompare") || !out8_.image || !lin_.image) return nullptr;
+    {
+        std::lock_guard l(cmpM_);
+        if (cmpLabDirty_ || !cmpLab_[0].image) {
+            cmpLabDirty_ = false;
+            for (int i = 0; i < 2; ++i) {
+                const Label& lb = cmpLabNew_[i];
+                const bool has = lb.w > 0 && lb.h > 0 && lb.rgba.size() >= size_t(lb.w) * lb.h * 4;
+                const uint32_t w = has ? uint32_t(lb.w) : 1, h = has ? uint32_t(lb.h) : 1;
+                if (cmpLab_[i].width != w || cmpLab_[i].height != h) {
+                    if (cmpLab_[i].image) retire(cmpLab_[i]);
+                    cmpLab_[i] = ctx_.createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+                }
+                const uint8_t clear[4] = {0, 0, 0, 0};
+                if (!cmpLab_[i].image || !ctx_.uploadImage(cmpLab_[i], has ? lb.rgba.data() : clear, w * 4)) return nullptr;
+            }
+        }
+    }
+    const uint32_t w = mode == 3 ? 1080u : out8_.width, h = mode == 3 ? 1920u : out8_.height;
+    if (cmp_.width != w || cmp_.height != h) {
+        if (cmp_.image) retire(cmp_);
+        cmp_ = ctx_.createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        if (!cmp_.image) return nullptr;
+    }
+    // reveal: sweep 2 s left to right, hold 1 s on VeyAmux, sweep back 2 s, hold 1 s on the original
+    const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - cmpStart_.load()).count();
+    const double ph = std::fmod(std::max(0.0, t), 6.0);
+    auto ease = [](double x) { return x * x * (3.0 - 2.0 * x); };
+    const float sweep = float(ph < 2.0 ? ease(ph / 2.0) : ph < 3.0 ? 1.0 : ph < 5.0 ? 1.0 - ease((ph - 3.0) / 2.0) : 0.0);
+    const bool haveA = cmpLab_[0].width > 1, haveB = cmpLab_[1].width > 1;
+    struct { uint32_t w, h, mode, pq; float nits, sweep; uint32_t aw, ah, bw, bh; float scale, p0; } cp{
+        w, h, uint32_t(mode), outPq_ ? 1u : 0u, frameNits_, sweep,
+        haveA ? cmpLab_[0].width : 0u, haveA ? cmpLab_[0].height : 0u, haveB ? cmpLab_[1].width : 0u, haveB ? cmpLab_[1].height : 0u,
+        float(std::max(1.0, (mode == 3 ? 1920.0 : double(h)) / 1080.0)), 0};
+    run("LxCompare", {&lin_, &out8_, &cmpLab_[0], &cmpLab_[1]}, {&cmp_}, &cp, sizeof cp, int(w), int(h), 16);
+    return &cmp_;
+}
+
+void EnhanceChain::recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t, bool keepSize) {
     if (!src.image || src.width == 0) return;
-    const int mh = recMaxH_.load();
+    const int mh = keepSize ? 0 : recMaxH_.load();
     int tw = int(src.width), th = int(src.height);
     if (mh > 0 && th > mh) { tw = int(std::lround(double(tw) * mh / th)); th = mh; }
     tw = std::max(2, tw & ~1); th = std::max(2, th & ~1);

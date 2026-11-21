@@ -20,33 +20,31 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file, Capture and PlayStation buttons, the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
+  <img src="docs/images/start.png" width="720" alt="VeyAmux's start screen: What do you want to play? with three cards (Capture card, PlayStation, Video file), the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
 
-## New in 1.5
+## New in 1.6
 
-- **Smoother Lossless Scaling:**
-  - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of
-    33/33, and frame generation keeps that judder. VeyAmux first moves each picture to an even rhythm. This costs one
-    refresh of delay, about 17 ms at 60 Hz. Based on PushFPS via Veyra-NRVideo 2.2.0.
-  - **VRR warning:** if Adaptive Sync is on in KDE, VeyAmux warns you, because lsfg-vk 2 needs a fixed refresh rate to
-    space its frames evenly.
-- **Sharp in any window size:** the finished picture is resampled to exactly the pixels it covers in the window, and
-  then drawn 1:1. Before, it was stretched bilinearly. It is sharper when enlarged and has no crawling lines when
-  shrunk.
-- **Lock the HUD** (AMD FSR frame generation, optional): still text, maps and gauges no longer warp in the generated
-  frames.
+- **A new start screen and menu:** the sources as three large cards, and a menu with six tabs (Picture, Frame
+  generation, Display, Sound, Record, System). It grows with the screen, so it reads well from the couch, and LB / RB
+  switch tabs on a controller.
+- **Updates from inside VeyAmux:** it looks for a new version on GitHub by itself (at most twice a day). One click
+  downloads it, checks it against the release's checksum and puts it in place; Gear Lever is no longer needed.
+- **Smoother frame generation:** repeated frames are now found by comparing the whole picture, so a small movement
+  seen from a still camera is no longer thrown away as a repeat. VeyAmux also warns when frame generation asks for
+  more frames than the screen can show, and when the capture card sends compressed MJPEG while it has an
+  uncompressed mode.
+- **Picture:** SMAA anti-aliasing, and texture, clarity and dehaze.
+- **Comparison clips:** the original picture next to VeyAmux's (split, side by side, vertical 9:16 or a sweeping
+  reveal), and clip markers (**F6**) while recording.
+- **Check my setup:** finds what costs sharpness, smoothness or sound, each with a button that fixes it, and a
+  performance report to copy into bug reports.
 
-New in 1.4: SGSR upscaling instead of Lanczos, Abyssal Garden in 720p, VA-API for PlayStation Remote Play, and *Off*
-really turns Lossless Scaling off. New in 1.3: FSR 3.1.6 TAA at native resolution, anti-flicker, *Add to Steam* with
-library artwork and the automatic lsfg-vk 2 install. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
-
-<p align="center">
-  <img src="docs/images/sgsr.png" width="900" alt="A menu screenshot at full size, and the same picture at half size scaled back up 2x with Lanczos (1.3) and with SGSR (1.4)">
-  <br><sub>Half the resolution, scaled back up 2×: Lanczos (1.3) and SGSR (1.4) next to the full-size original.</sub>
-</p>
+Several of these come from [PushFPS](https://github.com/DosukaSOL/PushFPS) 4.1 (GPL-3.0). New in 1.5: frame pacing
+repair, sharp fit-to-window scaling, HUD lock and the VRR warning. New in 1.4: SGSR upscaling and Abyssal Garden in
+720p. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
 
 <p align="center">
   <img src="docs/images/steam-artwork.jpg" width="640" alt="VeyAmux's Steam library artwork: the background with the logo over it, the portrait cover and the wide cover">
@@ -60,7 +58,7 @@ VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch o
 screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
 - **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Snapdragon Game Super Resolution (SGSR);
-- **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA or FSR 3.1.6 TAA;
+- **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA, SMAA or FSR 3.1.6 TAA;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
 - **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes), or show retro games with
@@ -77,13 +75,13 @@ uploaded to the GPU once, and everything else happens there. VeyAmux needs well 
 Developed and tested on **Bazzite** (KDE Plasma) with an **AMD RX 9070 XT** and an **AVerMedia Live Gamer Ultra 2.1**.
 
 <p align="center">
-  <img src="docs/images/demo-menu.jpg" width="800" alt="The built-in demo, Abyssal Garden, with VeyAmux's menu open beside it">
-  <br><sub>The built-in demo with the menu (P) open beside it.</sub>
+  <img src="docs/images/demo-menu.jpg" width="800" alt="The built-in demo, Abyssal Garden, with VeyAmux's menu open on the Picture tab: upscaling, method, noise reduction, anti-aliasing and anti-flicker">
+  <br><sub>The built-in demo with the menu (P) open on the Picture tab.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/menu.png" width="628" alt="Part of VeyAmux's menu: upscaling with NIS, noise reduction, HDR, anti-aliasing, sound output with a live spectrum, Retro TV, Steam, OBS, instant replay and live streaming">
-  <br><sub>Part of the menu (P). On a desktop screen the whole menu sits beside the picture, with everything visible at once and no scrolling; on handhelds it fills the screen.</sub>
+  <img src="docs/images/menu-tabs.jpg" width="900" alt="Three tabs of VeyAmux's menu: Frame generation (Lossless Scaling and AMD FSR 3.1.6, even out frame pacing), Record (instant replay, recording, live stream, comparison clips) and System (Check my setup with two findings, updates, performance report)">
+  <br><sub>The Frame generation, Record and System tabs. The findings under <i>Check my setup</i> are from a test PC without a graphics card.</sub>
 </p>
 
 ## What do I need?
@@ -147,7 +145,7 @@ needed for its own frame generation**, and everything else works without it:
   - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
     now (not over the internet).
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
-  one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
+  one marked with ★. If you pick a compressed MJPEG mode where the card also has an uncompressed one, VeyAmux says so. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
 - **A window or a whole screen** (Wayland: KDE Plasma, GNOME, …): choose *Window or screen …* under **Capture**, and your
   desktop asks what to share, the same way OBS and Discord do. The picture gets all of VeyAmux's processing.
@@ -168,7 +166,9 @@ needed for its own frame generation**, and everything else works without it:
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
 - **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by
   averaging them with the two previous frames along the motion. Everything else is left alone, and it adds no delay.
-- **Sharpness**, **anti-aliasing** (FXAA from Veyra), **exposure**, **contrast** and **saturation**.
+- **Sharpness**, **anti-aliasing** (FXAA or SMAA), **exposure**, **contrast** and **saturation**.
+- **Texture, clarity and dehaze** (from Veyra): texture brings out fine detail, clarity the contrast of mid-sized
+  shapes, and dehaze takes away a grey veil. The colours stay as they are.
 - **Retro TV**: turns the picture into an old CRT television, with a slightly curved glass screen, rounded corners,
   visible scanlines and red-green-blue phosphor stripes. This is CRT-Geom with the same settings as ShaderGlass'
   `crt-geom` preset. Choose 240 lines (old consoles), 480 lines (PS2 / GameCube era) or the source's own lines.
@@ -191,7 +191,10 @@ needed for its own frame generation**, and everything else works without it:
   frame is shown half a frame later. *Lock the HUD* keeps still text, maps and gauges from warping in the generated
   frames.
 - **Smarter input**: a 30 fps game in a 60 Hz signal repeats every picture. VeyAmux drops the repeats, so frame
-  generation turns 30 distinct frames into smooth 60.
+  generation turns 30 distinct frames into smooth 60. Every pixel of the picture is compared, so even a small movement
+  seen from a still camera counts as a new frame and is not thrown away.
+- **Screen check**: if frame generation asks for more frames than the screen shows (30 fps × 3 on a 60 Hz screen),
+  VeyAmux says so and what to change.
 - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of 33/33,
   and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first (costs one refresh of delay,
   about 17 ms at 60 Hz).
@@ -240,7 +243,7 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
   appears.
 - **Game controller in the menu**: hold **Select + Start** (or the **Guide / PS** button for half a second) to open and
   close the menu. While it is open, the controller only steers the menu (the game gets nothing): the D-pad or left
-  stick moves, **A** chooses, left/right change a slider, **LB / RB** jump between the columns and **B** closes. Xbox,
+  stick moves, **A** chooses, left/right change a slider, **LB / RB** switch between the tabs and **B** closes. Xbox,
   PlayStation, Switch and most other controllers work.
 - **Steam Deck and touchscreens**: on the Deck, Select + Start are the **View (⧉)** and **Menu (☰)** buttons. The menu
   can also be opened without them: a tap on the touchscreen shows the controls with the menu button (a tap does not
@@ -249,17 +252,22 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
   corner closes it.
 
   <p align="center">
-    <img src="docs/images/handheld-menu.jpg" width="640" alt="VeyAmux's menu on a 1280×800 handheld screen: it fills the screen in two columns with large text and a close button in the corner">
+    <img src="docs/images/handheld-menu.jpg" width="640" alt="VeyAmux's menu on a 1280×800 handheld screen: it fills the screen with the six tabs at the top, large controls and a close button in the corner">
     <br><sub>The menu on a 1280×800 handheld screen (Steam Deck size).</sub>
   </p>
-- **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
+- **Updates from inside the app**: VeyAmux looks for a new version on GitHub (at most twice a day, or when you ask).
+  One click downloads it, checks it against the release's checksum and puts it in place of the AppImage; it starts at
+  the next restart. Gear Lever and AppImageUpdate still work too.
+- **Check my setup** (System tab): looks at what is running and says what costs sharpness, smoothness or sound, each
+  with one button that fixes it. A **performance report** can be copied for bug reports.
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.
   - **Code**: black with terminal green and monospace text.
   - **Inferno**: near-black with blood red, ember orange and classical capitals.
   - **Retro**: 8-bit console greys and red, square buttons with a hard edge, and a pixel font.
 - **Eight languages**: English, Danish, German, Spanish, French, Swedish, Norwegian (Bokmål) and Russian, chosen from
-  the system or on the start screen. The whole menu is visible at once, with no scrolling.
+  the system or on the start screen.
+- **The menu** has six tabs: Picture, Frame generation, Display, Sound, Record and System.
 
 ## Latency
 
@@ -284,7 +292,8 @@ chmod +x VeyAmux-x86_64.AppImage
 ./VeyAmux-x86_64.AppImage
 ```
 
-Or install it with **[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)**, which also keeps it up to date.
+VeyAmux updates itself: when a new version is out, it offers it on the start screen and under *System*. You can
+also install it with **[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)**.
 
 The AppImage contains everything it needs (Qt, FFmpeg, shaders), and nothing is installed on the system. If FUSE is
 missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
@@ -354,10 +363,10 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 
 **Space** play/pause · **←/→** ±5 s (Shift ±30 s) · **↑/↓** volume · **F** fullscreen · **E** enhancement on/off ·
 **P** menu · **M** mute (your speakers only) · **O** open file · **C** capture · **F3** frame-time overlay ·
-**1–9** profiles · **F9** save replay · **F10** record · **F12** screenshot
+**1–9** profiles · **F6** clip marker · **F9** save replay · **F10** record · **F12** screenshot
 
 **Controller:** **Select + Start** (or hold **Guide**) menu · **D-pad / stick** move · **A** choose · **B** close ·
-**LB / RB** columns
+**LB / RB** menu tabs
 
 **Demo:** **W A S D** swim · **Q / E** down / up · **Shift** faster · drag with the mouse to look · **1–6** viewpoints ·
 controller sticks, triggers and **Y**

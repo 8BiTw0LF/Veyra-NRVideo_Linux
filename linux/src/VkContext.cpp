@@ -314,6 +314,40 @@ void VkContext::toGeneral(VkImage image) {
     vkFreeCommandBuffers(device_, pool_, 1, &c);
 }
 
+bool VkContext::uploadImage(const ImageRes& image, const void* data, uint32_t rowBytes) {
+    if (!image.image || !data) return false;
+    BufferRes stage = createBuffer(VkDeviceSize(rowBytes) * image.height, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+    if (!stage.mapped) return false;
+    std::memcpy(stage.mapped, data, size_t(rowBytes) * image.height);
+    VkCommandBufferAllocateInfo cai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    cai.commandPool = pool_;
+    cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cai.commandBufferCount = 1;
+    VkCommandBuffer c;
+    vkAllocateCommandBuffers(device_, &cai, &c);
+    VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(c, &bi);
+    VkBufferImageCopy r{};
+    r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    r.imageExtent = {image.width, image.height, 1};
+    vkCmdCopyBufferToImage(c, stage.buffer, image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &r);
+    VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+    vkEndCommandBuffer(c);
+    VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &c;
+    vkResetFences(device_, 1, &fence_);
+    const bool ok = vkQueueSubmit(queue_, 1, &si, fence_) == VK_SUCCESS;
+    if (ok) vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
+    vkFreeCommandBuffers(device_, pool_, 1, &c);
+    destroy(stage);
+    return ok;
+}
+
 ImageRes VkContext::createImage(uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags usage, uint32_t depth,
                                 bool volume) {
     ImageRes r;

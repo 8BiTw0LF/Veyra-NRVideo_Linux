@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(veyamux-linux VERSION 1.5 LANGUAGES C CXX)
+project(veyamux-linux VERSION 1.6 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,7 +44,14 @@ endforeach()
 foreach(q 3 4 5)
   veyamux_spv(AaFxaa${q} "${ORIG_SHADERS}/AaFxaa.hlsl" -DFXAA_PRESET=${q})
 endforeach()
-foreach(s LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom LxPixelGrid LxDeflicker LxFit LxHudUpdate LxHudCompose)
+# SMAA 1x (iryoku/smaa, MIT, via Veyra / PushFPS) and the colour effects texture / clarity / dehaze (Veyra)
+foreach(s AaSmaaEdges AaSmaaBlend ColorDetailReduce ColorDetailBlur ColorDetailApply)
+  veyamux_spv(${s} "${ORIG_SHADERS}/${s}.hlsl")
+endforeach()
+foreach(q MEDIUM HIGH ULTRA)
+  veyamux_spv(AaSmaaWeights${q} "${ORIG_SHADERS}/AaSmaaWeights.hlsl" -DSMAA_PRESET_${q})
+endforeach()
+foreach(s LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom LxPixelGrid LxDeflicker LxFit LxHudUpdate LxHudCompose LxCompare)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
 # AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
@@ -95,8 +102,8 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
-add_library(veyamux_core STATIC src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
-target_include_directories(veyamux_core PUBLIC src)
+add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
+target_include_directories(veyamux_core PUBLIC src third_party/smaa)
 target_link_libraries(veyamux_core PUBLIC Vulkan::Vulkan veyamux_ffx Threads::Threads)
 target_compile_options(veyamux_core PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_compat.h")
 add_executable(veyamux-selftest src/selftest.cpp)
@@ -147,7 +154,7 @@ endif()
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -162,9 +169,10 @@ foreach(f pq_video hdr_window)
 endforeach()
 qt_add_resources(veyamux "hdrshaders" PREFIX "/" FILES ${QSB_FILES})
 qt_add_resources(veyamux "qml" PREFIX "/" FILES
-  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/CaptureDialog.qml qml/RemotePlayDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
+  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/Menu.qml qml/CaptureDialog.qml qml/RemotePlayDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
+  qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)
@@ -183,6 +191,8 @@ install(FILES third_party/ffx_tools/SPIRV-Reflect/LICENSE DESTINATION ${CMAKE_IN
 add_executable(veyamux-capture-test src/capture_test.cpp)
 target_link_libraries(veyamux-capture-test PRIVATE veyamux_media)
 
+add_executable(veyamux-update-test src/update_test.cpp src/AppUpdate.cpp)
+target_link_libraries(veyamux-update-test PRIVATE Qt6::Core CURL::libcurl)
 add_executable(veyamux-probe-test src/probe_test.cpp src/ContentProbe.cpp)
 target_link_libraries(veyamux-probe-test PRIVATE Threads::Threads)
 add_executable(veyamux-upscale-test src/upscale_test.cpp)

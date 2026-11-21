@@ -27,6 +27,19 @@ int main(int argc, char** argv) {
         s.pixelPerfect = true;
         if (std::sscanf(argv[7] + 2, "%dx%d", &s.gridW, &s.gridH) == 2) s.pixelGrid = 1;
     }
+    if (const char* aa = std::getenv("VEYAMUX_TEST_AA")) {   // "fxaa,q" or "smaa,q" (q 0..2)
+        s.fxaa = true; s.smaa = std::strncmp(aa, "smaa", 4) == 0;
+        if (const char* c = std::strchr(aa, ',')) s.fxaaQuality = std::atoi(c + 1);
+    }
+    if (const char* c = std::getenv("VEYAMUX_TEST_COMPARE")) {   // comparison clip layout 1..4, with two test labels
+        chain.setCompare(std::atoi(c));
+        std::vector<uint8_t> a(160 * 40 * 4), b(200 * 40 * 4);
+        for (size_t i = 0; i < a.size(); i += 4) { a[i] = 20; a[i + 1] = 20; a[i + 2] = 20; a[i + 3] = 200; }
+        for (size_t i = 0; i < b.size(); i += 4) { b[i] = 255; b[i + 1] = 120; b[i + 2] = 60; b[i + 3] = 230; }
+        chain.setCompareLabels(a, 160, 40, b, 200, 40);
+    }
+    if (const char* d = std::getenv("VEYAMUX_TEST_DETAIL"))   // "texture,clarity,dehaze" in -1..1
+        std::sscanf(d, "%f,%f,%f", &s.texture, &s.clarity, &s.dehaze);
     if (const char* nr = std::getenv("VEYAMUX_TEST_NR")) {   // "mode,strength": 1 spatial, 2 temporal, 3 both
         int m = 0, k = 1; std::sscanf(nr, "%d,%d", &m, &k);
         s.denoise = Denoise(m); s.denoiseStrength = k;

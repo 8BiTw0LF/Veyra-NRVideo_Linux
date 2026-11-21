@@ -60,121 +60,177 @@ Window {
     }
 
 
-    // Empty state
-    Column {
+    // ------------------------------------------------------------- start screen (nothing playing)
+    // The sources as three large cards, "continue" for the last capture card, the demo, and the look below.
+    // Scaled with the window height so it reads the same on a TV from the couch.
+    Item {
         id: startCol
         visible: !player.hasMedia
-        anchors.centerIn: parent
-        spacing: 18
-        Image { anchors.horizontalCenter: parent.horizontalCenter; source: Theme.logo; sourceSize: Qt.size(112, 112); width: 112; height: 112; smooth: true }
-        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; anchors.horizontalCenter: parent.horizontalCenter; text: "VeyAmux"; color: Theme.heading; font.pixelSize: 54 * Theme.headScale; font.weight: Font.DemiBold; font.letterSpacing: 2 }
-        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("drop"); color: Theme.label; font.pixelSize: 16 }
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 12
-            Rectangle {
-                width: 170; height: 46; radius: 23 * Theme.round; gradient: openMa.containsMouse ? Theme.sunsetHover : Theme.sunset
-                border.width: Theme.edge; border.color: "#000000"
-                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
-                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("open"); color: Theme.accentInk
-                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
-                MouseArea { id: openMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDialog() }
-            }
-            Rectangle {
-                width: 160; height: 44; radius: 22 * Theme.round; color: capMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
-                border.width: Math.max(1, Theme.edge)
-                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
-                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("capture"); color: Theme.text
-                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
-                MouseArea { id: capMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: capDlg.openDialog() }
-            }
-            Rectangle {
-                width: 160; height: 44; radius: 22 * Theme.round; color: psMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
-                border.width: Math.max(1, Theme.edge)
-                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
-                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: "PlayStation"; color: Theme.text
-                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
-                MouseArea { id: psMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: psDlg.openDialog() }
+        anchors.fill: parent
+        readonly property real k: Math.max(0.85, Math.min(1.7, win.height / 900))
+        readonly property string lastDev: player.lastCaptureDevice()
+        readonly property string lastName: player.lastCaptureName()
+        // a soft wash of the theme's colours from below
+        Rectangle {
+            anchors.fill: parent; opacity: 0.16
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.55; color: "transparent" }
+                GradientStop { position: 1.0; color: Theme.accent }
             }
         }
-        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
-        // demo scene: try every feature without a capture card
+        // top: name and version, an update when there is one, the menu
+        Row {
+            x: 28 * startCol.k; y: 22 * startCol.k; spacing: 12 * startCol.k
+            Image { source: Theme.logo; sourceSize: Qt.size(64, 64); width: 40 * startCol.k; height: width; smooth: true; anchors.verticalCenter: parent.verticalCenter }
+            Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "VeyAmux"; color: Theme.heading
+                font.pixelSize: 26 * Theme.headScale * startCol.k; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
+            Text { font.family: Theme.font; text: player.appVersion; color: Theme.dim; font.pixelSize: 13 * startCol.k; anchors.verticalCenter: parent.verticalCenter }
+        }
+        Row {
+            anchors { right: parent.right; top: parent.top; rightMargin: 24 * startCol.k; topMargin: 22 * startCol.k }
+            spacing: 10 * startCol.k
+            Rectangle {
+                visible: player.updateState === "available" || player.updateState === "downloading" || player.updateState === "ready"
+                height: 40 * startCol.k; width: updRow.implicitWidth + 28 * startCol.k; radius: height / 2 * Theme.round
+                gradient: updMa.containsMouse ? Theme.sunsetHover : Theme.sunset
+                Row { id: updRow; anchors.centerIn: parent; spacing: 8
+                    Image { source: "icons/download.svg"; width: 18 * startCol.k; height: width; sourceSize: Qt.size(36, 36); anchors.verticalCenter: parent.verticalCenter }
+                    Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; color: Theme.accentInk; font.pixelSize: 14 * startCol.k; font.weight: Font.DemiBold
+                        text: player.updateState === "ready" ? t("updRestart") : player.updateState === "downloading" ? player.updateText
+                              : t("updBanner").replace("%1", player.updateVersion) + "  ·  " + t("updBannerBtn") } }
+                MouseArea { id: updMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: player.updateState === "ready" ? player.restartApp() : player.updateState === "available" ? player.installUpdate() : null }
+            }
+            IconButton { size: 44 * startCol.k; source: "icons/system.svg"; onClicked: { win.panelOpen = true } }
+        }
+
         Column {
-            visible: player.demoAvailable
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Item { width: 1; height: 4 }
-            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("demoTitle"); color: Theme.label; font.pixelSize: 15; font.weight: Font.DemiBold }
-            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; width: 540; horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap; text: t("demoHint"); color: Theme.muted; font.pixelSize: 13 }
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: -20 * startCol.k
+            spacing: 22 * startCol.k
+            Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; anchors.horizontalCenter: parent.horizontalCenter
+                text: t("startHeadline"); color: Theme.heading; font.pixelSize: 40 * Theme.headScale * startCol.k; font.weight: Font.DemiBold }
+            // continue with the last capture card
+            Rectangle {
+                visible: startCol.lastDev !== "" && startCol.lastDev !== "screencast"
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: resumeRow.implicitWidth + 48 * startCol.k; height: 52 * startCol.k; radius: height / 2 * Theme.round
+                gradient: resMa.containsMouse ? Theme.sunsetHover : Theme.sunset
+                border.width: Theme.edge; border.color: "#000000"
+                Row { id: resumeRow; anchors.centerIn: parent; spacing: 10 * startCol.k
+                    Image { source: "icons/play.svg"; width: 20 * startCol.k; height: width; sourceSize: Qt.size(40, 40); anchors.verticalCenter: parent.verticalCenter }
+                    Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.verticalCenter: parent.verticalCenter; color: Theme.accentInk
+                        font.pixelSize: (Theme.headCaps ? 12 : 17) * startCol.k; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase
+                        text: t("startResume").replace("%1", startCol.lastName !== "" ? startCol.lastName : t("startCapture")) } }
+                MouseArea { id: resMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openCaptureAuto(startCol.lastDev) }
+            }
+            // the three sources
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 10
+                spacing: 18 * startCol.k
                 Repeater {
-                    model: [[720, 30], [720, 60], [1080, 30], [1080, 60]]
+                    model: [
+                        { icon: "icons/capture.svg", title: "startCapture", sub: "startCaptureSub", act: 0 },
+                        { icon: "icons/gamepad.svg", title: "startPs", sub: "startPsSub", act: 1 },
+                        { icon: "icons/folder.svg", title: "startFile", sub: "startFileSub", act: 2 }
+                    ]
                     delegate: Rectangle {
                         required property var modelData
-                        width: 132; height: 38; radius: 19 * Theme.round
-                        color: dmMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.accentLine
-                        border.width: Math.max(1, Theme.edge)
-                        Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
-                        Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: modelData[0] + "p · " + modelData[1] + " fps"; color: Theme.text
-                            font.pixelSize: Theme.headCaps ? 10 : 14; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
-                        MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData[1], modelData[0]) }
+                        width: 250 * startCol.k; height: 190 * startCol.k; radius: 18 * Theme.round
+                        color: srcMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                        border.width: Math.max(1, Theme.edge); border.color: srcMa.containsMouse ? Theme.accentLine : Theme.border
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 7; width: parent.width - 4; height: 5; color: "#59000000" }
+                        Column {
+                            anchors { top: parent.top; topMargin: 22 * startCol.k; horizontalCenter: parent.horizontalCenter }
+                            spacing: 10 * startCol.k; width: parent.width - 32 * startCol.k
+                            Rectangle { width: 64 * startCol.k; height: width; radius: width / 2 * Theme.round; anchors.horizontalCenter: parent.horizontalCenter
+                                gradient: Theme.sunset
+                                Image { source: modelData.icon; anchors.centerIn: parent; width: 30 * startCol.k; height: width; sourceSize: Qt.size(64, 64) } }
+                            Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; text: t(modelData.title); color: Theme.heading; width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: (Theme.headCaps ? 12 : 19) * startCol.k; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; elide: Text.ElideRight }
+                            Text { font.family: Theme.font; text: t(modelData.sub); color: Theme.muted; width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
+                                font.pixelSize: 13 * startCol.k; maximumLineCount: 2 }
+                        }
+                        MouseArea { id: srcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: modelData.act === 0 ? capDlg.openDialog() : modelData.act === 1 ? psDlg.openDialog() : player.openDialog() }
+                    }
+                }
+            }
+            // the demo: try every feature without a capture card
+            Column {
+                visible: player.demoAvailable
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10 * startCol.k
+                Item { width: 1; height: 4 * startCol.k }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
+                    Image { source: "icons/waves.svg"; width: 20 * startCol.k; height: width; sourceSize: Qt.size(40, 40); anchors.verticalCenter: parent.verticalCenter; opacity: 0.8 }
+                    Text { font.family: Theme.font; text: t("demoTitle"); color: Theme.label; font.pixelSize: 15 * startCol.k; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
+                }
+                Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; width: Math.min(620 * startCol.k, win.width - 60); horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap; text: t("demoHint"); color: Theme.muted; font.pixelSize: 13 * startCol.k }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 10 * startCol.k
+                    Repeater {
+                        model: [[720, 30], [720, 60], [1080, 30], [1080, 60]]
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 130 * startCol.k; height: 38 * startCol.k; radius: height / 2 * Theme.round
+                            color: dmMa.containsMouse ? Theme.surfaceHover : Theme.surfaceDeep; border.color: Theme.accentLine
+                            border.width: Math.max(1, Theme.edge)
+                            Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: modelData[0] + "p · " + modelData[1] + " fps"; color: Theme.text
+                                font.pixelSize: (Theme.headCaps ? 10 : 14) * startCol.k; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
+                            MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData[1], modelData[0]) }
+                        }
                     }
                 }
             }
         }
-        // theme picker: each chip shows the theme's own colours and logo
-        Item { width: 1; height: 10 }
-        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("theme"); color: Theme.label; font.pixelSize: 13 }
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 10
-            Repeater {
-                model: Theme.names
-                delegate: Rectangle {
-                    required property string modelData
-                    readonly property var pal: Theme.palettes[modelData]
-                    readonly property bool sel: Theme.name === modelData
-                    width: 128; height: 44; radius: 12 * Theme.round
-                    color: pal.surface
-                    border.width: sel ? 2 : 1
-                    border.color: sel ? pal.accent : (thMa.containsMouse ? pal.accentLine : Theme.border)
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Image { source: "icons/logo-" + modelData + ".svg"; sourceSize: Qt.size(26, 26); width: 26; height: 26; anchors.verticalCenter: parent.verticalCenter }
-                        Text { font.family: Theme.font; text: pal.title; color: pal.text; font.pixelSize: 14; font.weight: sel ? Font.DemiBold : Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+
+        // bottom: theme and language, and the keys
+        Column {
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 20 * startCol.k }
+            spacing: 10 * startCol.k
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 8 * startCol.k
+                Repeater {
+                    model: Theme.names
+                    delegate: Rectangle {
+                        required property string modelData
+                        readonly property var pal: Theme.palettes[modelData]
+                        readonly property bool sel: Theme.name === modelData
+                        width: 112 * startCol.k; height: 36 * startCol.k; radius: 10 * Theme.round
+                        color: pal.surface
+                        border.width: sel ? 2 : 1
+                        border.color: sel ? pal.accent : (thMa.containsMouse ? pal.accentLine : Theme.border)
+                        Row { anchors.centerIn: parent; spacing: 6
+                            Image { source: "icons/logo-" + modelData + ".svg"; sourceSize: Qt.size(40, 40); width: 20 * startCol.k; height: width; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: pal.title; color: pal.text; font.pixelSize: 13 * startCol.k; font.weight: sel ? Font.DemiBold : Font.Medium; anchors.verticalCenter: parent.verticalCenter } }
+                        MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.theme = modelData }
                     }
-                    Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 } height: 3; radius: 1.5 * Theme.round
-                        gradient: Gradient { orientation: Gradient.Horizontal
-                            GradientStop { position: 0; color: pal.g0 } GradientStop { position: 1; color: pal.g1 } } }
-                    MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.theme = modelData }
+                }
+                Item { width: 10 * startCol.k; height: 1 }
+                Repeater {
+                    model: ["auto"].concat(S.languages)
+                    delegate: Rectangle {
+                        required property string modelData
+                        readonly property bool sel: player.languageChoice === modelData
+                        width: lgText.implicitWidth + 18 * startCol.k; height: 36 * startCol.k; radius: height / 2 * Theme.round
+                        color: sel ? Theme.accent : (lgMa.containsMouse ? Theme.surfaceHover : Theme.surface)
+                        gradient: sel ? Theme.sunset : null
+                        border.width: Theme.edge; border.color: "#000000"
+                        Text { id: lgText; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 13 * startCol.k
+                            text: modelData === "auto" ? t("langAuto") : modelData.toUpperCase()
+                            color: parent.sel ? Theme.accentInk : Theme.text; font.weight: parent.sel ? Font.DemiBold : Font.Normal }
+                        MouseArea { id: lgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.languageChoice = modelData }
+                    }
                 }
             }
-        }
-        // language picker: Auto follows the system
-        Item { width: 1; height: 4 }
-        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("language"); color: Theme.label; font.pixelSize: 13 }
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 6
-            Repeater {
-                model: ["auto"].concat(S.languages)
-                delegate: Rectangle {
-                    required property string modelData
-                    readonly property bool sel: player.languageChoice === modelData
-                    width: lgText.implicitWidth + 22; height: 30; radius: 15 * Theme.round
-                    color: sel ? Theme.accent : (lgMa.containsMouse ? Theme.surfaceHover : Theme.surface)
-                    gradient: sel ? Theme.sunset : null
-                    border.width: Theme.edge; border.color: "#000000"
-                    Text { id: lgText; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 13
-                        text: modelData === "auto" ? t("langAuto") : S.names[modelData]
-                        color: parent.sel ? Theme.accentInk : Theme.text; font.weight: parent.sel ? Font.DemiBold : Font.Normal }
-                    MouseArea { id: lgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.languageChoice = modelData }
-                }
-            }
+            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.dim; font.pixelSize: 12 * startCol.k }
         }
     }
 
@@ -383,12 +439,12 @@ Window {
             if (item.from !== undefined && item.to !== undefined && item.neutral !== undefined && item.moved !== undefined) {
                 out.push(item); return                       // a slider (VSlider): its own mouse area is not a target
             }
-            if (item.acceptedButtons !== undefined && item.enabled && item !== panelEater && item.width > 4 && item.height > 4
-                    && item.width < panel.width * 0.6) out.push(item)
+            if (item.acceptedButtons !== undefined && item.enabled && item.objectName !== "padSkip" && item.width > 4 && item.height > 4
+                    && !(item.width >= win.width * 0.9 && item.height >= win.height * 0.5)) out.push(item)
             for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
         }
         // what the controller steers: the capture dialog, else the menu, else the start screen
-        function scope() { return psDlg.visible ? psDlg : capDlg.visible ? capDlg : win.panelOpen ? area : !player.hasMedia ? startCol : null }
+        function scope() { return psDlg.visible ? psDlg : capDlg.visible ? capDlg : win.panelOpen ? panel : !player.hasMedia ? startCol : null }
         function targets() { var o = []; collect(scope(), o); return o }
         function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
         function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
@@ -411,13 +467,12 @@ Window {
             }
             if (best) current = best
         }
+        // LB / RB: the menu's tabs
         function column(step) {
-            if (scope() !== area) return
-            var cols = [secA, secB, secC], c = current ? centre(current) : null, idx = 0
-            for (var i = 0; i < cols.length; ++i) { var r = cols[i].mapToItem(win.contentItem, 0, 0); if (c && c.x >= r.x - 10) idx = i }
-            var want = Math.max(0, Math.min(cols.length - 1, idx + step)), o = []
-            collect(cols[want], o)
-            if (o.length) { var best = o[0]; for (var j = 1; j < o.length; ++j) if (centre(o[j]).y < centre(best).y) best = o[j]; current = best }
+            if (scope() !== panel) return
+            panel.switchTab(step)
+            current = null
+            Qt.callLater(reset)
         }
         function press(name) {
             if (!current || targets().indexOf(current) < 0) reset()
@@ -444,467 +499,27 @@ Window {
             x = p.x - 4; y = p.y - 4; width = q.x - p.x + 8; height = q.y - p.y + 8
         }
         Connections { target: padNav; function onCurrentChanged() {
-            // full-window menu: scroll the selected control into view
-            if (win.compactMenu && padNav.current && panelOpen) {
-                const p = padNav.current.mapToItem(menuFlick.contentItem, 0, 0)
-                const h = padNav.current.height * area.fit
-                if (p.y < menuFlick.contentY + 20) menuFlick.contentY = Math.max(0, p.y - 40)
-                else if (p.y + h > menuFlick.contentY + menuFlick.height - 20)
-                    menuFlick.contentY = Math.min(menuFlick.contentHeight - menuFlick.height, p.y + h - menuFlick.height + 40)
+            // the menu scrolls: bring the selected control into view
+            if (padNav.current && panelOpen) {
+                const f = panel.flick
+                const p = padNav.current.mapToItem(f.contentItem, 0, 0)
+                const h = padNav.current.height * panel.fit
+                if (p.y < f.contentY + 20) f.contentY = Math.max(0, p.y - 40)
+                else if (p.y + h > f.contentY + f.height - 20)
+                    f.contentY = Math.max(0, Math.min(f.contentHeight - f.height, p.y + h - f.height + 40))
             }
             padRing.place()
         } }
     }
 
-    // ------------------------------------------------------------- enhancement panel
-    // Half the window wide, everything visible at once (no scrolling): the sections sit in three columns (two in narrow
-    // windows), and if they still do not fit the height, the whole content is scaled down to fit.
-    Rectangle {
+    // ------------------------------------------------------------- menu (Menu.qml: six tabs)
+    Menu {
         id: panel
-        width: win.compactMenu ? parent.width : Math.max(560, parent.width / 2 - 18)
-        // as tall as the (scaled) content needs, at most the window height (small screens: the whole window)
-        height: win.compactMenu ? parent.height : Math.min(parent.height - 24, area.contentH * area.fit + 2 * area.anchors.margins)
-        y: win.compactMenu ? 0 : 12
-        x: win.compactMenu ? 0 : parent.width - width - 12   // always anchored; never animates on window resize (fullscreen)
-        opacity: panelOpen ? 1 : 0
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 160 } }
-        radius: win.compactMenu ? 0 : 18 * Theme.round
-        // HDR output: fully opaque. Bright HDR video behind a 95 % panel shines through several times stronger than in
-        // SDR (up to ~7x SDR white) and greys out the menu.
-        color: player.hdrOutputActive || win.compactMenu ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
-        border.color: Theme.border
-        // sunset line along the top edge
-        Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1 * Theme.round; gradient: Theme.sunset; opacity: 0.85 }
-        MouseArea { id: panelEater; anchors.fill: parent; hoverEnabled: true; onPositionChanged: { wake(); padNav.active = false } }   // keep controls awake & eat clicks
-        // full-window menu: nothing is left to click beside it, so it gets its own close button (touch)
-        Rectangle {
-            visible: win.compactMenu; z: 10
-            anchors { right: parent.right; top: parent.top; margins: 8 }
-            width: 44; height: 44; radius: 22 * Theme.round; color: closeMa.containsMouse ? Theme.surfaceHover : Theme.surface
-            Text { anchors.centerIn: parent; text: "✕"; color: Theme.text; font.pixelSize: 20 }
-            MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.panelOpen = false }
-        }
-
-        component Param: Column {
-            id: p
-            property string label
-            property real from; property real to; property real value; property real neutral: NaN
-            property int decimals: 2
-            signal moved(real v)
-            width: parent.width; spacing: 4; opacity: player.enhance ? 1 : 0.45
-            Row {
-                width: parent.width
-                Text { font.family: Theme.font; text: p.label; color: Theme.label; font.pixelSize: 16; width: parent.width - 50 }
-                Text { font.family: Theme.font; text: p.value.toFixed(p.decimals); color: Theme.text; font.pixelSize: 16; width: 50; horizontalAlignment: Text.AlignRight }
-            }
-            VSlider { width: parent.width; from: p.from; to: p.to; value: p.value; neutral: p.neutral; onMoved: (v) => p.moved(v) }
-        }
-
-        Item {
-            id: area
-            anchors { fill: parent; margins: 26; topMargin: win.compactMenu ? 60 : 26 }
-            // The menu is laid out at a fixed design width and then scaled as one piece to the panel (half the window),
-            // so text, controls and spacing all grow and shrink together. Three columns, two in tall narrow windows.
-            readonly property int cols: win.compactMenu ? 2 : width / Math.max(1, win.height - 76) >= 0.75 ? 3 : 2
-            readonly property real gap: 36
-            readonly property real designW: cols === 3 ? 1220 : 820
-            readonly property real colW: (designW - (cols - 1) * gap) / cols
-            readonly property real contentW: designW
-            readonly property real contentH: cols === 3 ? Math.max(secA.height, secB.height, secC.height)
-                                                        : Math.max(secA.height + gap + secB.height, secC.height)
-            readonly property real fit: win.compactMenu ? width / designW
-                                                        : Math.min(width / designW, (win.height - 24 - 2 * anchors.margins) / Math.max(1, contentH))
-            Component.onCompleted: if (Qt.application.arguments.indexOf("--layout-debug") >= 0) layoutDbg.start()
-            Timer { id: layoutDbg; interval: 3000; onTriggered: { console.log("LAYOUT cols", area.cols, "W", area.width, "H", win.height, "designW", area.designW, "contentH", area.contentH, "A", secA.height, "B", secB.height, "C", secC.height, "fitW", (area.width / area.designW).toFixed(3), "fit", area.fit.toFixed(3)); for (const c of [secA, secB, secC]) { let o = []; for (let i = 0; i < c.children.length; ++i) o.push(Math.round(c.children[i].height)); console.log("LAYOUT col", o.join(" ")) } } }
-
-            // small screens: the menu is shown at a readable size and scrolls (drag with a finger / the touchpad;
-            // the controller scrolls to what it selects)
-            Flickable {
-                id: menuFlick
-                anchors.fill: parent
-                interactive: win.compactMenu
-                clip: win.compactMenu
-                contentWidth: width; contentHeight: content.height * area.fit
-                boundsBehavior: Flickable.StopAtBounds
-                onContentYChanged: padRing.place()
-            Item {
-                id: content
-                width: area.contentW; height: area.contentH
-                transformOrigin: Item.Top
-                scale: area.fit
-                x: (area.width - width) / 2    // centred; scaling keeps the top centre in place
-
-                Column {
-                    id: secA
-                    x: 0; y: 0; width: area.colW
-                    spacing: 20
-                    Row {
-                        width: parent.width
-                        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: t("enhance"); color: Theme.heading; font.pixelSize: 24 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
-                        ToggleSwitch { checked: player.enhance; onToggled: (v) => player.enhance = v; anchors.verticalCenter: parent.verticalCenter }
-                    }
-                    Column {
-                        width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { font.family: Theme.font; text: t("upscale"); color: Theme.label; font.pixelSize: 16 }
-                        Segmented {
-                            width: parent.width; enabled: player.enhance
-                            model: [t("native"), "1.5×", "2×", "3×"]
-                            current: { var i = scales.indexOf(Math.round(player.scale * 10) / 10); return i < 0 ? 0 : i }
-                            onPicked: (i) => player.scale = scales[i]
-                        }
-                        Text { font.family: Theme.font; text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
-                        Segmented {
-                            width: parent.width; enabled: player.enhance
-                            // shown as SGSR | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
-                            readonly property var values: [0, 2, 1, 3]
-                            model: ["SGSR", "FSR 1", "FSR 3.1", "NIS"]
-                            current: Math.max(0, values.indexOf(player.upscaler))
-                            onPicked: (i) => player.upscaler = values[i]
-                        }
-                        Text { font.family: Theme.font;
-                            width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
-                            color: player.upscalerError !== "" ? Theme.warn : Theme.muted
-                            text: player.upscalerError !== "" ? t("fsrFallback") + player.upscalerError
-                                  : (player.upscaler === 1 ? (player.scale <= 1.001 ? t("fsrNativeAaHint") : t("fsr31Hint"))
-                                     : player.upscaler === 2 ? t("fsr1Hint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
-                                     : player.upscaler === 3 ? t("nisHint") + (player.scale <= 1.001 ? " " + t("fsrNeedsScale") : "")
-                                                             : t("sgsrHint"))
-                        }
-                    }
-                    Column {
-                        width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { font.family: Theme.font; text: t("denoise"); color: Theme.label; font.pixelSize: 16 }
-                        Segmented {
-                            width: parent.width; model: t("denoiseModes"); enabled: player.enhance
-                            current: player.denoise; onPicked: (i) => player.denoise = i
-                        }
-                        Segmented {
-                            width: parent.width; model: t("denoiseLevels"); enabled: player.enhance && player.denoise > 0
-                            current: player.denoiseStrength; onPicked: (i) => player.denoiseStrength = i
-                        }
-                        Text { font.family: Theme.font;
-                            width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted
-                            text: t("denoiseHint" + player.denoise)
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; text: t("hdr"); color: Theme.label; font.pixelSize: 16; topPadding: 6 }
-                        Segmented {
-                            width: parent.width; model: ["600", "1000", "2000", "4000 nits"]
-                            readonly property var peaks: [600, 1000, 2000, 4000]
-                            current: Math.max(0, peaks.indexOf(player.hdrPeak))
-                            onPicked: (i) => player.hdrPeak = peaks[i]
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("hdrHint") }
-                        Item {
-                            width: parent.width; height: 22
-                            Text { font.family: Theme.font; text: t("hdrOut"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                checked: player.hdrOutput; onToggled: (v) => player.hdrOutput = v }
-                        }
-                        Segmented {
-                            visible: player.hdrOutput
-                            width: parent.width; model: ["HDR10", "scRGB"]
-                            current: player.hdrMode; onPicked: (i) => player.hdrMode = i
-                        }
-                        Segmented {
-                            visible: player.hdrOutput
-                            width: parent.width
-                            model: ["Auto", "400", "600", "1000", "1500 nits"]
-                            readonly property var peaks: [0, 400, 600, 1000, 1500]
-                            current: Math.max(0, peaks.indexOf(player.displayPeak))
-                            onPicked: (i) => player.displayPeak = peaks[i]
-                        }
-                        Text { font.family: Theme.font;
-                            visible: player.hdrOutput
-                            width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
-                            color: player.hdrOutputActive ? Theme.ok : Theme.warn
-                            text: player.hdrOutputRestart ? t("hdrOutRestart") : player.hdrOutputActive ? t("hdrOutOn") + (player.displayPeak === 0 ? " " + (player.displayPeakEdid > 0 ? t("peakEdid").replace("%1", player.displayPeakEdid) : t("peakNoEdid")) : "")
-                                  : player.hdrOutputNoVulkan ? t("hdrOutSw") : player.hdrOutputXwayland ? t("hdrOutX11") : t("hdrOutNo")
-                        }
-                        Item {
-                            visible: player.gamescopeAvailable || player.inGamescope
-                            width: parent.width; height: 26
-                            Text { font.family: Theme.font; text: t("gamescope"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                checked: player.gamescope; onToggled: (v) => player.gamescope = v }
-                        }
-                        Text { font.family: Theme.font;
-                            visible: player.gamescopeAvailable || player.inGamescope
-                            width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
-                            color: player.inGamescope ? Theme.accent3 : Theme.muted
-                            text: player.inGamescope ? t("gamescopeOn") : t("gamescopeHint")
-                        }
-                        Rectangle {
-                            visible: player.hdrOutputRestart || player.gamescopeRestart
-                            width: hdrRs.implicitWidth + 22; height: 26; radius: 8 * Theme.round; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
-                            Text { font.family: Theme.font; id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
-                            MouseArea { id: hdrRsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.restartApp() }
-                        }
-                    }
-                    Column {
-                        width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Row {
-                            width: parent.width
-                            Text { font.family: Theme.font; text: t("aa") + " (FXAA)"; color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { checked: player.fxaa; enabled: player.enhance; onToggled: (v) => player.fxaa = v; anchors.verticalCenter: parent.verticalCenter }
-                        }
-                        Segmented {
-                            width: parent.width; model: t("aaq"); enabled: player.enhance && player.fxaa
-                            current: player.fxaaQuality; onPicked: (i) => player.fxaaQuality = i
-                        }
-                        Row {
-                            width: parent.width
-                            Text { font.family: Theme.font; text: t("deflicker"); color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { checked: player.deflicker; enabled: player.enhance; onToggled: (v) => player.deflicker = v; anchors.verticalCenter: parent.verticalCenter }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("deflickerHint") }
-                    }
-                    // ---- sound output (the system default plus every output the sound server reports; refreshed when
-                    // the menu opens) and a spectrum of the source's sound, so you can see whether sound comes in
-                    Column {
-                        id: sinkCol
-                        width: parent.width; spacing: 4
-                        property var sinks: []
-                        function refresh() { sinks = player.audioSinks() }
-                        Component.onCompleted: refresh()
-                        Connections { target: win; function onPanelOpenChanged() { if (win.panelOpen) sinkCol.refresh() } }
-                        Text { font.family: Theme.font; text: t("audioOut"); color: Theme.label; font.pixelSize: 16 }
-                        Repeater {
-                            model: [{ name: "", desc: t("audioOutDefault") }].concat(sinkCol.sinks.slice(0, 8))
-                            delegate: Rectangle {
-                                required property var modelData
-                                readonly property bool sel: player.audioOutput === modelData.name
-                                width: sinkCol.width; height: 28; radius: 8 * Theme.round
-                                color: sinkMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                                gradient: sel ? Theme.sunset : null
-                                Text { font.family: Theme.font; anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                                    text: modelData.desc; elide: Text.ElideRight; font.pixelSize: 15
-                                    color: parent.sel ? Theme.accentInk : Theme.text }
-                                MouseArea { id: sinkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: player.audioOutput = modelData.name }
-                            }
-                        }
-                        Item { width: 1; height: 6 }
-                        Item {
-                            width: parent.width; height: 18
-                            Text { font.family: Theme.font; text: t("audioIn"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                            Text { font.family: Theme.font;
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                font.pixelSize: 13; font.weight: Font.Medium
-                                color: player.audioActive ? Theme.ok : Theme.muted
-                                text: player.audioActive ? (player.muted ? t("audioInMuted") : t("audioInOn")) : t("audioInNone")
-                            }
-                        }
-                        // spectrum: 24 bands from 50 Hz (left) to 16 kHz (right)
-                        Rectangle {
-                            id: spec
-                            width: parent.width; height: 46; radius: 8 * Theme.round; color: Theme.surfaceDeep; border.color: Theme.border
-                            Row {
-                                id: specRow
-                                anchors { fill: parent; margins: 6 }
-                                spacing: 2
-                                readonly property int n: 24
-                                Repeater {
-                                    model: specRow.n
-                                    delegate: Item {
-                                        required property int index
-                                        width: (specRow.width - (specRow.n - 1) * specRow.spacing) / specRow.n
-                                        height: specRow.height
-                                        readonly property real level: player.audioBands.length > index ? player.audioBands[index] : 0
-                                        Rectangle {
-                                            anchors.bottom: parent.bottom
-                                            width: parent.width; radius: 2 * Theme.round
-                                            height: Math.max(2, parent.height * parent.level)
-                                            gradient: Theme.sunset
-                                            opacity: player.muted ? 0.45 : 1
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("audioInHint") }
-                    }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-                    // ---- Retro TV (CRT-Geom)
-                    Column {
-                        width: parent.width; spacing: 10
-                        Item {
-                            width: parent.width; height: 28
-                            Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Retro TV"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                checked: player.retroTv; onToggled: (v) => player.retroTv = v }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("retroHint") }
-                        Text { font.family: Theme.font; visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 16 }
-                        Segmented {
-                            visible: player.retroTv
-                            width: parent.width
-                            readonly property var values: [240, 480, 0]
-                            model: ["240", "480", t("native")]
-                            current: Math.max(0, values.indexOf(player.retroLines))
-                            onPicked: (i) => player.retroLines = values[i]
-                        }
-                        // ---- pixel-perfect scaling (shares the Retro TV section)
-                        Item {
-                            width: parent.width; height: 30
-                            Text { font.family: Theme.font; text: t("pixelPerfect"); color: Theme.label; font.pixelSize: 17; width: parent.width - 62; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
-                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                checked: player.pixelPerfect; onToggled: (v) => player.pixelPerfect = v }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("pixelHint") }
-                        Text { font.family: Theme.font; visible: player.pixelPerfect; text: t("pixelGrid") + (player.pixelGrid === 1 && player.pixelGridSize !== "" ? "  ·  " + player.pixelGridSize : ""); color: Theme.label; font.pixelSize: 16 }
-                        Segmented {
-                            visible: player.pixelPerfect
-                            width: parent.width
-                            model: t("pixelGridModes")
-                            current: player.pixelGrid
-                            onPicked: (i) => player.pixelGrid = i
-                        }
-                        Text { font.family: Theme.font; visible: player.pixelPerfect; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 14; color: Theme.muted; text: t("pixelGridHint") }
-                    }
-                }
-                Column {
-                    id: secB
-                    x: area.cols === 3 ? area.colW + area.gap : 0
-                    y: area.cols === 3 ? 0 : secA.height + area.gap
-                    width: area.colW
-                    spacing: 20
-                    Param { label: t("sharpen"); from: 0; to: 1; value: player.sharpen; onMoved: (v) => player.sharpen = v }
-                    Param { label: t("exposure"); from: -2; to: 2; value: player.exposure; neutral: 0; onMoved: (v) => player.exposure = v }
-                    Param { label: t("contrast"); from: 0.6; to: 1.4; value: player.contrast; neutral: 1; onMoved: (v) => player.contrast = v }
-                    Param { label: t("saturation"); from: 0; to: 2; value: player.saturation; neutral: 1; onMoved: (v) => player.saturation = v }
-                    Param {
-                        label: t("audioDelay"); from: -300; to: 300; decimals: 0; neutral: 0; opacity: 1
-                        value: player.audioDelay; onMoved: (v) => player.audioDelay = Math.round(v / 10) * 10
-                    }
-                    Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("audioDelayHint") }
-                    Item {
-                        width: parent.width; height: 26
-                        Text { font.family: Theme.font; text: t("normalize"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                        ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            checked: player.normalize; onToggled: (v) => player.normalize = v }
-                    }
-                    Rectangle {
-                        width: parent.width; height: 34; radius: 10 * Theme.round; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                        Text { font.family: Theme.font; anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 17 }
-                        MouseArea { id: rstMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.resetEnhance() }
-                    }
-
-                    // ---- profiles
-                    Column {
-                        width: parent.width; spacing: 6
-                        Text { font.family: Theme.font; text: t("profiles"); color: Theme.label; font.pixelSize: 16 }
-                        Flow {
-                            width: parent.width; spacing: 6
-                            visible: player.profiles.length > 0
-                            Repeater {
-                                model: player.profiles
-                                delegate: Rectangle {
-                                    required property string modelData
-                                    required property int index
-                                    readonly property bool active: player.activeProfile === modelData
-                                    readonly property string bound: player.profileSignal(modelData)
-                                    height: 28; radius: 8 * Theme.round; width: chipRow.implicitWidth + 16
-                                    color: active ? Theme.accent : (chipMa.containsMouse ? Theme.surfaceHover : Theme.surface)
-                                    Row {
-                                        id: chipRow; anchors.centerIn: parent; spacing: 6
-                                        Text { font.family: Theme.font; text: (index < 9 ? (index + 1) + "  " : "") + modelData + (bound !== "" ? "  ⚡" : ""); color: active ? Theme.accentInk : Theme.text; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                                        Text { font.family: Theme.font;
-                                            text: "×"; color: active ? Theme.accentInk : Theme.muted; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter
-                                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: player.deleteProfile(modelData) }
-                                        }
-                                    }
-                                    MouseArea { id: chipMa; anchors.fill: parent; anchors.rightMargin: 18; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.loadProfile(modelData) }
-                                }
-                            }
-                        }
-                        Row {
-                            width: parent.width; spacing: 6
-                            Rectangle {
-                                width: parent.width - saveBtn.width - 6; height: 30; radius: 8 * Theme.round; color: Theme.surface
-                                border.color: nameIn.activeFocus ? Theme.accent : Theme.surfaceHover
-                                TextInput {
-                                    id: nameIn; anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                                    verticalAlignment: TextInput.AlignVCenter; color: Theme.text; font.pixelSize: 16; maximumLength: 24
-                                    clip: true; selectByMouse: true
-                                    Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: t("profileName"); color: Theme.dim; font.pixelSize: 16 }
-                                    onAccepted: saveBtn.save()
-                                    Keys.onEscapePressed: { text = ""; keyRoot.forceActiveFocus() }
-                                }
-                            }
-                            Rectangle {
-                                id: saveBtn
-                                function save() { if (nameIn.text.trim() !== "") { player.saveProfile(nameIn.text, bindSig.checked); nameIn.text = ""; keyRoot.forceActiveFocus() } }
-                                width: saveTxt.implicitWidth + 24; height: 30; radius: 8 * Theme.round
-                                color: nameIn.text.trim() !== "" ? (saveMa.containsMouse ? Theme.accentHover : Theme.accent) : Theme.surfaceHover
-                                Text { font.family: Theme.font; id: saveTxt; anchors.centerIn: parent; text: t("saveProfile"); color: nameIn.text.trim() !== "" ? Theme.accentInk : Theme.muted; font.pixelSize: 16; font.weight: Font.Medium }
-                                MouseArea { id: saveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: saveBtn.save() }
-                            }
-                        }
-                        Row {
-                            id: bindSig
-                            property bool checked: false
-                            visible: player.signalKey !== ""
-                            spacing: 8
-                            Rectangle {
-                                width: 16; height: 16; radius: 4 * Theme.round; anchors.verticalCenter: parent.verticalCenter
-                                color: bindSig.checked ? Theme.accent : "transparent"; border.color: bindSig.checked ? Theme.accent : Theme.dim
-                                Text { font.family: Theme.font; anchors.centerIn: parent; text: "✓"; visible: bindSig.checked; color: Theme.accentInk; font.pixelSize: 15 }
-                            }
-                            Text { font.family: Theme.font; text: t("bindSignal").replace("%1", player.signalKey); color: Theme.text; font.pixelSize: 15; width: secB.width - 30; wrapMode: Text.Wrap }
-                            TapHandler { onTapped: bindSig.checked = !bindSig.checked }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("profilesHint") }
-                    }
-                    Column {
-                        width: parent.width; spacing: 3
-                        Text { font.family: Theme.font; width: parent.width; text: t("gpu") + ": " + (player.gpuName !== "" ? player.gpuName : t("cpuOnly")); color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
-                        Text { font.family: Theme.font; width: parent.width; text: player.perf; color: Theme.label; font.pixelSize: 16; wrapMode: Text.Wrap }
-                    }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-                    FrameGenSection { width: parent.width; tr: win.t }
-                }
-                Column {
-                    id: secC
-                    x: area.cols === 3 ? 2 * (area.colW + area.gap) : area.colW + area.gap
-                    y: 0; width: area.colW
-                    spacing: 20
-                    Column {
-                        width: parent.width; spacing: 8
-                        Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Steam"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5 }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("steamHint") }
-                        Rectangle {
-                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10 * Theme.round
-                            color: steamMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                            Text { font.family: Theme.font; id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                            MouseArea { id: steamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.addToSteam() }
-                        }
-                        Item {
-                            width: parent.width; height: 26
-                            Text { font.family: Theme.font; text: t("autostart"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight }
-                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                checked: player.autostart; onToggled: (v) => player.autostart = v }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
-                        // controller: which one is connected, and how to open the menu with it
-                        Item {
-                            width: parent.width; height: 26
-                            Text { font.family: Theme.font; text: t("controller"); color: Theme.label; font.pixelSize: 17; anchors.verticalCenter: parent.verticalCenter }
-                            Text { font.family: Theme.font; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.62; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
-                                font.pixelSize: 14; color: gamepad.controllers.length > 0 ? Theme.ok : Theme.muted
-                                text: gamepad.controllers.length > 0 ? "● " + t("padOn").replace("%1", gamepad.controllers.join(", ")) : t("padNone") }
-                        }
-                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("padHint") }
-                    }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-                    ObsSection { width: parent.width; tr: win.t }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-                    RecordSection { width: parent.width; tr: win.t }
-                }
-            }
-            }
-        }
+        tr: win.t
+        open: win.panelOpen
+        compact: win.compactMenu
+        onCloseRequested: win.panelOpen = false
+        onAwake: { wake(); padNav.active = false }
     }
 
     CaptureDialog { id: capDlg; anchors.fill: parent; z: 100; tr: win.t; onRemotePlay: psDlg.openDialog() }
@@ -952,6 +567,7 @@ Window {
             case Qt.Key_F3: player.overlay = !player.overlay; break
             case Qt.Key_F9: player.saveReplay(); break
             case Qt.Key_F10: player.toggleRecording(); break
+            case Qt.Key_F6: player.addMarker(); break
             case Qt.Key_F12: case Qt.Key_Print: player.screenshot(); break
             default: return
             }

@@ -11,6 +11,7 @@ Item {
     property int devIdx: 0
     property int modeIdx: 0
     property int srcIdx: 0          // 0 = no audio
+    property string help: ""        // why no card is listed
     signal closed()
     signal remotePlay()             // "PlayStation Remote Play" was chosen
 
@@ -22,6 +23,7 @@ Item {
         var dv = player.captureDevices()
         if (player.screenCastAvailable()) dv.push({ path: "screencast", name: tr("screenShare") })
         devices = dv
+        help = player.captureHelp()
         var s = [{ name: "", desc: tr("noAudio") }]
         var list = player.audioSources()
         list.push({ name: "@default", desc: tr("defaultInput") })
@@ -86,7 +88,7 @@ Item {
                 Repeater { model: dlg.devices
                     Row_ { text: modelData.path === "screencast" ? modelData.name : modelData.name + "  (" + modelData.path + ")"
                         sel: index === dlg.devIdx; onClicked: dlg.pickDevice(index) } }
-                Text { font.family: Theme.font; visible: dlg.cardCount <= 0; text: tr("noDevices"); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
+                Text { font.family: Theme.font; visible: dlg.cardCount <= 0; text: tr("noDevices") + (dlg.help !== "" ? "\n" + dlg.help : ""); color: Theme.warn; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15 }
             }
 
             Text { font.family: Theme.font; visible: dlg.isShare; text: tr("screenShareHint"); color: Theme.muted; font.pixelSize: 12; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15 }
@@ -97,6 +99,23 @@ Item {
                 Column { id: modeCol; width: parent.width; spacing: 4
                     Repeater { model: dlg.modes
                         Row_ { text: modelData + (index === 0 ? "   ★" : ""); sel: index === dlg.modeIdx; onClicked: dlg.modeIdx = index } } }
+            }
+
+            // a compressed mode where the card has an uncompressed one (after PushFPS 4.1): said, never switched for you
+            Rectangle {
+                readonly property string advice: dlg.modes.length > 0 ? player.modeAdvice(dlg.modeIdx) : ""
+                readonly property int better: dlg.modes.length > 0 ? player.betterModeIndex(dlg.modeIdx) : -1
+                visible: advice !== ""
+                width: parent.width; height: visible ? adviceCol.height + 16 : 0; radius: 8 * Theme.round
+                color: Theme.surface; border.color: Theme.border
+                Column {
+                    id: adviceCol
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+                    spacing: 6
+                    Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; text: parent.parent.advice; color: Theme.text; font.pixelSize: 12; lineHeight: 1.15 }
+                    Text { font.family: Theme.font; visible: parent.parent.better >= 0; text: tr("useUncompressed"); color: Theme.accent; font.pixelSize: 12; font.weight: Font.DemiBold
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: dlg.modeIdx = parent.parent.parent.better } }
+                }
             }
 
             Section { text: tr("audio") }

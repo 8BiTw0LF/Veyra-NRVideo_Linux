@@ -1,5 +1,6 @@
 #include "LiveVulkan.h"
 #include <cstring>
+#include <QImage>
 #include <QMetaObject>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -34,6 +35,19 @@ void LiveVulkan::setStream(int maxHeight, std::function<void(QImage, int)> sink)
 void LiveVulkan::setRecord(int maxHeight, std::function<void(veyamux::EnhanceChain::RecFrame&&)> sink) {
     { std::lock_guard l(sinkM_); recSink_ = std::move(sink); }
     chain_->setRecordMaxHeight(maxHeight);
+}
+
+void LiveVulkan::setCompare(int mode, const QImage& a, const QImage& b) {
+    auto bytes = [](const QImage& img) {
+        std::vector<uint8_t> v;
+        if (img.isNull()) return v;
+        const QImage c = img.convertToFormat(QImage::Format_RGBA8888);
+        v.resize(size_t(c.width()) * c.height() * 4);
+        for (int y = 0; y < c.height(); ++y) std::memcpy(v.data() + size_t(y) * c.width() * 4, c.constScanLine(y), size_t(c.width()) * 4);
+        return v;
+    };
+    if (mode > 0) chain_->setCompareLabels(bytes(a), a.width(), a.height(), bytes(b), b.width(), b.height());
+    chain_->setCompare(mode);
 }
 
 void LiveVulkan::requestScreenshot(std::function<void(QImage)> cb) {

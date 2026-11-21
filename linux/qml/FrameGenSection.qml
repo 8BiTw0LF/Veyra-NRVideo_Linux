@@ -102,6 +102,11 @@ Column {
         width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.warn
         text: tr("lsVrrWarn").replace("%1", player.vrrScreens)
     }
+    Text { font.family: Theme.font;   // more frames than the screen shows (30 fps x 3 on 60 Hz)
+        visible: player.fgOverRefresh !== ""
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.warn
+        text: player.fgOverRefresh
+    }
 
     // AMD FSR 3.1.6 frame generation inside VeyAmux (free, open source); can be chosen next to Lossless Scaling
     Text { font.family: Theme.font; text: "AMD FSR 3.1.6"; color: Theme.label; font.pixelSize: 16; font.weight: Font.Medium; topPadding: 4 }

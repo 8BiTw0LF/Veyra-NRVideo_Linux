@@ -24,6 +24,11 @@
 #include <QVariantMap>
 #include <QSettings>
 #include <QIcon>
+#include <QLinearGradient>
+#include <QFontMetrics>
+#include <QPainter>
+#include <linux/videodev2.h>
+#include <unistd.h>
 #include "DisplayVrr.h"
 #include "LsfgInstall.h"
 #include "SteamShortcut.h"
@@ -122,6 +127,8 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         QSettings q;
         replaySeconds_ = std::clamp(q.value("rec/replaySeconds", 30).toInt(), 10, 300);
         recHeight_ = std::clamp(q.value("rec/height", 1080).toInt(), 0, 4320);
+        compareLayout_ = std::clamp(q.value("rec/compareLayout", 1).toInt(), 1, 4);
+        compareSeconds_ = std::clamp(q.value("rec/compareSeconds", 15).toInt(), 5, 120);
         if (q.value("rec/replay", false).toBool()) setReplay(true);
     }
     tick_.setInterval(100);
@@ -129,6 +136,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         if (rec_->recording() || rec_->streaming()) emit recTick();
         if (overlay_) updateOverlay();
         checkHighRate();
+        checkOverRefresh();
         updatePixelGrid();
         if (demoActive_) {
             const double p = veyamux::demo::progress();
@@ -170,6 +178,9 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         emit statsChanged();
     });
     tick_.start();
+    // updates: asked by itself a few seconds after the start (not while the first picture is being set up)
+    if (autoUpdateCheck() && qEnvironmentVariable("VEYAMUX_NO_UPDATE_CHECK") != "1")
+        QTimer::singleShot(8000, this, [this] { checkForUpdate(false); });
 }
 
 PlayerBridge::~PlayerBridge() {
@@ -291,14 +302,111 @@ void PlayerBridge::saveReplay() {
 }
 
 void PlayerBridge::toggleRecording() {
+    if (comparing_) { stopCompare(); return; }
     if (rec_->recording()) {
         rec_->stopRecording();
     } else {
         if (!engine_.isOpen() && !liveVulkanActive()) { showNotice(L("Nothing is playing", "Der afspilles ikke noget")); return; }
-        rec_->startRecording((recFolder(false) + "/VeyAmux_" + stamp() + ".mp4").toStdString());
+        recPath_ = recFolder(false) + "/VeyAmux_" + stamp() + ".mp4";
+        markers_.clear();
+        rec_->startRecording(recPath_.toStdString());
     }
     updateRecordSource();
     emit recChanged();
+    emit recTick();
+}
+
+// ------------------------------------------------------------------ comparison clips and clip markers
+
+// A badge for a comparison clip: rounded, drawn at 1080p size (the shader scales it with the clip).
+QImage PlayerBridge::compareLabel(const QString& text, bool accent) const {
+    QFont f(QStringLiteral("sans-serif"));
+    f.setPixelSize(30);
+    f.setWeight(QFont::DemiBold);
+    const QFontMetrics fm(f);
+    const int w = fm.horizontalAdvance(text) + 44, h = fm.height() + 20;
+    QImage img(w, h, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    QPainter p(&img);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    if (accent) {
+        QLinearGradient g(0, 0, w, 0);
+        g.setColorAt(0, QColor(255, 122, 69));
+        g.setColorAt(1, QColor(255, 61, 127));
+        p.setBrush(g);
+    } else {
+        p.setBrush(QColor(12, 12, 16, 215));
+    }
+    p.drawRoundedRect(QRectF(0, 0, w, h), h / 2.0, h / 2.0);
+    p.setFont(f);
+    p.setPen(accent ? QColor(20, 10, 16) : QColor(240, 240, 245));
+    p.drawText(QRect(0, 0, w, h), Qt::AlignCenter, text);
+    p.end();
+    return img.convertToFormat(QImage::Format_RGBA8888);
+}
+
+// A comparison clip: a normal recording of a picture that holds the original next to VeyAmux's (EnhanceChain).
+// The original is the capture as it arrived, before upscaling, noise reduction, sharpening and colour. Lossless
+// Scaling's frames are made after VeyAmux, so they are in no recording; FSR frame generation's are not recorded either.
+void PlayerBridge::toggleCompare() {
+    if (comparing_) { stopCompare(); return; }
+    if (!liveVulkanActive()) { showNotice(L("Comparison clips need a live picture (capture card, PlayStation or the demo)",
+                                            "Sammenligningsklip kræver et live-billede (capture-kort, PlayStation eller demoen)")); return; }
+    if (rec_->recording()) { showNotice(L("Stop the recording first", "Stop optagelsen først")); return; }
+    const auto c = engine_.liveContent();
+    const int fps = int(std::lround(c.contentFps > 1 ? c.contentFps : engine_.info().fps));
+    QString what;
+    if (s_.enabled && s_.scale > 1.001f) {
+        static const char* names[] = {"SGSR", "FSR 3.1", "FSR 1", "NIS"};
+        what = QString(" · %1 %2×").arg(names[std::clamp(int(s_.upscaler), 0, 3)]).arg(double(s_.scale));
+    }
+    const QString a = L("Original", "Original") + (fps > 0 ? QString(" · %1 fps").arg(fps) : QString());
+    const QString b = "VeyAmux" + what;
+    liveVk_->setCompare(compareLayout_, compareLabel(a, false), compareLabel(b, true));
+    recPath_ = recFolder(false) + "/VeyAmux-compare_" + stamp() + ".mp4";
+    markers_.clear();
+    rec_->startRecording(recPath_.toStdString());
+    comparing_ = true;
+    if (!compareTimer_) {
+        compareTimer_ = new QTimer(this);
+        compareTimer_->setSingleShot(true);
+        connect(compareTimer_, &QTimer::timeout, this, [this] { if (comparing_) stopCompare(); });
+    }
+    compareTimer_->start(compareSeconds_ * 1000);
+    updateRecordSource();
+    showNotice(L("Recording a comparison clip (%1 s)", "Optager et sammenligningsklip (%1 s)").arg(compareSeconds_));
+    emit recChanged();
+    emit recTick();
+}
+
+void PlayerBridge::stopCompare() {
+    comparing_ = false;
+    if (compareTimer_) compareTimer_->stop();
+    if (rec_->recording()) rec_->stopRecording();
+    if (liveVk_) liveVk_->setCompare(0);
+    updateRecordSource();
+    emit recChanged();
+    emit recTick();
+}
+
+// Clip markers (after PushFPS 4.1): "<recording>-markers.txt" beside the recording, one line a marker, written again
+// at every marker so nothing is lost if the recording ends badly. The "H:MM:SS.t  Marker n" form is what video sites
+// take for chapters.
+void PlayerBridge::addMarker() {
+    if (!rec_->recording() || recPath_.isEmpty()) { showNotice(L("Markers are set while recording (F10)", "Markører sættes under en optagelse (F10)")); return; }
+    const double sec = rec_->recordingSeconds();
+    markers_ << sec;
+    auto fmt = [](double s) {
+        const int tenths = int(std::lround(std::max(0.0, s) * 10));
+        const int h = tenths / 36000, m = tenths / 600 % 60, sc = tenths / 10 % 60, t = tenths % 10;
+        return QString("%1:%2:%3.%4").arg(h).arg(m, 2, 10, QChar('0')).arg(sc, 2, 10, QChar('0')).arg(t);
+    };
+    QString text = "VeyAmux markers for " + QFileInfo(recPath_).fileName() + "\n";
+    for (int i = 0; i < markers_.size(); ++i) text += fmt(markers_[i]) + "  Marker " + QString::number(i + 1) + "\n";
+    QFile f(recPath_.left(recPath_.size() - 4) + "-markers.txt");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(text.toUtf8());
+    showNotice(L("Marker %1 · %2", "Markør %1 · %2").arg(markers_.size()).arg(fmt(sec)));
     emit recTick();
 }
 
@@ -611,6 +719,10 @@ void PlayerBridge::loadSettings() {
     s_.exposure = float(q.value("enh/exposure", 0.0).toDouble());
     s_.contrast = float(q.value("enh/contrast", 1.0).toDouble());
     s_.saturation = float(q.value("enh/saturation", 1.0).toDouble());
+    s_.smaa = q.value("enh/smaa", false).toBool();
+    s_.texture = float(std::clamp(q.value("enh/texture", 0.0).toDouble(), -1.0, 1.0));
+    s_.clarity = float(std::clamp(q.value("enh/clarity", 0.0).toDouble(), -1.0, 1.0));
+    s_.dehaze = float(std::clamp(q.value("enh/dehaze", 0.0).toDouble(), -1.0, 1.0));
     volume_ = q.value("audio/volume", 1.0).toDouble();
     audioDelay_ = std::clamp(q.value("audio/delayMs", 0).toInt(), -300, 300);
     muted_ = q.value("audio/muted", false).toBool();
@@ -624,6 +736,7 @@ void PlayerBridge::saveSettings() {
     q.setValue("enh/fxaa", s_.fxaa); q.setValue("enh/deflicker", s_.deflicker); q.setValue("enh/denoise", int(s_.denoise)); q.setValue("enh/denoiseStrength", s_.denoiseStrength); q.setValue("enh/hdrPeak", hdrPeak()); q.setValue("enh/vrr", s_.vrr); q.setValue("enh/frameGenMode", int(s_.frameGen)); q.setValue("enh/fxaaQuality", s_.fxaaQuality);
     q.setValue("enh/sharpen", double(s_.sharpen)); q.setValue("enh/exposure", double(s_.exposure));
     q.setValue("enh/contrast", double(s_.contrast)); q.setValue("enh/saturation", double(s_.saturation));
+    q.setValue("enh/smaa", s_.smaa); q.setValue("enh/texture", double(s_.texture)); q.setValue("enh/clarity", double(s_.clarity)); q.setValue("enh/dehaze", double(s_.dehaze));
     q.setValue("audio/volume", volume_); q.setValue("audio/muted", muted_);
 }
 
@@ -733,6 +846,40 @@ void PlayerBridge::checkHighRate() {
     updateLsfgMultiplier();
     emit lsfgChanged();
     emit mediaChanged();
+}
+
+// Frame generation that asks for more pictures than the screen can show (a 40 fps game x 2 = 80 on a 60 Hz screen, or
+// 30 x 3 on 60 Hz): lsfg-vk presents in FIFO, so its frames queue up behind the refresh, the delay grows and frames are
+// thrown away unevenly; FSR's are dropped. After PushFPS 4.1's display cap. Shown after 3 s, cleared after 3 s below.
+void PlayerBridge::checkOverRefresh() {
+    int mult = 1;
+    if (engine_.isOpen() && engine_.isLive() && !fgPaused_) {
+        if (s_.lsfgFg() && lsfgActive_) mult = lsfgMultiplier_;
+        else if (s_.fsrFg() && liveVulkanActive()) mult = 2;
+    }
+    const double hz = displayHz();
+    const double base = mult > 1 ? frameGenBaseFps() : 0.0;
+    const bool over = mult > 1 && hz > 1 && base * mult > hz * 1.05;
+    const bool shown = !fgOverRefresh_.isEmpty();
+    overRefreshTicks_ = over != shown ? overRefreshTicks_ + 1 : 0;
+    if (overRefreshTicks_ < 30) return;
+    overRefreshTicks_ = 0;
+    if (over) {
+        const int out = int(std::lround(base * mult)), screen = int(std::lround(hz));
+        // the multiplier that fits, if any
+        const int fit = int(std::floor(hz * 1.05 / std::max(1.0, base)));
+        QString tip;
+        if (s_.lsfgFg() && mult == 3 && fit >= 2) tip = L(" Use Fixed 2×, or a screen with a higher refresh rate.", " Brug Fast 2×, eller en skærm med højere opdateringsfrekvens.");
+        else tip = L(" Set the screen to a higher refresh rate, or turn frame generation off for this game.",
+                     " Sæt skærmen til en højere opdateringsfrekvens, eller slå frame generation fra til dette spil.");
+        fgOverRefresh_ = L("%1 fps × %2 = %3 fps, but the screen shows %4 Hz: frames queue up and are dropped.",
+                           "%1 fps × %2 = %3 fps, men skærmen viser %4 Hz: billederne hober sig op og smides væk.")
+                             .arg(std::lround(base)).arg(mult).arg(out).arg(screen) + tip;
+        if (!overRefreshNoticed_) { overRefreshNoticed_ = true; showNotice(fgOverRefresh_); }
+    } else {
+        fgOverRefresh_.clear();
+    }
+    emit lsfgChanged();
 }
 
 // "→ 120 fps" after the source rate when frame generation raises it: source rate x multiplier for Lossless Scaling
@@ -886,6 +1033,7 @@ void PlayerBridge::resetEnhance() {
     const auto keep = s_;
     s_ = veyamux::EnhanceSettings{};
     s_.enabled = keep.enabled; s_.frameGen = keep.frameGen; s_.vrr = keep.vrr; s_.hdrPeak = keep.hdrPeak; s_.hdrOut = keep.hdrOut; s_.displayPeak = keep.displayPeak; s_.fgPaused = keep.fgPaused;
+    s_.pacingRepair = keep.pacingRepair; s_.hudLock = keep.hudLock; s_.fitW = keep.fitW; s_.fitH = keep.fitH;
     activeProfile_.clear();
     emit profilesChanged();
     applyEnhance();
@@ -927,6 +1075,7 @@ void PlayerBridge::saveProfile(const QString& rawName, bool bindToSignal) {
     q.setValue(g + "hdrPeak", hdrPeak());
     q.setValue(g + "sharpen", double(s_.sharpen)); q.setValue(g + "exposure", double(s_.exposure));
     q.setValue(g + "contrast", double(s_.contrast)); q.setValue(g + "saturation", double(s_.saturation));
+    q.setValue(g + "smaa", s_.smaa); q.setValue(g + "texture", double(s_.texture)); q.setValue(g + "clarity", double(s_.clarity)); q.setValue(g + "dehaze", double(s_.dehaze));
     q.setValue(g + "audioDelay", audioDelay_);
     const QString sig = bindToSignal ? signalKey() : QString();
     if (!sig.isEmpty()) {   // one profile per signal: unbind the others
@@ -961,6 +1110,10 @@ bool PlayerBridge::loadProfile(const QString& name) {
     s_.denoiseStrength = std::clamp(q.value(g + "denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value(g + "hdrPeak", 1000).toInt(), 203, 10000));
     s_.sharpen = float(q.value(g + "sharpen", 0.0).toDouble());
+    s_.smaa = q.value(g + "smaa", false).toBool();
+    s_.texture = float(std::clamp(q.value(g + "texture", 0.0).toDouble(), -1.0, 1.0));
+    s_.clarity = float(std::clamp(q.value(g + "clarity", 0.0).toDouble(), -1.0, 1.0));
+    s_.dehaze = float(std::clamp(q.value(g + "dehaze", 0.0).toDouble(), -1.0, 1.0));
     s_.exposure = float(q.value(g + "exposure", 0.0).toDouble());
     s_.contrast = float(q.value(g + "contrast", 1.0).toDouble());
     s_.saturation = float(q.value(g + "saturation", 1.0).toDouble());
@@ -1001,6 +1154,59 @@ QVariantList PlayerBridge::captureDevices() {
         out << m;
     }
     return out;
+}
+
+namespace {
+bool compressedFourcc(uint32_t f) { return f == V4L2_PIX_FMT_MJPEG || f == V4L2_PIX_FMT_JPEG || f == V4L2_PIX_FMT_H264; }
+}
+
+int PlayerBridge::betterModeIndex(int modeIndex) const {
+    if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) return -1;
+    const auto& m = lastModes_[size_t(modeIndex)];
+    if (!compressedFourcc(m.fourcc)) return -1;
+    int best = -1;
+    for (int i = 0; i < int(lastModes_.size()); ++i) {
+        const auto& o = lastModes_[size_t(i)];
+        if (compressedFourcc(o.fourcc) || o.w != m.w || o.h != m.h) continue;
+        if (best < 0 || o.fps > lastModes_[size_t(best)].fps + 0.5) best = i;
+    }
+    return best;
+}
+
+QString PlayerBridge::modeAdvice(int modeIndex) const {
+    const int b = betterModeIndex(modeIndex);
+    if (b < 0) return {};
+    const auto& m = lastModes_[size_t(modeIndex)];
+    const auto& o = lastModes_[size_t(b)];
+    const QString name = QString::fromStdString(veyamux::fourccName(o.fourcc));
+    if (o.fps + 0.5 >= m.fps)
+        return L("The card also sends this size uncompressed (%1) at the same rate: a sharper picture, without the "
+                 "compression's blocks and no decoding. Choose \"%2\".",
+                 "Kortet sender også denne størrelse ukomprimeret (%1) med samme hastighed: et skarpere billede uden "
+                 "komprimeringens blokke og uden afkodning. Vælg \"%2\".")
+            .arg(name, QString::fromStdString(o.label));
+    return L("MJPEG is compressed and softer. Uncompressed (%1) is only offered at %2 fps at this size: sharper, but a "
+             "60 fps game then reaches VeyAmux with half its frames.",
+             "MJPEG er komprimeret og blødere. Ukomprimeret (%1) findes kun ved %2 fps i denne størrelse: skarpere, men et "
+             "spil i 60 fps når så VeyAmux med halvdelen af sine billeder.")
+        .arg(name).arg(std::lround(o.fps));
+}
+
+QString PlayerBridge::captureHelp() const {
+    const QStringList devs = QDir("/dev").entryList({"video*"}, QDir::System);
+    if (devs.isEmpty())
+        return L("No /dev/video* at all: plug the card into a USB 3 port (blue or marked SS) directly on the PC, not a hub, "
+                 "and give it a few seconds.",
+                 "Slet ingen /dev/video*: sæt kortet i en USB 3-port (blå eller mærket SS) direkte på pc'en, ikke en hub, "
+                 "og giv det et par sekunder.");
+    int noAccess = 0;
+    for (const QString& d : devs) if (::access(("/dev/" + d).toLocal8Bit().constData(), R_OK | W_OK) != 0) ++noAccess;
+    if (noAccess == devs.size())
+        return L("%1 exists, but your user may not open it. Add yourself to the \"video\" group "
+                 "(sudo usermod -aG video $USER) and log in again.",
+                 "%1 findes, men din bruger må ikke åbne den. Føj dig selv til gruppen \"video\" "
+                 "(sudo usermod -aG video $USER) og log ind igen.").arg("/dev/" + devs.first());
+    return {};
 }
 
 QVariantList PlayerBridge::captureModes(const QString& path) {
@@ -1160,6 +1366,10 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
         emit mediaChanged();
         return false;
     }
+    curMode_ = screenCast || veyamux::CaptureSource::isDemo(path.toStdString()) || veyamux::CaptureSource::isRemotePlay(path.toStdString())
+                   ? veyamux::CaptureMode{} : mode;
+    curDevice_ = path;
+    curAudio_ = audioSource;
     QSettings q; q.setValue("cap/device", screenCast ? QStringLiteral("screencast") : path); q.setValue("cap/audio", audioSource);
     if (const QString n = screenCast ? QString() : veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
     updateLsfgMultiplier();

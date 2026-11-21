@@ -1,28 +1,47 @@
-## VeyAmux-V.1.5
+## VeyAmux-V.1.6
 
-### Smoother Lossless Scaling
-- **Even out frame pacing** (optional, under Frame generation): many games locked to 30 fps show their pictures unevenly,
-  for example 17 ms and 50 ms apart instead of 33 and 33. Frame generation then keeps that judder. VeyAmux now moves each
-  picture to an even rhythm before frame generation. This costs one refresh of delay, about 17 ms at 60 Hz. The
-  frame-time overlay (F3) shows how many pictures were moved. Based on PushFPS's frame pacing repair, by way of
-  Veyra-NRVideo 2.2.0 (GPL-3.0-or-later).
-- **VRR warning:** lsfg-vk 2 needs a fixed refresh rate to space its frames evenly. If Adaptive Sync (VRR) is on in KDE,
-  VeyAmux now shows a warning in the menu and a notice when you choose Lossless Scaling. Set *Adaptive sync* to
-  *Never* under *Display & Monitor*.
+### New start screen and menu
+- The start screen shows the sources as three large cards (capture card, PlayStation, video file), a button to
+  continue with the last capture card, the demo, and the themes and languages.
+- The menu has six tabs: Picture, Frame generation, Display, Sound, Record and System. It grows with the screen, so it
+  reads well on a TV, and **LB / RB** switch tabs on a controller. On handhelds it still fills the screen.
 
-### Sharp in any window size
-The finished picture is now resampled to exactly the pixels it covers in the window, and then drawn 1:1. Before, Qt
-stretched it with a simple bilinear filter. It is sharper when the picture is enlarged, and thin lines and text no
-longer crawl when it is shrunk (for example 4K in a 1440p window). In fullscreen at the source's own size, nothing
-changes. To compare with the old way, start VeyAmux with `VEYAMUX_NO_FIT=1`.
+### Updates from inside VeyAmux
+VeyAmux looks for a new version on GitHub by itself, at most twice a day (it can be turned off under *System*). One
+click downloads it, checks it against the release's checksum and puts it in place of the AppImage under the same
+name, so a Steam shortcut or Gear Lever entry keeps working. The new version starts the next time, or right away with
+*Restart now*. Gear Lever is no longer needed.
 
-### Lock the HUD (AMD FSR frame generation)
-A new option keeps still text, maps and gauges from warping in the generated frames. It takes still, sharp-edged pixels
-from the real frame. Based on PushFPS, by way of Veyra-NRVideo 2.2.0.
+### Smoother frame generation
+- **Repeated frames are found by comparing the whole picture.** Before, only a sparse grid was compared, and a small
+  movement seen from a still camera (an idle animation, a distant figure) could be taken for a repeat and thrown away,
+  which frame generation shows as a judder. In a 4K test with card noise and only a 12-pixel element moving, the old
+  check was right on 68 of 119 frames, the new one on 119 of 119. It costs about 1 ms per frame.
+- **Screen check:** VeyAmux warns when frame generation asks for more frames than the screen can show (for example
+  30 fps × 3 on a 60 Hz screen) and says what to change.
+- **Capture format:** if you pick compressed MJPEG while the card has an uncompressed mode, the capture window says so
+  and offers it. If no capture card is listed, it explains why (no device, or no access to it).
+
+### Picture
+- **SMAA** anti-aliasing (medium, high, ultra) next to FXAA: sharper edges with a little more GPU time.
+- **Texture, clarity and dehaze** (from Veyra-NRVideo).
+
+### Recording
+- **Comparison clips:** the original capture next to VeyAmux's picture, as split, side by side, vertical 9:16 (for
+  TikTok, Shorts and Reels) or a sweeping reveal, with labels. Lossless Scaling's frames are made after VeyAmux, so
+  they are not in recordings.
+- **Clip markers:** **F6** while recording notes the moment in `<recording>-markers.txt`.
+
+### Help
+- **Check my setup** (System tab) finds what costs sharpness, smoothness or sound, each with a button that fixes it.
+- **Performance report:** copies the graphics card, settings and measurements for a bug report, with nothing personal.
+
+Several of these features come from [PushFPS](https://github.com/DosukaSOL/PushFPS) 4.1 (GPL-3.0-or-later). SMAA is
+MIT-licensed (iryoku/smaa).
 
 ### Download
-Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. It can update itself through the
-`.zsync` file (for example with Gear Lever).
+Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. From now on, VeyAmux can update
+itself.
 
 Lossless Scaling frame generation still needs your own copy of Lossless Scaling (Steam) and lsfg-vk. VeyAmux does not
 include either of them.

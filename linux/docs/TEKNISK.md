@@ -554,10 +554,33 @@ nyeste billede bruges; derefter går det samme live-spor som et capture-kort (Ra
 - Valget gemmes som `restore_token` (`cap/scToken`), så `--capture last` kan genåbne samme vindue uden at spørge.
   Afbrydes dialogen, slettes tokenet.
 
+## Fra PushFPS 4.1 (2026-11-21)
+- **Dublet-fjernelse på hele billedet** (`PictureCompare` i `src/ContentProbe.cpp`): hver luma-sample sammenlignes med
+  det sidste *nye* billede; en sample tæller som ændret ved mere end 3 niveauer, og billedet er en gentagelse, så længe
+  højst ca. 5 pr. million samples afviger (41 ved 4K). Hver buffer fra kortet sammenlignes én gang i `probeRaw`, og
+  resultatet både måler billedraten og afgør, om næste udleverede billede er en gentagelse (`newSinceDelivered_`).
+  Test (`veyamux-probe-test dedup`): 4K, 30 fps i 60 Hz med kortstøj og kun et 12 px element i bevægelse: det gamle
+  gitter rammer 68/119, det nye 119/119, ca. 1,1 ms pr. billede.
+- **SMAA 1x** (medium/høj/ultra, `AaSmaa*`, opslagstabeller i `third_party/smaa`) som alternativ til FXAA.
+- **Tekstur / klarhed / fjern dis** (Veyras `ColorDetail*`): blokstatistik ved ca. 135 rækker, separabel blur, apply
+  i outputstørrelsen (`recordDetail`).
+- **Sammenligningsklip** (`shaders/LxCompare.hlsl`): originalen (`lin_`, sidste rigtige billede før forbedring) og
+  VeyAmux' billede (`out8_`) i fire layouts (delt, side om side, lodret 1080×1920, afsløring); mærkater tegnes af Qt
+  og lægges på i shaderen. Lossless Scalings billeder kommer efter VeyAmux og er derfor ikke med.
+- **Klipmarkører** (F6): `<optagelse>-markers.txt` med `H:MM:SS.t  Marker n`.
+- **Tjek min opsætning** og **ydelsesrapport**: `src/PlayerBridgeSetup.cpp`.
+- **Over skærmens frekvens** (`checkOverRefresh`): advarsel når spillets fps × multiplikator > skærmens Hz × 1,05 i 3 s.
+
+## Opdatering inde fra appen
+`src/AppUpdate.cpp`: spørger `api.github.com/repos/8BiTw0LF/VeyAmux/releases/latest`, henter `VeyAmux-x86_64.AppImage`
+til `$APPIMAGE.download`, tjekker GitHubs SHA-256 for filen (ellers SHA-1 fra `.zsync`), gør den kørbar og `rename()`r
+den over `$APPIMAGE`. Den kørende kopi fortsætter til genstart. Automatisk søgning højst hver 12. time
+(`update/lastCheck`); `veyamux-update-test [install]` tester det.
+
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
 `--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
-`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
+`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `--tab=N` (åbn menuen på fane N, med `--panel`) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 
 ## Genvejstaster
 Mellemrum afspil/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volumen · F fuldskærm · E forbedring til/fra · P panel · M lyd fra · O åbn ·

@@ -1,5 +1,6 @@
 // QML-facing wrapper around veyamux::MediaEngine.
 #pragma once
+#include "AppUpdate.h"
 #include <algorithm>
 #include <cmath>
 #include <QElapsedTimer>
@@ -126,6 +127,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool hudLock READ hudLock WRITE setHudLock NOTIFY enhanceChanged)
     // the desktop has VRR on for a screen while Lossless Scaling is chosen: lsfg-vk 2 cannot pace its frames then
     Q_PROPERTY(bool lsfgVrrWarning READ lsfgVrrWarning NOTIFY lsfgChanged)
+    // frame generation asks for more pictures than the screen shows (30 fps x 3 on a 60 Hz screen): its text, or empty
+    Q_PROPERTY(QString fgOverRefresh READ fgOverRefresh NOTIFY lsfgChanged)
     Q_PROPERTY(QString vrrScreens READ vrrScreens NOTIFY lsfgChanged)
     Q_PROPERTY(bool vrrRestartNeeded READ vrrRestartNeeded NOTIFY enhanceChanged)
     Q_PROPERTY(int denoiseStrength READ denoiseStrength WRITE setDenoiseStrength NOTIFY enhanceChanged)
@@ -142,6 +145,19 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int recHeight READ recHeight WRITE setRecHeight NOTIFY recChanged)
     Q_PROPERTY(bool recording READ recording NOTIFY recChanged)
     Q_PROPERTY(QString recInfo READ recInfo NOTIFY recTick)
+    // before/after comparison clips: layout 1 split, 2 side by side, 3 vertical (9:16), 4 reveal; length in seconds
+    Q_PROPERTY(int compareLayout READ compareLayout WRITE setCompareLayout NOTIFY recChanged)
+    Q_PROPERTY(int compareSeconds READ compareSeconds WRITE setCompareSeconds NOTIFY recChanged)
+    Q_PROPERTY(bool comparing READ comparing NOTIFY recChanged)
+    Q_PROPERTY(int markers READ markers NOTIFY recTick)
+    // updates from inside the app (AppUpdate.h): "", checking, uptodate, available, downloading, ready, error
+    Q_PROPERTY(QString updateState READ updateState NOTIFY updateChanged)
+    Q_PROPERTY(QString updateVersion READ updateVersion NOTIFY updateChanged)
+    Q_PROPERTY(QString updateText READ updateText NOTIFY updateChanged)
+    Q_PROPERTY(QString updateNotes READ updateNotes NOTIFY updateChanged)
+    Q_PROPERTY(bool updateSelf READ updateSelf CONSTANT)   // runs as an AppImage that can be replaced
+    Q_PROPERTY(bool autoUpdateCheck READ autoUpdateCheck WRITE setAutoUpdateCheck NOTIFY updateChanged)
+    Q_PROPERTY(QString appVersion READ appVersion CONSTANT)   // clip markers in the recording that runs
     // Live stream (RTMP): 0 = Twitch, 1 = YouTube, 2 = own server URL; the key is kept in the settings file
     Q_PROPERTY(bool streaming READ streaming NOTIFY recChanged)
     // Frame-time overlay (F3): intervals between pictures on screen (ms, newest last) and a summary line
@@ -157,6 +173,10 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double exposure READ exposure WRITE setExposure NOTIFY enhanceChanged)
     Q_PROPERTY(double contrast READ contrast WRITE setContrast NOTIFY enhanceChanged)
     Q_PROPERTY(double saturation READ saturation WRITE setSaturation NOTIFY enhanceChanged)
+    Q_PROPERTY(bool smaa READ smaa WRITE setSmaa NOTIFY enhanceChanged)            // anti-aliasing: SMAA instead of FXAA
+    Q_PROPERTY(double texture READ texture WRITE setTexture NOTIFY enhanceChanged)   // colour effects, -1..1
+    Q_PROPERTY(double clarity READ clarity WRITE setClarity NOTIFY enhanceChanged)
+    Q_PROPERTY(double dehaze READ dehaze WRITE setDehaze NOTIFY enhanceChanged)
     // PlayStation Remote Play (RemotePlay.h): consoles found on the network merged with the registered ones,
     // [{id, name, host, ps5, ready, registered, app, passcode}]
     Q_PROPERTY(QVariantList psConsoles READ psConsoles NOTIFY psChanged)
@@ -281,6 +301,7 @@ public:
     bool restartNeeded() const;
     int lsfgMultiplier() const { return lsfgMultiplier_; }
     bool fgPaused() const { return fgPaused_; }
+    QString fgOverRefresh() const { return fgOverRefresh_; }
     double displayHz() const;
     // Set by main() before the window exists: whether Vulkan UI is used and whether lsfg-vk was enabled for this run.
     void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed);
@@ -305,6 +326,10 @@ public:
     double exposure() const { return s_.exposure; }
     double contrast() const { return s_.contrast; }
     double saturation() const { return s_.saturation; }
+    bool smaa() const { return s_.smaa; }
+    double texture() const { return s_.texture; }
+    double clarity() const { return s_.clarity; }
+    double dehaze() const { return s_.dehaze; }
 
     void setVolume(double v);
     int audioDelay() const { return audioDelay_; }
@@ -325,8 +350,13 @@ public:
     void setExposure(double v);
     void setContrast(double v);
     void setSaturation(double v);
+    void setSmaa(bool v) { s_.smaa = v; applyEnhance(); }
+    void setTexture(double v) { s_.texture = float(qBound(-1.0, v, 1.0)); applyEnhance(); }
+    void setClarity(double v) { s_.clarity = float(qBound(-1.0, v, 1.0)); applyEnhance(); }
+    void setDehaze(double v) { s_.dehaze = float(qBound(-1.0, v, 1.0)); applyEnhance(); }
 
     QImage currentImage();
+    void setGpuDevice(const QString& n) { gpuDevice_ = n; }
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
         if (l) {
@@ -366,6 +396,29 @@ public:
     void setRecHeight(int h);
     bool recording() const { return rec_ && rec_->recording(); }
     QString recInfo() const;
+    int compareLayout() const { return compareLayout_; }
+    void setCompareLayout(int v) { compareLayout_ = std::clamp(v, 1, 4); QSettings().setValue("rec/compareLayout", compareLayout_); emit recChanged(); }
+    int compareSeconds() const { return compareSeconds_; }
+    void setCompareSeconds(int v) { compareSeconds_ = std::clamp(v, 5, 120); QSettings().setValue("rec/compareSeconds", compareSeconds_); emit recChanged(); }
+    bool comparing() const { return comparing_; }
+    Q_INVOKABLE void toggleCompare();   // records a comparison clip (stops by itself after compareSeconds)
+    Q_INVOKABLE void addMarker();
+    Q_INVOKABLE QVariantList setupCheck();          // [{id, kind, title, detail, fix}] (PlayerBridgeSetup.cpp)
+    Q_INVOKABLE void applySetupFix(const QString& id);
+    Q_INVOKABLE QString perfReport();
+    Q_INVOKABLE void copyPerfReport();       // F6: notes this moment of the recording in "<recording>-markers.txt"
+    int markers() const { return int(markers_.size()); }
+    QString updateState() const { return updState_; }
+    QString updateVersion() const { return updRelease_.version; }
+    QString updateText() const { return updText_; }
+    QString updateNotes() const { return updRelease_.notes; }
+    bool updateSelf() const;
+    bool autoUpdateCheck() const { return QSettings().value("update/auto", true).toBool(); }
+    void setAutoUpdateCheck(bool v) { QSettings().setValue("update/auto", v); emit updateChanged(); }
+    QString appVersion() const;
+    Q_INVOKABLE void checkForUpdate(bool manual = true);
+    Q_INVOKABLE void installUpdate();
+    Q_INVOKABLE void openReleasePage();
     Q_INVOKABLE void saveReplay();
     Q_INVOKABLE void toggleRecording();
     Q_INVOKABLE void screenshot();
@@ -400,6 +453,11 @@ public:
 public slots:
     QVariantList captureDevices();
     QVariantList captureModes(const QString& path);
+    // A word on the chosen mode of the last captureModes() list: a compressed (MJPEG) mode where the card also has an
+    // uncompressed one, and at which cost (after PushFPS 4.1). Empty when there is nothing to say.
+    QString modeAdvice(int modeIndex) const;
+    int betterModeIndex(int modeIndex) const;   // the uncompressed mode the advice points to, or -1
+    QString captureHelp() const;   // why no capture card is listed (device files without access, another program), or empty
     QVariantList audioSources();
     Q_INVOKABLE QVariantList audioSinks();   // [{name, desc}] from pactl
     QString audioOutput() const { return QSettings().value("audio/sink").toString(); }
@@ -408,6 +466,7 @@ public slots:
     void setNormalize(bool v) { QSettings().setValue("audio/normalize", v); engine_.setNormalize(v); emit audioChanged(); }
     QString guessAudioSource(const QString& cardName);
     QString lastCaptureDevice() const;
+    QString lastCaptureName() const { return QSettings().value("cap/name").toString(); }   // the card's name, for "continue"
     QString lastCaptureAudio() const;
     bool openCapture(const QString& path, int modeIndex, const QString& audioSource);
     bool openCaptureAuto(const QString& path);
@@ -462,6 +521,7 @@ public slots:
     void psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
 
 signals:
+    void updateChanged();
     void psChanged();
     void psRumble(int low, int high);
     void demoChanged();
@@ -542,6 +602,22 @@ private:
     QString openFile_;              // the video file that is open (to reopen it after a restart)
     bool lsfgOffPending_ = false;   // a restart without lsfg-vk is on its way
     bool lsfgHighNoticed_ = false;  // the 120 Hz hint for Lossless Scaling was shown
+    int overRefreshTicks_ = 0;      // 100 ms ticks the output was above the screen's refresh rate (or back below it)
+    QString fgOverRefresh_;
+    int compareLayout_ = 1, compareSeconds_ = 15;
+    update::Release updRelease_;
+    QString updState_, updText_;
+    bool comparing_ = false;
+    QTimer* compareTimer_ = nullptr;
+    QString recPath_;                 // the recording being written
+    QList<double> markers_;           // its markers (seconds)
+    void stopCompare();
+    QImage compareLabel(const QString& text, bool accent) const;
+    veyamux::CaptureMode curMode_;   // the capture card mode in use (fourcc 0: none / not a card)
+    QString curDevice_, curAudio_;
+    QString gpuDevice_;              // the Vulkan device's name (performance report)
+    bool overRefreshNoticed_ = false;
+    void checkOverRefresh();
     // restarts VeyAmux with the same source (and fullscreen) - used to take lsfg-vk off the window
     void restartWithSource();
     lsfg::Detection lsfg_;

@@ -67,6 +67,8 @@ public:
     // View over an image owned by someone else (e.g. the FidelityFX backend). Destroy with destroyView().
     ImageRes wrapImage(VkImage image, VkFormat fmt, uint32_t w, uint32_t h);
     void destroyView(ImageRes& i);
+    // One-shot upload of tightly packed rows into an image in GENERAL layout (waits for completion). For small tables.
+    bool uploadImage(const ImageRes& image, const void* data, uint32_t rowBytes);
     // One-shot UNDEFINED -> GENERAL transition (waits for completion).
     void transitionToGeneral(VkImage image) { toGeneral(image); }
 

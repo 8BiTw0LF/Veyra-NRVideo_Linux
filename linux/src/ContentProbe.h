@@ -11,6 +11,7 @@
 //    width. In-game sharpening or temporal upscalers (FSR/DLSS/checkerboarding) recreate fine detail, so then the
 //    estimate reads higher; a flat scene gives no estimate. It is shown with "~".
 #pragma once
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -34,6 +35,26 @@ private:
     int pw_ = 0, ph_ = 0;
 };
 
+// Is this frame a different picture from the last *new* one? Every luma sample of the whole picture is compared
+// (after PushFPS's PictureCompare, GPL-3.0-or-later): a sample differs when it is more than kBand levels off, and the
+// frame repeats while at most tolerance() samples differ (about five per million: a capture card now and then moves a
+// lone sample of a repeated frame, mostly at bright text edges). A sparse grid, as FrameDiff uses, misses small real
+// motion seen from a still camera (an idle animation, a distant figure) and drops real game frames, which frame
+// generation then shows as judder. For uncompressed formats only: a compressed card (MJPEG) changes many samples of
+// a repeat, so it keeps FrameDiff's noise-adaptive test.
+class PictureCompare {
+public:
+    static constexpr int kBand = 3;
+    bool changed(const uint8_t* luma, int w, int h, int stride, int step);
+    void reset() { ref_.clear(); }
+    static int tolerance(int w, int h) { return std::max(8, int(int64_t(w) * h * 5 / 1000000)); }
+    int lastDiffering() const { return lastDiff_; }   // samples off by more than kBand in the last call (capped)
+private:
+    std::vector<uint8_t> ref_;
+    int rw_ = 0, rh_ = 0;
+    int lastDiff_ = 0;
+};
+
 class ContentProbe {
 public:
     struct Result {
@@ -50,7 +71,8 @@ public:
 
     void reset();
     // One delivered frame. Luma sample (x, y) is luma[y * stride + x * step]. t = capture timestamp.
-    void feed(const uint8_t* luma, int w, int h, int stride, int step, std::chrono::steady_clock::time_point t);
+    // changed: the caller already knows whether this is a new picture (-1: the probe's own sparse test decides)
+    void feed(const uint8_t* luma, int w, int h, int stride, int step, std::chrono::steady_clock::time_point t, int changed = -1);
     Result result() const;
 
     // Resolution estimate for one block of luma rows (each `n` samples, n a power of two); exposed for tests.
