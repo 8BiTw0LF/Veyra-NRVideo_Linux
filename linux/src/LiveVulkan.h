@@ -84,6 +84,7 @@ private:
     uint64_t seenGen_ = 0;
     // frame generation pacing
     std::chrono::steady_clock::time_point lastArrival_{};
+    void requestFrame();   // draw a new picture as soon as possible
     double frameMs_ = 1000.0 / 60.0;     // smoothed capture interval
     std::atomic<uint64_t> seq_{0};        // bumps for every real frame rendered
     std::atomic<uint64_t> lastHandle_{0};

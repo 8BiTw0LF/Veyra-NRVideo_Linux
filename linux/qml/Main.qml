@@ -35,6 +35,9 @@ Window {
         return (h > 0 ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (s < 10 ? "0" : "") + s
     }
     function wake() { controlsShown = true; hideTimer.restart() }
+    // gamescope: VeyAmux hides the pointer itself there, all but invisibly (see PlayerBridge::setPointerHidden)
+    readonly property bool pointerHidden: !controlsShown && fs && player.hasMedia
+    onPointerHiddenChanged: player.setPointerHidden(pointerHidden)
     readonly property var scales: [1.0, 1.5, 2.0, 3.0]
 
     Timer { id: hideTimer; interval: 2600; onTriggered: if (player.playing && !panelOpen && !scrubbing && !keepControls) controlsShown = false }
@@ -245,6 +248,7 @@ Window {
         cursorShape: player.demoActive && pressed ? Qt.ClosedHandCursor : (win.controlsShown || !win.fs) ? Qt.ArrowCursor : Qt.BlankCursor
         onPressed: (m) => { lx = m.x; ly = m.y }
         onPositionChanged: (m) => {
+            if (player.syntheticMove()) return   // gamescope keep-alive, not the user
             wake()
             if (pressed && player.demoActive) { player.demoLook(m.x - lx, m.y - ly); lx = m.x; ly = m.y }
         }

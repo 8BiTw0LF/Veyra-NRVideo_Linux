@@ -116,6 +116,25 @@ void EnhanceChain::releaseResources() {
 bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& error, int dw, int dh) {
     if (dw <= 0 || dh <= 0) { dw = ow; dh = oh; }
     if (w == w_ && h == h_ && ow == ow_ && oh == oh_ && dw == dw_ && dh == dh_ && src_.image) return true;
+    if (liveMode_ && w == w_ && h == h_ && ow == ow_ && oh == oh_ && src_.image) {
+        // Only the window changed size: new display images, nothing else. The working images and the temporal
+        // history (denoiser, anti-flicker, upscaler) stay, and nothing waits for the GPU: the old images are freed a
+        // few frames later, when no frame in flight can use them any more.
+        retire(out8_);
+        retire(pre8_);
+        out8_ = ctx_.createImage(dw, dh, VK_FORMAT_R8G8B8A8_UNORM,
+                                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (dw != ow || dh != oh) pre8_ = ctx_.createImage(ow, oh, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (!out8_.image || ((dw != ow || dh != oh) && !pre8_.image)) {
+            error = "Out of GPU memory while resizing the picture";
+            vkDeviceWaitIdle(ctx_.device());
+            releaseResources();
+            return false;
+        }
+        dw_ = dw; dh_ = dh;
+        ++liveGen_;
+        return true;
+    }
     vkDeviceWaitIdle(ctx_.device());
     releaseResources();
     const VkImageUsageFlags upl = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
@@ -488,13 +507,20 @@ void EnhanceChain::collectRetired() {
     }
 }
 
-bool EnhanceChain::ensureLive(int w, int h, int ow, int oh, std::string& error, int dw, int dh) {
-    const VkDeviceSize need = VkDeviceSize(w) * h * 4;
+bool EnhanceChain::ensureLive(int w, int h, int ow, int oh, std::string& error, int dw, int dh, size_t inputBytes) {
+    // room for a whole frame as the source lays it out (a padded stride can be larger than w * h * 4)
+    const VkDeviceSize need = std::max<VkDeviceSize>(VkDeviceSize(w) * h * 4, VkDeviceSize(inputBytes));
     if (dw <= 0 || dh <= 0) { dw = ow; dh = oh; }
     if (liveW_ == w && liveH_ == h && w_ == w && h_ == h && ow_ == ow && oh_ == oh && dw_ == dw && dh_ == dh && out8_.image && liveStagingSize_ >= need)
         return true;
     liveMode_ = true;
     if (!ensureResources(w, h, ow, oh, error, dw, dh)) return false;     // also recreates out8_ (old one retired)
+    // only the window size changed (ensureResources kept everything else): the upload images and buffers stay
+    if (liveW_ == w && liveH_ == h && rawY_.image && liveStagingSize_ >= need) return true;
+    // (a larger upload buffer alone: ensureResources did not wait, so wait here; this is rare)
+    vkDeviceWaitIdle(ctx_.device());
+    for (ImageRes* i : {&rawPacked_, &rawY_, &rawUV_}) ctx_.destroy(*i);
+    for (auto& b : liveStaging_) ctx_.destroy(b);
     rawPacked_ = ctx_.createImage(uint32_t(w / 2), uint32_t(h), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     rawY_ = ctx_.createImage(uint32_t(w), uint32_t(h), VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     rawUV_ = ctx_.createImage(uint32_t(w / 2), uint32_t(h / 2), VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -520,7 +546,20 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     if (!noFit && s.fitW >= 16 && s.fitH >= 16 && !s.pixelActive() && (std::abs(s.fitW - ow) > 1 || std::abs(s.fitH - oh) > 1)) {
         dw = s.fitW & ~1; dh = s.fitH & ~1;
     }
-    if (!ensureLive(in.w, in.h, ow, oh, error, dw, dh)) return false;
+    // The copies below read these bytes from the upload buffer: a frame that is shorter is not drawn.
+    {
+        const size_t W = size_t(in.w), H = size_t(in.h), st = size_t(std::max(in.stride, 0));
+        size_t rowMin = W * 4, need = st * H;
+        if (in.fmt == LiveInput::YUYV || in.fmt == LiveInput::UYVY) rowMin = W * 2;
+        if (in.fmt == LiveInput::NV12) { rowMin = W; need = st * H * 3 / 2; }
+        if (in.fmt == LiveInput::P010) { rowMin = W * 2; need = st * H * 3 / 2; }
+        const bool yuv = in.fmt != LiveInput::RGBA;   // chroma is subsampled: even sizes
+        if (in.w < 2 || in.h < 2 || (yuv && ((in.w & 1) || (in.h & 1))) || st < rowMin || !in.data || in.size < need) {
+            error = "Incomplete frame from the source";
+            return false;
+        }
+    }
+    if (!ensureLive(in.w, in.h, ow, oh, error, dw, dh, in.size)) return false;
     hudLock_ = s.hudLock;
     collectRetired();
     if (in.fmt == LiveInput::P010 && !rawY16_.image) {   // HDR capture: 16-bit planes, created on first use
@@ -602,12 +641,15 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     timer_.mark(cb, GpuTimer::Input);
     recordPost(&lin_, s);
     // OBS stream copy of the displayed image
-    if (streamMaxH_.load() >= 0) { recordStream(cb, out8_, 0); timer_.mark(cb, GpuTimer::Output); }
+    // recording and streaming take the picture before it is fitted to the window, so resizing the window (or moving it
+    // to a screen with another scale) does not change their resolution
+    const ImageRes& canvas = (pre8_.image && (dw_ != ow_ || dh_ != oh_)) ? pre8_ : out8_;
+    if (streamMaxH_.load() >= 0) { recordStream(cb, canvas, 0); timer_.mark(cb, GpuTimer::Output); }
     if (recMaxH_.load() >= 0) {
         const int cm = cmpMode_.load();
         const ImageRes* c = cm > 0 ? recordCompare(cm) : nullptr;
         if (c) recordRec(cb, *c, in.time, cm == 3);   // vertical clips keep their 1080x1920
-        else recordRec(cb, out8_, in.time);
+        else recordRec(cb, canvas, in.time);
     }
     if (shotWanted_.exchange(false)) recordShot(cb, out8_);
 
@@ -727,7 +769,7 @@ bool EnhanceChain::recordFg(VkCommandBuffer cb) {
     ctx_.computeBarrier();
     const bool reset = fgReset_;
     std::string err;
-    if (!fg_->record(cb, out8_, fgOut_, reset, frameMs_, err)) {
+    if (!fg_->record(cb, out8_, fgOut_, reset, frameMs_, err, outPq_, frameNits_)) {
         if (std::getenv("VEYAMUX_DEBUG_FG") && err != fgError_) std::fprintf(stderr, "FG: %s\n", err.c_str());
         fgError_ = err;
         fgActive_ = fgRealPending_ = false;

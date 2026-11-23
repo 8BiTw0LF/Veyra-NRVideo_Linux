@@ -39,5 +39,5 @@ mkdir -p "$OUT"
 # Update information: AppImageUpdate / Gear Lever find new versions among the GitHub releases (upload the .zsync file
 # next to the AppImage in every release).
 UPDATE_INFO="${VEYAMUX_UPDATE_INFO:-gh-releases-zsync|8BiTw0LF|VeyAmux|latest|VeyAmux-x86_64.AppImage.zsync}"
-( cd "$OUT" && ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream -u "$UPDATE_INFO" "$APPDIR" "VeyAmux-x86_64.AppImage" )
+( cd "$OUT" && ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream --runtime-file "$T/appimage/runtime-x86_64" -u "$UPDATE_INFO" "$APPDIR" "VeyAmux-x86_64.AppImage" )
 echo "Built: $OUT/VeyAmux-x86_64.AppImage (+ .zsync for the release)"

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(veyamux-linux VERSION 1.7 LANGUAGES C CXX)
+project(veyamux-linux VERSION 1.8 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -198,3 +198,6 @@ target_link_libraries(veyamux-probe-test PRIVATE Threads::Threads)
 add_executable(veyamux-upscale-test src/upscale_test.cpp)
 target_link_libraries(veyamux-upscale-test PRIVATE veyamux_core)
 add_dependencies(veyamux-upscale-test veyamux_shaders)
+add_executable(veyamux-live-test src/live_test.cpp)
+target_link_libraries(veyamux-live-test PRIVATE veyamux_core)
+add_dependencies(veyamux-live-test veyamux_shaders)

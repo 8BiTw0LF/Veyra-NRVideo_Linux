@@ -1,4 +1,6 @@
 #include "PlayerBridge.h"
+#include <QPixmap>
+#include <QCursor>
 #include "Sandbox.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
@@ -181,13 +183,46 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     // updates: asked by itself a few seconds after the start (not while the first picture is being set up)
     if (autoUpdateCheck() && qEnvironmentVariable("VEYAMUX_NO_UPDATE_CHECK") != "1")
         QTimer::singleShot(8000, this, [this] { checkForUpdate(false); });
+    // Steam's gamescope session (SteamOS, Big Picture as a session): frame generation was reported to stop a few
+    // seconds after the mouse stops, and to come back when it moves. When the pointer is hidden and still, gamescope
+    // changes how it puts the window on screen. So while frame generation runs there, the pointer is never fully
+    // hidden (an all-but-transparent one, see setPointerHidden) and it is moved one pixel and back every two seconds,
+    // which VeyAmux itself ignores (syntheticMove). VEYAMUX_GAMESCOPE_KEEPALIVE=0 turns it off.
+    gamescope_ = inGamescope() || qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("gamescope", Qt::CaseInsensitive);
+    if (gamescope_ && qEnvironmentVariable("VEYAMUX_GAMESCOPE_KEEPALIVE") != "0") {
+        auto* keep = new QTimer(this);
+        connect(keep, &QTimer::timeout, this, [this] {
+            if (s_.frameGen == veyamux::FrameGenMode::Off || !hasMedia()) return;
+            const QPoint p = QCursor::pos();
+            nudgeUntil_.start();
+            QCursor::setPos(p + QPoint(p.x() > 0 ? -1 : 1, 0));
+            QCursor::setPos(p);
+        });
+        keep->start(2000);
+    }
+}
+
+bool PlayerBridge::syntheticMove() const { return nudgeUntil_.isValid() && nudgeUntil_.elapsed() < 250; }
+
+void PlayerBridge::setPointerHidden(bool hidden) {
+    if (!gamescope_ || qEnvironmentVariable("VEYAMUX_GAMESCOPE_KEEPALIVE") == "0") return;   // QML hides it itself
+    if (hidden == pointerHidden_) return;
+    pointerHidden_ = hidden;
+    if (hidden) {
+        // one pixel at the lowest alpha: nothing to see, but gamescope still has a pointer to draw
+        QImage img(1, 1, QImage::Format_ARGB32);
+        img.fill(qRgba(0, 0, 0, 1));
+        QGuiApplication::setOverrideCursor(QCursor(QPixmap::fromImage(img), 0, 0));
+    } else {
+        QGuiApplication::restoreOverrideCursor();
+    }
 }
 
 PlayerBridge::~PlayerBridge() {
     saveSettings();
     veyamux::remoteplay::setRumbleCallback({});
     // a running Remote Play task (registration, wake-up: up to ~40 s) is not waited for
-    psQuit_->store(true);
+    psQuit_->close();
     if (psWorker_.joinable()) psWorker_.detach();
     veyamux::remoteplay::stopDiscovery();
     if (liveVk_) { liveVk_->setStream(-1, nullptr); liveVk_->setRecord(-1, nullptr); }
@@ -446,9 +481,9 @@ void PlayerBridge::updateOverlay() {
                 pacingClock_.start();
             }
             if (pacingShown_ >= 0)
-                s += L("\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)",
-                       "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)")
-                         .arg(int(std::lround(pacingShown_ * 100)));
+                s += L("\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (held %2 ms)",
+                       "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (holdt %2 ms)")
+                         .arg(int(std::lround(pacingShown_ * 100))).arg(engine_.pacingHoldMs(), 0, 'f', 1);
         }
         // Remote Play: the delay from the console, as far as it can be measured (the console's own encoding cannot;
         // a PS5 / PS4 typically needs 5-10 ms for it)
@@ -1209,12 +1244,47 @@ QString PlayerBridge::captureHelp() const {
     return {};
 }
 
+// Favourite signals: up to three modes the user marked, kept in "cap/favorites" with the most recently used first.
+// They head the mode list in that order (so the first is the one used last); the rest follow in the built-in order.
+namespace {
+QString modeKey(const veyamux::CaptureMode& m) {
+    return QStringLiteral("%1:%2x%3@%4").arg(m.fourcc).arg(m.w).arg(m.h).arg(std::lround(m.fps * 100));
+}
+constexpr int kMaxFavorites = 3;
+}
+
 QVariantList PlayerBridge::captureModes(const QString& path) {
     lastModes_ = veyamux::listCaptureModes(path.toStdString());
+    const QStringList favs = QSettings().value("cap/favorites").toStringList();
+    std::vector<veyamux::CaptureMode> front;
+    for (const QString& f : favs)
+        for (auto it = lastModes_.begin(); it != lastModes_.end(); ++it)
+            if (modeKey(*it) == f) { front.push_back(*it); lastModes_.erase(it); break; }
+    const bool recommendedFirst = front.empty();
+    lastModes_.insert(lastModes_.begin(), front.begin(), front.end());
     QVariantList out;
-    for (const auto& m : lastModes_) out << QString::fromStdString(m.label);
+    for (size_t i = 0; i < lastModes_.size(); ++i) {
+        QVariantMap e;
+        e["label"] = QString::fromStdString(lastModes_[i].label);
+        e["favorite"] = i < front.size();
+        e["recommended"] = recommendedFirst && i == 0;
+        out << e;
+    }
     return out;
 }
+
+bool PlayerBridge::toggleFavoriteMode(int modeIndex) {
+    if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) return false;
+    QStringList favs = QSettings().value("cap/favorites").toStringList();
+    const QString k = modeKey(lastModes_[size_t(modeIndex)]);
+    if (favs.contains(k)) favs.removeAll(k);
+    else if (favs.size() >= kMaxFavorites) return false;   // full: the user removes one first
+    else favs.prepend(k);
+    QSettings().setValue("cap/favorites", favs);
+    return true;
+}
+
+int PlayerBridge::maxFavoriteModes() const { return kMaxFavorites; }
 
 namespace {
 // i18n/messages.json: { "<language>": { "<English text>": "<translation>" } }
@@ -1329,6 +1399,10 @@ QString PlayerBridge::lastCaptureAudio() const { return QSettings().value("cap/a
 
 bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString& audioSource) {
     if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) { setStatus(L("No capture mode selected", "Ingen capture-tilstand valgt")); return false; }
+    // a favourite that is used moves to the top of the favourites
+    QStringList favs = QSettings().value("cap/favorites").toStringList();
+    const QString k = modeKey(lastModes_[size_t(modeIndex)]);
+    if (favs.contains(k) && favs.first() != k) { favs.removeAll(k); favs.prepend(k); QSettings().setValue("cap/favorites", favs); }
     return startCapture(path, lastModes_[size_t(modeIndex)], audioSource);
 }
 
@@ -1489,14 +1563,14 @@ void PlayerBridge::installLsfg() {
         const auto r = lsfg::installV2([this, quit, last](int pc) {
             if (quit->load() || pc / 5 == last->load() / 5) return;
             last->store(pc);
-            QMetaObject::invokeMethod(this, [this, pc] {
+            quit->post(this, [this, pc] {
                 if (lsfgInstall_ != "busy") return;
                 lsfgInstallText_ = L("Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %", "Henter lsfg-vk 2 fra builds.lsfg-vk.dev… %1 %").arg(pc);
                 emit lsfgChanged();
-            }, Qt::QueuedConnection);
+            });
         });
         if (quit->load()) return;   // VeyAmux closed meanwhile
-        QMetaObject::invokeMethod(this, [this, r] {
+        quit->post(this, [this, r] {
             qInfo("Lossless Scaling: %s", qPrintable(r.message));
             lsfgInstall_ = r.ok ? "done" : "error";
             if (r.ok) {
@@ -1510,7 +1584,7 @@ void PlayerBridge::installLsfg() {
             }
             lsfg_ = lsfg::detect(QSettings().value("lsfg/folder").toString());
             emit lsfgChanged();
-        }, Qt::QueuedConnection);
+        });
     }).detach();
 }
 

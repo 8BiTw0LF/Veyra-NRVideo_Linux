@@ -108,7 +108,19 @@ bool MediaEngine::openVideoDecoder(bool tryHw, std::string& error) {
 
 bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGpu) {
     close();
-    int r = avformat_open_input(&fmt_, path.c_str(), nullptr, nullptr);
+    quit_ = false;
+    fmt_ = avformat_alloc_context();
+    if (!fmt_) { error = "Out of memory"; return false; }
+    // a stalled read (a network share, a stream) gives up when the player closes
+    fmt_->interrupt_callback.callback = [](void* self) { return static_cast<MediaEngine*>(self)->quit_.load() ? 1 : 0; };
+    fmt_->interrupt_callback.opaque = this;
+    AVDictionary* opts = nullptr;
+    const bool local = !path.empty() && path[0] == '/';
+    // a local file only reads local files (a playlist inside it cannot reach out to the network)
+    if (local) av_dict_set(&opts, "protocol_whitelist", "file", 0);
+    else av_dict_set(&opts, "rw_timeout", "15000000", 0);   // network: 15 s without data is an error
+    int r = avformat_open_input(&fmt_, path.c_str(), nullptr, &opts);
+    av_dict_free(&opts);
     if (r < 0) { error = "Could not open the file: " + avErr(r); fmt_ = nullptr; return false; }
     if ((r = avformat_find_stream_info(fmt_, nullptr)) < 0) {
         error = "Could not read stream info: " + avErr(r);
@@ -277,6 +289,11 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
 void MediaEngine::captureLoop() {
     FramePacingRepair repair;
     auto lastPaced = std::chrono::steady_clock::time_point{};
+    // How long a repaired picture is held after its even-grid time: just enough that the latest one of recent frames
+    // (decoding an MJPEG picture takes a while) is still ready in time. A fixed amount would show the late ones late
+    // (uneven again) or hold every picture longer than needed.
+    double holdMs = 0.0;
+    std::deque<double> lateness;   // ms from the grid time to the moment the picture was ready, recent frames
     std::vector<uint8_t> rgba;
     RawFrame raw;
     int idle = 0;
@@ -350,7 +367,7 @@ void MediaEngine::captureLoop() {
         if (toGpu) {
             if (pacingRepair_.load() && skipRepeats_.load() && cb_.onLiveFrame) {
                 // even out a locked game's uneven showing: hand the picture to the pacer thread with its due time
-                if (pacingReset_.exchange(false)) repair.reset();
+                if (pacingReset_.exchange(false)) { repair.reset(); lateness.clear(); holdMs = 0.0; }
                 const double fps = cap_->fps() > 1.0 ? cap_->fps() : 60.0;
                 const int64_t transport = int64_t(1e7 / fps);   // one capture refresh, 100 ns
                 const auto captured = raw.captured.time_since_epoch().count() ? raw.captured : clk::now();
@@ -360,10 +377,20 @@ void MediaEngine::captureLoop() {
                 lastPaced = clk::now();
                 ++pacedTotal_;
                 if (res.repaired) ++pacedRepaired_;
-                // + one refresh: the grid line may lie up to one refresh before the arrival
-                const auto due = captured + std::chrono::nanoseconds((res.shift + transport) * 100);
+                // the picture's time on the even grid (its own arrival when there is nothing to even out), then held
+                // by holdMs so that every recent picture was ready by then: an even rhythm, and no more delay than needed
+                const auto grid = captured + std::chrono::nanoseconds(res.shift * 100);
+                lateness.push_back(std::chrono::duration<double, std::milli>(clk::now() - grid).count());
+                while (lateness.size() > 90) lateness.pop_front();   // ~1.5-3 s
+                const double need = *std::max_element(lateness.begin(), lateness.end()) + 1.0;   // + 1 ms margin
+                // up at once (a late picture would break the rhythm), down slowly (no visible step)
+                holdMs = need > holdMs ? need : std::max(need, holdMs - 0.25);
+                holdMs = std::clamp(holdMs, 0.0, 2.0 * double(transport) / 1e4);
+                pacingHold_ = holdMs;
+                const auto due = grid + std::chrono::microseconds(int64_t(holdMs * 1000.0));
                 std::lock_guard l(pace_m_);
                 while (paced_.size() >= 2) paced_.pop_front();   // never pile up: latency first
+                raw.due = due;
                 paced_.push_back({due, std::move(raw)});
                 raw = RawFrame{};
                 if (!paceSpare_.empty()) { raw = std::move(paceSpare_.back()); paceSpare_.pop_back(); }
@@ -371,6 +398,7 @@ void MediaEngine::captureLoop() {
                 continue;
             }
             pacingReset_ = true;
+            raw.due = {};
             if (cb_.onLiveFrame) cb_.onLiveFrame(raw);   // raw now holds a used buffer to fill next time
             else raw = RawFrame{};
             continue;

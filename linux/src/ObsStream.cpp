@@ -5,11 +5,13 @@
 #include <QMetaObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <algorithm>
 #include <chrono>
 
 namespace {
 constexpr qint64 kMaxBacklog = 8 * 1024 * 1024;   // a viewer this far behind skips frames
+constexpr size_t kMaxViewers = 8;
 }
 
 ObsStream::ObsStream(QObject* parent) : QObject(parent) {
@@ -39,12 +41,16 @@ bool ObsStream::start(quint16 port, QString* error) {
 }
 
 void ObsStream::stop() {
-    for (auto& s : streams_) if (s) s->abort();
-    streams_.clear();
+    // abort() emits disconnected() at once, and that handler edits streams_: take the list out first
+    std::vector<QPointer<QTcpSocket>> streams;
+    streams.swap(streams_);
+    for (auto& s : streams) if (s) { s->disconnect(this); s->abort(); }
     if (server_) { server_->close(); server_->deleteLater(); server_ = nullptr; }
+    lastJpeg_.clear();   // a picture from before the stop is never served again
     if (viewers_.exchange(0) != 0) emit viewersChanged();
     std::lock_guard l(m_);
     jobs_.clear();
+    firstSeq_ = nextSeq_;   // frames still being encoded are dropped when they come back
 }
 
 bool ObsStream::running() const { return server_ && server_->isListening(); }
@@ -92,7 +98,7 @@ void ObsStream::encoderLoop() {
 }
 
 void ObsStream::broadcast(quint64 seq, QByteArray jpeg) {
-    if (seq <= lastSent_) return;   // the other encoder already sent a newer frame
+    if (seq <= lastSent_ || seq < firstSeq_ || !running()) return;   // a newer frame went out, or it is from before a stop
     lastSent_ = seq;
     lastJpeg_ = jpeg;
     const QByteArray head = "--veyamuxframe\r\nContent-Type: image/jpeg\r\nContent-Length: " + QByteArray::number(jpeg.size()) + "\r\n\r\n";
@@ -109,6 +115,8 @@ void ObsStream::onNewConnection() {
     while (QTcpSocket* s = server_->nextPendingConnection()) {
         connect(s, &QTcpSocket::readyRead, this, [this, s] { onReadyRead(s); });
         connect(s, &QTcpSocket::disconnected, s, &QObject::deleteLater);
+        // a connection that never sends its request is closed after a while
+        QTimer::singleShot(10000, s, [s] { if (!s->property("served").toBool()) s->abort(); });
     }
 }
 
@@ -123,22 +131,40 @@ void ObsStream::onReadyRead(QTcpSocket* s) {
     s->setProperty("served", true);
     const QList<QByteArray> line = req.left(req.indexOf("\r\n")).split(' ');
     const QByteArray path = line.size() >= 2 ? line[1].split('?').first() : QByteArray("/");
-    auto reply = [s](const QByteArray& status, const QByteArray& type, const QByteArray& body) {
+    // Only /ping may be read by other web pages (the saved browser file checks it). The pictures carry no CORS header,
+    // so a web page can show them but never read their pixels.
+    auto reply = [s](const QByteArray& status, const QByteArray& type, const QByteArray& body, bool shared = false) {
         s->write("HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\nContent-Length: " + QByteArray::number(body.size()) +
-                 "\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n" + body);
+                 "\r\nCache-Control: no-store\r\n" + (shared ? "Access-Control-Allow-Origin: *\r\n" : "") +
+                 "X-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n" + body);
         s->disconnectFromHost();
     };
     if (line.value(0) != "GET") { reply("405 Method Not Allowed", "text/plain", "GET only\n"); return; }
+    // A web site that points its own name at 127.0.0.1 (DNS rebinding) would be "same origin" and could read the
+    // picture: only the names this server really has are answered.
+    {
+        QByteArray host;
+        for (const QByteArray& h : req.left(req.indexOf("\r\n\r\n")).split('\n'))
+            if (h.toLower().startsWith("host:")) host = h.mid(5).trimmed().toLower();
+        const QByteArray port = QByteArray::number(port_);
+        if (!host.isEmpty() && host != "127.0.0.1:" + port && host != "localhost:" + port && host != "127.0.0.1" &&
+            host != "localhost" && host != "[::1]:" + port) {
+            reply("403 Forbidden", "text/plain", "forbidden\n");
+            return;
+        }
+    }
     if (path == "/" || path == "/index.html") { reply("200 OK", "text/html; charset=utf-8", pageHtml("stream.mjpg", "VeyAmux")); return; }
-    if (path == "/ping") { reply("200 OK", "text/plain", "ok\n"); return; }
+    if (path == "/ping") { reply("200 OK", "text/plain", "ok\n", true); return; }
     if (path == "/snapshot.jpg") {
         if (lastJpeg_.isEmpty()) reply("503 Service Unavailable", "text/plain", "no picture yet\n");
         else reply("200 OK", "image/jpeg", lastJpeg_);
         return;
     }
     if (path == "/stream.mjpg") {
+        streams_.erase(std::remove_if(streams_.begin(), streams_.end(), [](const QPointer<QTcpSocket>& p) { return p.isNull(); }), streams_.end());
+        if (streams_.size() >= kMaxViewers) { reply("503 Service Unavailable", "text/plain", "too many viewers\n"); return; }
         s->write("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=veyamuxframe\r\nCache-Control: no-store\r\n"
-                 "Access-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n");
+                 "X-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n");
         s->setSocketOption(QAbstractSocket::LowDelayOption, 1);
         streams_.push_back(s);
         if (!lastJpeg_.isEmpty()) {   // show the current picture right away

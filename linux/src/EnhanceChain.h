@@ -116,7 +116,8 @@ public:
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }
-    void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; }
+    // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
+    void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; fgReset_ = true; hudReset_ = true; }
     static void outputSize(int w, int h, const EnhanceSettings& s, int& ow, int& oh);
 
     // OBS stream (live path): when maxHeight >= 0, every displayed image is downscaled to fit
@@ -186,7 +187,7 @@ private:
     uint32_t pqFrame_ = 0;
     void retire(ImageRes& img);
     void collectRetired();
-    bool ensureLive(int w, int h, int ow, int oh, std::string& error, int dw = 0, int dh = 0);
+    bool ensureLive(int w, int h, int ow, int oh, std::string& error, int dw = 0, int dh = 0, size_t inputBytes = 0);
     bool loadKernel(const std::string& name, std::string& error);
     bool ensureResources(int w, int h, int ow, int oh, std::string& error, int dw = 0, int dh = 0);
     int dw_ = 0, dh_ = 0;   // out8_'s size: the window fit (LxFit) or ow x oh

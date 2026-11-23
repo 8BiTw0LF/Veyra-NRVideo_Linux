@@ -189,6 +189,11 @@ std::vector<CaptureMode> listCaptureModes(const std::string& path) {
         }
     }
     ::close(fd);
+    orderCaptureModes(modes);
+    return modes;
+}
+
+void orderCaptureModes(std::vector<CaptureMode>& modes) {
     std::stable_sort(modes.begin(), modes.end(), [](const CaptureMode& a, const CaptureMode& b) {
         const bool ah = a.fps >= 50, bh = b.fps >= 50;
         if (ah != bh) return ah;
@@ -200,7 +205,55 @@ std::vector<CaptureMode> listCaptureModes(const std::string& path) {
         if (ap != bp) return bp;
         return !compressed(a.fourcc) && compressed(b.fourcc);
     });
-    return modes;
+    // First (the default, marked ★): the largest picture the card sends uncompressed, at its highest rate (on a
+    // 4K card typically 4K NV12 at 30 fps: sharpest, no decoding, least delay). Right below it: the same size at a
+    // higher rate, compressed if need be (4K MJPEG at 60 fps), for 60 fps games.
+    auto pixels = [](const CaptureMode& m) { return long(m.w) * m.h; };
+    auto raw = [](const CaptureMode& m) { return !compressed(m.fourcc) && m.fourcc != V4L2_PIX_FMT_P010; };
+    int first = -1;
+    for (int i = 0; i < int(modes.size()); ++i) {
+        if (!raw(modes[size_t(i)])) continue;
+        const auto& m = modes[size_t(i)];
+        if (first < 0 || pixels(m) > pixels(modes[size_t(first)]) ||
+            (pixels(m) == pixels(modes[size_t(first)]) && m.fps > modes[size_t(first)].fps + 0.5) ||
+            // same size and rate: NV12 (12 bits a pixel) before YUYV/UYVY (16): less USB and less to upload
+            (pixels(m) == pixels(modes[size_t(first)]) && std::abs(m.fps - modes[size_t(first)].fps) <= 0.5 &&
+             m.fourcc == V4L2_PIX_FMT_NV12 && modes[size_t(first)].fourcc != V4L2_PIX_FMT_NV12)) first = i;
+    }
+    if (first >= 0) {
+        const CaptureMode top = modes[size_t(first)];
+        modes.erase(modes.begin() + first);
+        int second = -1;
+        for (int i = 0; i < int(modes.size()); ++i) {
+            const auto& m = modes[size_t(i)];
+            if (m.w != top.w || m.h != top.h || m.fps <= top.fps + 0.5 || m.fourcc == V4L2_PIX_FMT_P010) continue;
+            if (second < 0 || m.fps > modes[size_t(second)].fps + 0.5) second = i;   // the sort put the best format first
+        }
+        if (second >= 0) {
+            const CaptureMode next = modes[size_t(second)];
+            modes.erase(modes.begin() + second);
+            modes.insert(modes.begin(), next);
+        }
+        // between them: 1080p uncompressed at the same rate (a quarter of the USB traffic, so much less delay; VeyAmux
+        // can enlarge it again)
+        if (top.h > 1080) {
+            int mid = -1;
+            for (int i = 0; i < int(modes.size()); ++i) {
+                const auto& m = modes[size_t(i)];
+                if (m.h != 1080 || !raw(m)) continue;
+                const auto score = [&](const CaptureMode& x) {   // same rate as the top first, then NV12
+                    return (std::abs(x.fps - top.fps) <= 0.5 ? 2 : 0) + (x.fourcc == V4L2_PIX_FMT_NV12 ? 1 : 0);
+                };
+                if (mid < 0 || score(m) > score(modes[size_t(mid)])) mid = i;
+            }
+            if (mid >= 0) {
+                const CaptureMode m = modes[size_t(mid)];
+                modes.erase(modes.begin() + mid);
+                modes.insert(modes.begin(), m);   // ahead of the faster variant
+            }
+        }
+        modes.insert(modes.begin(), top);
+    }
 }
 
 // ------------------------------------------------------------------ FrameConverter
@@ -239,7 +292,13 @@ bool FrameConverter::convert(const uint8_t* data, size_t size, std::vector<uint8
     int range = fullRange_ ? 1 : 0;
     int w = w_, h = h_;
     if (mjpeg_) {
-        pkt_->data = const_cast<uint8_t*>(data);
+        // FFmpeg may read up to AV_INPUT_BUFFER_PADDING_SIZE bytes past a packet; the driver's buffer has no such
+        // padding, so the JPEG is copied into one that does
+        if (size == 0 || size > size_t(INT32_MAX) - AV_INPUT_BUFFER_PADDING_SIZE) { error = "Corrupt MJPEG frame"; return false; }
+        packet_.resize(size + AV_INPUT_BUFFER_PADDING_SIZE);
+        std::memcpy(packet_.data(), data, size);
+        std::memset(packet_.data() + size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+        pkt_->data = packet_.data();
         pkt_->size = int(size);
         if (avcodec_send_packet(mjpeg_, pkt_) < 0 || avcodec_receive_frame(mjpeg_, frame_) < 0) {
             error = "Corrupt MJPEG frame";
@@ -251,6 +310,10 @@ bool FrameConverter::convert(const uint8_t* data, size_t size, std::vector<uint8
     } else {
         fmt = pixFmtFor(fourcc_);
         const int bpl = stride_;
+        // every plane must lie inside what the card delivered
+        size_t need = size_t(bpl) * h;
+        if (fourcc_ == V4L2_PIX_FMT_NV12 || fourcc_ == V4L2_PIX_FMT_P010 || fourcc_ == V4L2_PIX_FMT_YUV420) need = need * 3 / 2;
+        if (bpl <= 0 || w <= 0 || h <= 0 || size < need) { error = "Incomplete frame from the capture card"; return false; }
         switch (fourcc_) {
         case V4L2_PIX_FMT_NV12:
         case V4L2_PIX_FMT_P010:
@@ -348,6 +411,8 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     fourcc_ = mode.fourcc;
     rawStride_ = int(fmt.fmt.pix.bytesperline);
     if (rawStride_ <= 0) rawStride_ = fourcc_ == V4L2_PIX_FMT_NV12 ? w_ : w_ * 2;   // NV12 1, P010/YUYV/UYVY 2 bytes per luma
+    // YUV from a card is limited range (16-235) unless the driver says otherwise
+    fullRange_ = fmt.fmt.pix.quantization == V4L2_QUANTIZATION_FULL_RANGE;
 
     v4l2_streamparm parm{};
     parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -356,11 +421,12 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
         fps_ = double(parm.parm.capture.timeperframe.denominator) / parm.parm.capture.timeperframe.numerator;
     else fps_ = mode.fps;
 
-    if (!conv_.init(mode.fourcc, w_, h_, int(fmt.fmt.pix.bytesperline ? fmt.fmt.pix.bytesperline : w_ * 2), error)) { close(); return false; }
+    if (!conv_.init(mode.fourcc, w_, h_, rawStride_, error)) { close(); return false; }
+    conv_.setFullRange(fullRange_);
 
     v4l2_requestbuffers req{};
     // 6: the renderer may hold two (the newest and the one on screen) without starving the card
-    req.count = 6; req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; req.memory = V4L2_MEMORY_MMAP;
+    req.count = 8; req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; req.memory = V4L2_MEMORY_MMAP;
     if (xioctl(fd_, VIDIOC_REQBUFS, &req) != 0 || req.count < 2) { error = "The device does not support memory-mapped streaming"; close(); return false; }
     bufs_.resize(req.count);
     for (uint32_t i = 0; i < req.count; ++i) {
@@ -515,6 +581,7 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
     out.hold.reset();   // a driver buffer this (recycled) frame still held goes back to the card
     out.ext = nullptr;
     out.extSize = 0;
+    out.fullRange = false;
     if (ps_) {
         out.repeat = false;
         const auto r = ps_->readLatest(out, timeoutMs, error);
@@ -564,19 +631,36 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
                 // no copy here: the renderer copies straight from the driver's buffer into the GPU upload buffer
                 // (only with enough buffers: the renderer may hold two, the card must keep at least three)
                 static const bool forceCopy = std::getenv("VEYAMUX_CAPTURE_COPY") != nullptr;   // the old way, to compare
-                if (bufs_.size() < 5 || !map_ || forceCopy) {
+                // The renderer may hold up to five (two waiting for their paced time, the mailbox, the picture on
+                // screen, the frame being read); the card must always keep at least three to capture into.
+                int held = 0;
+                if (map_) { std::lock_guard l(map_->m); held = map_->held; }
+                if (!map_ || forceCopy || held + 1 > int(bufs_.size()) - 3) {
                     out.data.assign(src, src + need);
                 } else {
                     out.ext = src;
                     out.extSize = need;
-                    auto map = map_;
-                    v4l2_buffer keep = b;
-                    out.hold = std::shared_ptr<void>(nullptr, [map, keep](void*) mutable {
-                        std::lock_guard l(map->m);
-                        if (map->live) xioctl(map->fd, VIDIOC_QBUF, &keep);
-                    });
+                    // One owner of the buffer: it goes back to the card exactly once, when the last frame holding it
+                    // lets go (not here, while the renderer still copies from it).
+                    struct Lease {
+                        std::shared_ptr<Mapping> map;
+                        v4l2_buffer buf;
+                        Lease(std::shared_ptr<Mapping> m, const v4l2_buffer& b) : map(std::move(m)), buf(b) {
+                            std::lock_guard l(map->m);
+                            ++map->held;
+                        }
+                        Lease(const Lease&) = delete;
+                        Lease& operator=(const Lease&) = delete;
+                        ~Lease() {
+                            std::lock_guard l(map->m);
+                            --map->held;
+                            if (map->live) xioctl(map->fd, VIDIOC_QBUF, &buf);
+                        }
+                    };
+                    out.hold = std::make_shared<Lease>(map_, b);
                 }
                 out.w = w_; out.h = h_; out.stride = rawStride_;
+                out.fullRange = fullRange_;
                 // luma bytes for repeat detection: NV12 every byte, YUYV every 2nd, UYVY every 2nd from 1, P010 the high bytes
                 const int step = fourcc_ == V4L2_PIX_FMT_NV12 ? 1 : 2, off = (fourcc_ == V4L2_PIX_FMT_UYVY || p010) ? 1 : 0;
                 static const bool sparse = std::getenv("VEYAMUX_DEDUP_SPARSE") != nullptr;
@@ -595,7 +679,7 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
             }
         }
     }
-    if (!out.hold) xioctl(fd_, VIDIOC_QBUF, &b);   // a held buffer is queued again when its frame is dropped
+    if (!out.hold) xioctl(fd_, VIDIOC_QBUF, &b);   // a leased buffer is queued again when its last frame lets go
     return res;
 }
 

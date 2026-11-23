@@ -86,6 +86,7 @@ private:
     void drainAudio();
     void deliver(AVPacket* p, bool video);
     void trimRing();
+    void finishRecording();
     void message(const std::string& m, bool error) { if (onMessage) onMessage(m, error); }
     void updateParams();
     bool toNv12(Job& j);

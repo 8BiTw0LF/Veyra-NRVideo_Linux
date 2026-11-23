@@ -25,6 +25,18 @@
 
 ---
 
+## New in 1.8
+
+- **Smoother frame pacing, less delay:** *Even out frame pacing* holds each picture only as long as it has to.
+  Pictures from MJPEG at 60 fps now come evenly. A signal that is already even gets almost no extra delay, and F3
+  shows the hold in ms. A new picture is also drawn at once, without waiting for the compositor.
+- **Capture list:** the best modes come first (on a 4K card: 4K NV12 30, 1080p NV12 30, 4K MJPEG 60). Mark up to
+  **three favourite signals** with ☆; the one used last is chosen automatically.
+- **Steam's gamescope session (SteamOS, Big Picture):** frame generation no longer stops a few seconds after the mouse
+  stops moving.
+- **Fixes from a code review:** capture buffers, recording while the window is resized, resize stalls, the OBS
+  source, private settings, checked updates and build tools. See [what was fixed and why](docs/REVIEW-FIXES.md).
+
 ## New in 1.7
 
 - **PlayStation Remote Play by IP address:** if the console is not found, type its IP address. VeyAmux asks it
@@ -86,7 +98,7 @@ Developed and tested on **Bazzite** (KDE Plasma) with an **AMD RX 9070 XT** and 
 </p>
 
 <p align="center">
-  <img src="docs/images/menu-tabs.jpg" width="900" alt="Three tabs of VeyAmux's menu: Frame generation (Lossless Scaling and AMD FSR 3.1.6, even out frame pacing), Record (instant replay, recording, live stream, comparison clips) and System (Check my setup with two findings, updates, performance report)">
+  <img src="docs/images/menu-tabs.jpg" width="900" alt="Three tabs of VeyAmux's menu: Frame generation (Lossless Scaling and AMD FSR 3.1.6, even out frame pacing), Record (instant replay, recording, live stream, comparison clips) and System (Check my setup, updates, performance report)">
   <br><sub>The Frame generation, Record and System tabs. The findings under <i>Check my setup</i> are from a test PC without a graphics card.</sub>
 </p>
 
@@ -285,10 +297,14 @@ Measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (*
 - **under 1 ms of CPU work** per frame,
 - **about 7 ms of GPU work** per frame.
 
-The menu shows *Delay in VeyAmux*, the time from the capture driver's timestamp until the picture is finished. In that
-setup it reads about 29–32 ms, and most of it is the picture waiting for the next display refresh, not processing.
-Lighter settings lower it. The capture card, USB, Lossless Scaling and the display add their own latency on top, as
-with any capture setup.
+The menu and F3 show the delay, the time from the capture driver's timestamp until the picture is finished. Most of
+it is not processing:
+- **USB:** a 4K NV12 picture is about 12 MB. At 30 fps it fills the USB link, so each picture takes about 30 ms to
+  arrive, and that counts in the delay. **1080p NV12** takes about 8 ms, and VeyAmux can upscale it again.
+  **4K MJPEG** arrives quickly but has to be decoded, and it is a little softer.
+- **Even out frame pacing** adds only what the rhythm needs. F3 shows the hold in ms.
+
+The capture card, Lossless Scaling and the display add their own latency on top, as with any capture setup.
 
 ## Installation
 
@@ -359,6 +375,8 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 | Frame generation turned off after a crash | Press *Try again* in the menu. To start without lsfg-vk: `VEYAMUX_LSFG=0 ./VeyAmux-x86_64.AppImage` |
 | Motion does not look smoother | The display's refresh rate must match (see step 4). Log: `~/.config/VeyAmux/lsfg-vk.log` |
 | Lossless Scaling stutters or the picture seems to come and go | Turn VRR off (KDE: *Display & Monitor → Adaptive sync: Never*); VeyAmux warns when it is on. With a game locked to 30 fps, also turn on *Even out frame pacing*. |
+| Frame generation stops a few seconds after the mouse stops (Steam Big Picture / SteamOS) | Fixed in 1.8: VeyAmux keeps the pointer alive in gamescope while frame generation runs. To turn it off: `VEYAMUX_GAMESCOPE_KEEPALIVE=0`. |
+| The delay is high with 4K NV12 | Mostly USB transfer, see [Latency](#latency). Choose 1080p NV12 for the least delay. |
 | "Device or resource busy" | Another program (or a hung VeyAmux) uses the capture card. VeyAmux retries for 5 seconds and shows which program holds it. |
 | No 4K @ 60 HDR mode | Many cards only send HDR (P010) at 4K30 or 1440p60 over USB. Use 4K60 NV12 (SDR), 1440p60 P010 with upscaling, or 4K30 P010 with frame generation. |
 | HDR games look washed out | Choose a **P010 (HDR)** mode under Capture (C), and set *HDR capture: source peak brightness* to the game's HDR calibration. |

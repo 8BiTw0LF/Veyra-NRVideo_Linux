@@ -34,7 +34,17 @@ Item {
         for (var d = 0; d < devices.length; ++d) if (devices[d].path === last) devIdx = d
         pickDevice(devIdx)
     }
+    property bool favFull: false    // a fourth favourite was refused
+    function toggleFavorite(i) {
+        favFull = !player.toggleFavoriteMode(i)
+        if (favFull) return
+        // the list order changes: keep the chosen mode chosen
+        const chosen = modes[modeIdx].label
+        modes = player.captureModes(devices[devIdx].path)
+        for (var k = 0; k < modes.length; ++k) if (modes[k].label === chosen) modeIdx = k
+    }
     function pickDevice(i) {
+        favFull = false
         devIdx = i
         var share = devices.length > 0 && devices[i].path === "screencast"
         modes = devices.length > 0 && !share ? player.captureModes(devices[i].path) : []
@@ -60,11 +70,12 @@ Item {
         id: row
         property string text
         property bool sel: false
+        property int rightPad: 12
         signal clicked()
         width: parent ? parent.width : 100; height: 34; radius: 8 * Theme.round
         color: sel ? Theme.accentSoft : (ma.containsMouse ? Theme.border : Theme.surface)
         border.color: sel ? Theme.accent : "transparent"
-        Text { font.family: Theme.font; anchors { verticalCenter: parent.verticalCenter; left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12 }
+        Text { font.family: Theme.font; anchors { verticalCenter: parent.verticalCenter; left: parent.left; right: parent.right; leftMargin: 12; rightMargin: row.rightPad }
             text: row.text; color: row.sel ? Theme.heading : Theme.text; font.pixelSize: 13; elide: Text.ElideRight }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: row.clicked() }
     }
@@ -98,8 +109,30 @@ Item {
                 width: parent.width; height: Math.min(170, contentHeight); contentHeight: modeCol.height; clip: true
                 Column { id: modeCol; width: parent.width; spacing: 4
                     Repeater { model: dlg.modes
-                        Row_ { text: modelData + (index === 0 ? "   ★" : ""); sel: index === dlg.modeIdx; onClicked: dlg.modeIdx = index } } }
+                        Row_ {
+                            id: modeRow
+                            rightPad: 40
+                            text: modelData.label + (modelData.recommended ? "   · " + tr("recommended") : "")
+                            sel: index === dlg.modeIdx; onClicked: dlg.modeIdx = index
+                            // ★ marks a favourite signal (up to three, shown first, the last used on top)
+                            Text {
+                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                z: 2
+                                text: modelData.favorite ? "★" : "☆"
+                                color: modelData.favorite ? Theme.accent : (favMa.containsMouse ? Theme.text : Theme.muted)
+                                font.pixelSize: 18
+                                MouseArea {
+                                    id: favMa
+                                    anchors { fill: parent; margins: -8 }
+                                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: dlg.toggleFavorite(index)
+                                }
+                            }
+                        } } }
             }
+            Text { font.family: Theme.font; visible: dlg.modes.length > 0; width: parent.width; wrapMode: Text.Wrap
+                text: dlg.favFull ? tr("favoritesFull").arg(player.maxFavoriteModes()) : tr("favoritesHint").arg(player.maxFavoriteModes())
+                color: dlg.favFull ? Theme.warn : Theme.muted; font.pixelSize: 11; lineHeight: 1.15 }
 
             // a compressed mode where the card has an uncompressed one (after PushFPS 4.1): said, never switched for you
             Rectangle {

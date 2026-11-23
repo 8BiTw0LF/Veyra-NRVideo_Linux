@@ -36,6 +36,8 @@ struct CaptureMode {
 std::vector<CaptureDevice> listCaptureDevices();
 // Sorted best-first: >=50 fps first, then resolution, then fps, uncompressed before MJPEG.
 std::vector<CaptureMode> listCaptureModes(const std::string& path);
+// the order the list shows (the first is the default): see CaptureSource.cpp
+void orderCaptureModes(std::vector<CaptureMode>& modes);
 std::string fourccName(uint32_t fourcc);
 
 // Converts one captured buffer to RGBA8 (tightly packed).
@@ -53,6 +55,7 @@ private:
     AVCodecContext* mjpeg_ = nullptr;
     AVFrame* frame_ = nullptr;
     AVPacket* pkt_ = nullptr;
+    std::vector<uint8_t> packet_;   // the JPEG with the zero padding FFmpeg's decoders may read past the end
 };
 
 // A captured frame ready for the GPU. YUYV/UYVY/NV12/P010 are passed through untouched (converted on the GPU);
@@ -63,6 +66,7 @@ struct RawFrame {
     int w = 0, h = 0, stride = 0;     // stride in bytes
     bool repeat = false;              // same picture as the previous delivered frame (game slower than the signal)
     bool reset = false;               // a jump in the timeline (video file seek): temporal passes start over
+    bool fullRange = false;           // YUV levels 0-255 (the card says so) instead of the usual 16-235
     // Capture cards (V4L2, raw formats): the picture is not copied out of the driver's buffer. `ext` points into it and
     // `hold` keeps it from the driver until the frame is dropped (then it is queued again), so the renderer copies it
     // once, straight into the GPU's upload buffer. `data` is unused then.
@@ -72,6 +76,8 @@ struct RawFrame {
     const uint8_t* bytes() const { return ext ? ext : data.data(); }
     size_t size() const { return ext ? extSize : data.size(); }
     std::chrono::steady_clock::time_point captured{};   // when the driver finished receiving it (V4L2 timestamp)
+    std::chrono::steady_clock::time_point due{};        // paced frames: when the pacer meant to hand it on (timing log)
+    std::chrono::steady_clock::time_point arrived{};    // when it reached the renderer (timing log)
 };
 
 class CaptureSource {
@@ -111,6 +117,7 @@ private:
     int psConvW_ = 0, psConvH_ = 0, psConvFmt_ = -1;
     uint32_t fourcc_ = 0;
     int rawStride_ = 0;
+    bool fullRange_ = false;          // the card reports full-range YUV (V4L2 quantization)
     std::vector<Buf> bufs_;
     // the mappings and the device, shared with the frames that still hold a buffer (RawFrame::hold): unmapped when
     // the last one is gone; a buffer handed back after close() is not queued again
@@ -118,6 +125,7 @@ private:
         std::mutex m;
         int fd = -1;
         bool live = true;
+        int held = 0;                 // buffers handed out to frames (RawFrame::hold) and not yet queued again
         std::vector<Buf> bufs;
         ~Mapping();
     };

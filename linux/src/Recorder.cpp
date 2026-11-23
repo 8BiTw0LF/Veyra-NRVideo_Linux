@@ -36,6 +36,7 @@ struct Recorder::Mux {
     int vi = -1, ai = -1;
     int64_t offV = -1;   // in kVideoTb
     bool ok = false;
+    std::string failure;   // the first write error (a full disk, a lost connection); empty while all is well
 
     bool flv = false;
     bool open(const std::string& path, const Params& par, bool fragmented, std::string& err, const char* format = "mp4") {
@@ -87,15 +88,25 @@ struct Recorder::Mux {
         av_packet_rescale_ts(q, tb, oc->streams[q->stream_index]->time_base);
         const int e = av_interleaved_write_frame(oc, q);
         av_packet_free(&q);
+        if (e < 0 && failure.empty()) failure = averr(e);
         return e >= 0;
     }
-    void close() {
-        if (!oc) return;
-        if (ok) av_write_trailer(oc);
-        if (oc->pb) avio_closep(&oc->pb);
+    // False (with the reason in `failure`) when the file could not be finished: then it is not a good recording.
+    bool close() {
+        if (!oc) return failure.empty();
+        if (ok) {
+            const int e = av_write_trailer(oc);
+            if (e < 0 && failure.empty()) failure = averr(e);
+        }
+        if (oc->pb) {
+            if (oc->pb->error < 0 && failure.empty()) failure = averr(oc->pb->error);
+            const int e = avio_closep(&oc->pb);
+            if (e < 0 && failure.empty()) failure = averr(e);
+        }
         avformat_free_context(oc);
         oc = nullptr;
         ok = false;
+        return failure.empty();
     }
     ~Mux() { close(); }
 };
@@ -271,11 +282,7 @@ void Recorder::worker() {
             if (!queue_.empty()) { j = std::move(queue_.front()); queue_.pop_front(); have = true; }
             if (quit_ && queue_.empty() && !have) stop = true;
         }
-        if (stop && rec_) {
-            rec_->close();
-            rec_.reset();
-            message("recording-saved", false);
-        }
+        if (stop && rec_) finishRecording();
         bool sStart = false, sStop = false;
         {
             std::lock_guard l(qm_);
@@ -351,7 +358,7 @@ void Recorder::worker() {
             if (queue_.empty()) closeEncoders();
         }
     }
-    if (rec_) { rec_->close(); rec_.reset(); }
+    if (rec_) { rec_->close(); rec_.reset(); }   // shutting down: nobody to tell
     closeEncoders();
     if (sws_) sws_freeContext(sws_);
 }
@@ -491,7 +498,7 @@ void Recorder::updateParams() {
 
 void Recorder::closeEncoders() {
     if (venc_) { avcodec_send_frame(venc_, nullptr); drainVideo(); }
-    if (rec_) { rec_->close(); rec_.reset(); recording_ = false; message("recording-saved", false); }
+    if (rec_) finishRecording();
     avcodec_free_context(&venc_);
     avcodec_free_context(&aenc_);
     av_buffer_unref(&hwFrames_);
@@ -503,10 +510,20 @@ void Recorder::closeEncoders() {
     aSamples_ = -1;
 }
 
+// Ends the recording file; "saved" only when every write and the file's ending went through.
+void Recorder::finishRecording() {
+    if (!rec_) return;
+    const bool ok = rec_->close();
+    const std::string why = rec_->failure;
+    rec_.reset();
+    recording_ = false;
+    message(ok ? std::string("recording-saved") : "The recording could not be saved completely: " + why, !ok);
+}
+
 void Recorder::encodeVideo(Job& j) {
     if (venc_ && (j.w != vw_ || j.h != vh_)) {
         // The picture size changed: a recording cannot continue in the same file, the replay restarts.
-        if (rec_) { rec_->close(); rec_.reset(); recording_ = false; message("recording-saved", false); }
+        if (rec_) finishRecording();
         if (stream_) { stream_.reset(); streaming_ = false; wantH264_ = false; message("Stream stopped: the picture size changed", true); }
         closeVideoEncoder();
     }
@@ -588,7 +605,7 @@ void Recorder::drainAudio() {
 
 void Recorder::deliver(AVPacket* p, bool video) {
     const bool key = (p->flags & AV_PKT_FLAG_KEY) != 0;
-    if (rec_) rec_->write(p, video, key);
+    if (rec_ && !rec_->write(p, video, key)) finishRecording();   // the disk is full or gone: stop and say so
     if (stream_ && !stream_->failed.load()) stream_->push(p, video);
     if (replayOn_.load()) {
         Pkt k;
@@ -650,10 +667,11 @@ bool Recorder::saveReplay(const std::string& path) {
         std::string err;
         bool ok = m.open(path, *par, false, err);
         for (auto& k : copy) {
-            if (ok) m.write(k.p, k.video, k.key);
+            if (ok && !m.write(k.p, k.video, k.key)) ok = false;
             av_packet_free(&k.p);
         }
-        m.close();
+        if (!m.close() && err.empty()) err = m.failure;
+        if (!m.failure.empty()) { ok = false; if (err.empty()) err = m.failure; }
         message(ok ? "replay-saved:" + path : "Could not save the replay: " + err, !ok);
     });
     return true;

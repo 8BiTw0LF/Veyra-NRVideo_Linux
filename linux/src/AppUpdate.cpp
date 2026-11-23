@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QUrl>
 
 #include <curl/curl.h>
 #include <cstdio>
@@ -79,7 +80,16 @@ bool get(const QString& url, Sink& sink, QString& error, bool api) {
                            "/etc/ssl/ca-bundle.pem", "/etc/ssl/cert.pem"})
         if (access(ca, R_OK) == 0) { curl_easy_setopt(c, CURLOPT_CAINFO, ca); break; }
     const CURLcode rc = curl_easy_perform(c);
+    // only GitHub may answer (the release files redirect to GitHub's own file servers)
+    char* where = nullptr;
+    curl_easy_getinfo(c, CURLINFO_EFFECTIVE_URL, &where);
+    const QString host = QUrl(QString::fromUtf8(where ? where : "")).host().toLower();
+    const bool github = host == "github.com" || host == "api.github.com" || host.endsWith(".githubusercontent.com");
     curl_easy_cleanup(c);
+    if (rc == CURLE_OK && !github) {
+        error = "the download came from an unexpected server (" + host + ")";
+        return false;
+    }
     curl_slist_free_all(headers);
     if (rc != CURLE_OK) {
         error = sink.bytes > sink.max ? QStringLiteral("the download is larger than expected")
@@ -182,6 +192,18 @@ bool install(const Release& r, const std::function<void(int)>& progress, QString
     const bool match = !r.sha256.isEmpty() ? fileHash(part, QCryptographicHash::Sha256) == r.sha256
                                            : fileHash(part, QCryptographicHash::Sha1) == sha1;
     if (!match) { QFile::remove(part); message = "The download does not match the release's checksum, so it was not installed"; return false; }
+    // it must be the size GitHub lists and a real AppImage (an ELF file with the type-2 AppImage mark)
+    {
+        QFile chk(part);
+        QByteArray head;
+        if (chk.open(QIODevice::ReadOnly)) head = chk.read(16);
+        const bool appImage = head.size() == 16 && head.startsWith("\x7f" "ELF") && head.mid(8, 3) == QByteArray("AI\x02", 3);
+        if (!appImage || (r.size > 0 && chk.size() != r.size)) {
+            QFile::remove(part);
+            message = "The download is not a complete VeyAmux AppImage, so it was not installed";
+            return false;
+        }
+    }
     QFile::setPermissions(part, QFile::permissions(target) | QFileDevice::ExeOwner | QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     // rename() replaces the file in one step; the running AppImage keeps its (now unnamed) old file until it exits
     if (::rename(part.toLocal8Bit().constData(), target.toLocal8Bit().constData()) != 0) {

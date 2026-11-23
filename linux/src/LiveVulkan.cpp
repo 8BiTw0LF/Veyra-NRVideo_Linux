@@ -1,4 +1,6 @@
 #include "LiveVulkan.h"
+#include <QCoreApplication>
+#include <QEvent>
 #include <cstring>
 #include <QImage>
 #include <QMetaObject>
@@ -127,6 +129,8 @@ void LiveVulkan::setActive(bool on) {
     if (!on) {
         std::lock_guard l(m_);
         hasNew_ = haveCurrent_ = redraw_ = false;
+        mailbox_.hold.reset(); mailbox_.ext = nullptr;   // capture buffers go back to the card
+        current_.hold.reset(); current_.ext = nullptr;
     }
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
 }
@@ -138,10 +142,27 @@ void LiveVulkan::submit(RawFrame& frame) {
         const double dt = std::chrono::duration<double, std::milli>(now - lastArrival_).count();
         lastArrival_ = now;
         if (dt > 4.0 && dt < 100.0) frameMs_ = 0.85 * frameMs_ + 0.15 * dt;
-        std::swap(mailbox_, frame);         // the newest frame always wins; an unrendered older one goes back for reuse
+        // the newest frame always wins; an unrendered older one goes back for reuse. A timeline jump (seek) it carried
+        // is not lost with it: the newer frame comes after the jump too.
+        const bool carry = hasNew_ && mailbox_.reset;
+        frame.arrived = now;
+        std::swap(mailbox_, frame);
+        if (carry) mailbox_.reset = true;
+        frame.reset = false;
         hasNew_ = true;
     }
-    QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
+    requestFrame();
+}
+
+// A new picture: draw it now. QQuickWindow::update() goes through QWindow::requestUpdate(), which on Wayland waits for
+// the compositor's next frame callback - the picture then waits for the compositor's clock, a varying part of a
+// refresh (jitter), on top of the GUI thread's queue. An UpdateRequest event, posted ahead of other events, makes the
+// render loop draw at once. VEYAMUX_QT_UPDATE=1: the old way, to compare.
+void LiveVulkan::requestFrame() {
+    if (!win_) return;
+    static const bool qtWay = qEnvironmentVariable("VEYAMUX_QT_UPDATE") == "1";
+    if (qtWay) { QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection); return; }
+    QCoreApplication::postEvent(win_, new QEvent(QEvent::UpdateRequest), Qt::HighEventPriority);
 }
 
 void LiveVulkan::onBeforeRendering() {
@@ -153,6 +174,7 @@ void LiveVulkan::onBeforeRendering() {
         s = settings_;
         if (hasNew_) {
             std::swap(current_, mailbox_);
+            mailbox_.hold.reset(); mailbox_.ext = nullptr;   // the picture before is not drawn again: its buffer goes back
             hasNew_ = false;
             haveCurrent_ = true;
             redraw_ = false;
@@ -176,6 +198,20 @@ void LiveVulkan::onBeforeRendering() {
     }
 
     const auto t0 = std::chrono::steady_clock::now();
+    // VEYAMUX_DEBUG_PACE=1: where a picture's time goes, per picture (ms): capture -> due -> handed to the renderer ->
+    // drawing starts, and the gap to the previous drawing
+    static const bool paceLog = qEnvironmentVariableIsSet("VEYAMUX_DEBUG_PACE");
+    if (paceLog && current_.captured.time_since_epoch().count()) {
+        static std::chrono::steady_clock::time_point prevStart{};
+        auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        const bool paced = current_.due.time_since_epoch().count() != 0;
+        qInfo("pace: due %+6.1f  handed %+6.1f  draw %+6.1f  total %6.1f  gap %6.1f",
+              paced ? ms(current_.captured, current_.due) : 0.0,
+              paced ? ms(current_.due, current_.arrived) : ms(current_.captured, current_.arrived),
+              ms(current_.arrived, t0), ms(current_.captured, t0),
+              prevStart.time_since_epoch().count() ? ms(prevStart, t0) : 0.0);
+        prevStart = t0;
+    }
     if (current_.reset) { chain_->resetHistory(); current_.reset = false; }   // a video file was seeked
     LiveInput in;
     switch (current_.fmt) {
@@ -188,6 +224,7 @@ void LiveVulkan::onBeforeRendering() {
     in.data = current_.bytes();
     in.size = current_.size();
     in.w = current_.w; in.h = current_.h; in.stride = current_.stride;
+    in.fullRange = current_.fullRange;
     in.time = current_.captured.time_since_epoch().count() ? current_.captured : std::chrono::steady_clock::now();
 
     win_->beginExternalCommands();

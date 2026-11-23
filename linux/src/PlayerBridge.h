@@ -452,7 +452,11 @@ public:
 
 public slots:
     QVariantList captureDevices();
+    // [{label, favorite, recommended}]: the user's favourite signals first (last used on top), then the built-in order
     QVariantList captureModes(const QString& path);
+    // marks or unmarks a mode of the last list as a favourite; false when there are already maxFavoriteModes()
+    bool toggleFavoriteMode(int modeIndex);
+    int maxFavoriteModes() const;
     // A word on the chosen mode of the last captureModes() list: a compressed (MJPEG) mode where the card also has an
     // uncompressed one, and at which cost (after PushFPS 4.1). Empty when there is nothing to say.
     QString modeAdvice(int modeIndex) const;
@@ -495,6 +499,9 @@ public slots:
     void demoPose(int pose);                       // -1: the next viewpoint
     void demoRelease();
     void demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
+    // gamescope: the pointer moved by VeyAmux itself (ignored by the window), and hiding it all but invisibly
+    bool syntheticMove() const;
+    void setPointerHidden(bool hidden);
 
     // ---- PlayStation Remote Play
     QVariantList psConsoles() const;
@@ -595,7 +602,22 @@ private:
     QString psBusy_, psMessage_;
     bool psMessageError_ = false;
     std::thread psWorker_;
-    std::shared_ptr<std::atomic<bool>> psQuit_ = std::make_shared<std::atomic<bool>>(false);   // VeyAmux is closing
+    // Background threads (Remote Play, updates, the lsfg-vk download) hand their results to the UI through this. Once
+    // VeyAmux is closing nothing more is posted, and posting and closing never overlap (the lock), so a result can
+    // never reach a PlayerBridge that is being destroyed.
+    struct UiGate {
+        std::atomic<bool> closing{false};
+        std::mutex m;
+        bool load() const { return closing.load(); }
+        void close() { std::lock_guard l(m); closing = true; }
+        template <class F> void post(QObject* to, F&& f) {
+            std::lock_guard l(m);
+            if (!closing) QMetaObject::invokeMethod(to, std::forward<F>(f), Qt::QueuedConnection);
+        }
+    };
+    bool gamescope_ = false, pointerHidden_ = false;
+    QElapsedTimer nudgeUntil_;
+    std::shared_ptr<UiGate> psQuit_ = std::make_shared<UiGate>();   // VeyAmux is closing
     QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
     QVariantList psSeen_;           // last discovery result
     void psRun(const QString& busy, std::function<void(QString& message, bool& error)> work, std::function<void()> done = {});

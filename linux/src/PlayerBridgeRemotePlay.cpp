@@ -179,11 +179,11 @@ void PlayerBridge::psRun(const QString& busy, std::function<void(QString&, bool&
         bool error = false;
         work(message, error);
         if (quit->load()) return;   // VeyAmux closed meanwhile
-        QMetaObject::invokeMethod(this, [this, message, error, done] {
+        quit->post(this, [this, message, error, done] {
             psBusy_.clear();
             psSay(message, error);
             if (done) done();
-        }, Qt::QueuedConnection);
+        });
     });
 }
 
@@ -224,11 +224,11 @@ void PlayerBridge::psSetLogin(const QString& input) {
     }
     const std::string url = t.toStdString();
     psRun(L("Asking PlayStation Network for your account ID...", "Spørger PlayStation Network om dit konto-ID..."),
-          [this, url](QString& msg, bool& err) {
+          [this, url, quit = psQuit_](QString& msg, bool& err) {
               std::string id, e;
               if (rp::psnAccountId(url, id, e)) {
                   const QString acc = QString::fromStdString(id);
-                  QMetaObject::invokeMethod(this, [acc] { QSettings().setValue("ps/accountId", acc); }, Qt::QueuedConnection);
+                  quit->post(this, [acc] { QSettings().setValue("ps/accountId", acc); });
                   msg = L("PlayStation account saved", "PlayStation-konto gemt");
               } else {
                   msg = L("Login failed: ", "Login mislykkedes: ") + translateMessage(QString::fromStdString(e));
@@ -257,11 +257,11 @@ void PlayerBridge::psRegister(const QString& id, const QString& pin) {
     const std::string account = QSettings().value("ps/accountId").toString().toStdString();
     if (account.empty()) { psSay(L("Log in to PlayStation Network first", "Log ind på PlayStation Network først"), true); return; }
     const uint32_t p = digits.toUInt();
-    psRun(L("Registering with the console...", "Registrerer hos konsollen..."), [this, console, account, p](QString& msg, bool& err) {
+    psRun(L("Registering with the console...", "Registrerer hos konsollen..."), [this, console, account, p, quit = psQuit_](QString& msg, bool& err) {
         rp::Registered r;
         std::string e;
         if (rp::registerConsole(console, account, p, r, e)) {
-            QMetaObject::invokeMethod(this, [this, r] { saveConsole(r); emit psChanged(); }, Qt::QueuedConnection);
+            quit->post(this, [this, r] { saveConsole(r); emit psChanged(); });
             msg = L("Registered: ", "Registreret: ") + QString::fromStdString(r.name);
         } else {
             msg = translateMessage(QString::fromStdString(e));

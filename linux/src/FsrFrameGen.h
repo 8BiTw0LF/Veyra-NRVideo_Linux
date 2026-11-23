@@ -32,8 +32,9 @@ public:
     // `current`: the newest real frame, RGBA8 UNORM (sRGB-coded), GENERAL layout, SAMPLED|STORAGE usage.
     // `output`: same size/format, receives the generated in-between frame. reset=true after seeks/cuts/size changes;
     // a reset frame produces no usable in-between frame (the caller shows the real frame only).
+    // pq: the frames are PQ-coded (HDR display), peakNits their brightest level; else sRGB-coded SDR.
     bool record(VkCommandBuffer cb, const ImageRes& current, const ImageRes& output, bool reset, float frameTimeMs,
-                std::string& error);
+                std::string& error, bool pq = false, float peakNits = 1000.0f);
 
     // Motion source for FSR's "game motion vector" input: +1 / -1 = optical flow (sign), 0 = none.
     void setMotionSign(float s) { motionSign_ = s; }

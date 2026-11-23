@@ -186,9 +186,10 @@ private:
     std::atomic<bool> vrrPacing_{false};     // live: space the game's pictures evenly (VRR display)
     // Frame pacing repair (FramePacingRepair.h): a game locked to 30 fps often shows its pictures 17/50 ms apart
     // instead of 33/33; frame generation (Lossless Scaling above all, which works at the moment of presenting)
-    // keeps that judder. With it on, every new picture is handed on at its place on an even grid, one capture
-    // refresh later than the grid line so no picture is due before it arrived (costs that one refresh of delay).
+    // keeps that judder. With it on, every new picture is handed on at its place on an even grid, held just long
+    // enough that every recent picture was ready by then (pacingHoldMs: about half a refresh plus the decode time).
     std::atomic<bool> pacingRepair_{false};
+    std::atomic<double> pacingHold_{0.0};
     std::atomic<bool> pacingReset_{true};
     std::thread pacer_;
     std::mutex pace_m_; std::condition_variable pace_cv_;
@@ -200,6 +201,7 @@ private:
 public:
     // live: share of new pictures the pacing repair moved (last few seconds), -1 when it is off
     double pacingRepairShare();
+    double pacingHoldMs() const { return pacingHold_.load(); }   // the delay the even rhythm costs now
 private:
     std::string capAudioSource_;
     std::string capPath_;          // for reconnecting after the card drops out or stalls on a signal change

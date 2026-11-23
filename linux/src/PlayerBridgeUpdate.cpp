@@ -42,7 +42,7 @@ void PlayerBridge::checkForUpdate(bool manual) {
         QString err;
         const bool ok = update::latest(r, err);
         if (quit->load()) return;
-        QMetaObject::invokeMethod(this, [this, ok, r, err, manual] {
+        quit->post(this, [this, ok, r, err, manual] {
             QSettings().setValue("update/lastCheck", QDateTime::currentSecsSinceEpoch());
             if (!ok) {
                 updState_ = manual ? "error" : "";
@@ -58,7 +58,7 @@ void PlayerBridge::checkForUpdate(bool manual) {
                 updText_ = L("VeyAmux %1 is the newest version", "VeyAmux %1 er den nyeste version").arg(appVersion());
             }
             emit updateChanged();
-        }, Qt::QueuedConnection);
+        });
     }).detach();
 }
 
@@ -78,14 +78,14 @@ void PlayerBridge::installUpdate() {
         if (ok) ok = update::install(r, [this, quit, last, v = r.version](int pc) {
             if (quit->load() || pc == last->load()) return;
             last->store(pc);
-            QMetaObject::invokeMethod(this, [this, pc, v] {
+            quit->post(this, [this, pc, v] {
                 if (updState_ != "downloading") return;
                 updText_ = L("Downloading VeyAmux %1… %2 %", "Henter VeyAmux %1… %2 %").arg(v).arg(pc);
                 emit updateChanged();
-            }, Qt::QueuedConnection);
+            });
         }, msg);
         if (quit->load()) return;
-        QMetaObject::invokeMethod(this, [this, ok, msg, r] {
+        quit->post(this, [this, ok, msg, r] {
             qInfo("Update: %s", qPrintable(msg));
             if (ok) {
                 updRelease_ = r;
@@ -98,7 +98,7 @@ void PlayerBridge::installUpdate() {
                 updText_ = L("The update failed: ", "Opdateringen mislykkedes: ") + msg;
             }
             emit updateChanged();
-        }, Qt::QueuedConnection);
+        });
     }).detach();
 }
 

@@ -1,4 +1,5 @@
 #include "FsrFrameGen.h"
+#include <algorithm>
 #include "FsrUpscaler.h"
 #include "MotionEstimator.h"
 #include <cstdlib>
@@ -185,7 +186,10 @@ bool FsrFrameGen::ensure(uint32_t width, uint32_t height, std::string& error) {
 }
 
 bool FsrFrameGen::record(VkCommandBuffer cb, const ImageRes& current, const ImageRes& output, bool reset,
-                         float frameTimeMs, std::string& error) {
+                         float frameTimeMs, std::string& error, bool pq, float peakNits) {
+    // how the pictures are coded, so FSR judges brightness and scene changes on the right scale
+    const FfxBackbufferTransferFunction transfer = pq ? FFX_BACKBUFFER_TRANSFER_FUNCTION_PQ : FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
+    const float lumMin = pq ? 0.0001f : 0.0f, lumMax = pq ? std::clamp(peakNits, 100.0f, 10000.0f) : 1.0f;
     if (!p_ || !p_->fiOk || p_->w != current.width || p_->h != current.height) {
         if (!ensure(current.width, current.height, error)) return false;
         reset = true;
@@ -215,8 +219,8 @@ bool FsrFrameGen::record(VkCommandBuffer cb, const ImageRes& current, const Imag
     od.opticalFlowVector = ofVec;
     od.opticalFlowSCD = ofScd;
     od.reset = reset;
-    od.backbufferTransferFunction = FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
-    od.minMaxLuminance = {0.0f, 1.0f};
+    od.backbufferTransferFunction = transfer;
+    od.minMaxLuminance = {lumMin, lumMax};
     if (FfxErrorCode e = ffxOpticalflowContextDispatch(&s.of, &od); e != FFX_OK) { error = ffxErr("ffxOpticalflowContextDispatch", e); return false; }
     ctx_.computeBarrier();
 
@@ -282,9 +286,9 @@ bool FsrFrameGen::record(VkCommandBuffer cb, const ImageRes& current, const Imag
     fd.viewSpaceToMetersFactor = 1.0f;
     fd.frameTimeDelta = frameTimeMs;
     fd.reset = reset;
-    fd.backBufferTransferFunction = FFX_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
-    fd.minMaxLuminance[0] = 0.0f;
-    fd.minMaxLuminance[1] = 1.0f;
+    fd.backBufferTransferFunction = transfer;
+    fd.minMaxLuminance[0] = lumMin;
+    fd.minMaxLuminance[1] = lumMax;
     fd.frameID = s.frameId;
     fd.dilatedDepth = dDepth;
     fd.dilatedMotionVectors = dMv;

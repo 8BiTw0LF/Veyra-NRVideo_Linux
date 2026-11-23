@@ -63,6 +63,7 @@ private:
     std::vector<QPointer<QTcpSocket>> streams_;
     QByteArray lastJpeg_;
     quint64 lastSent_ = 0;
+    quint64 firstSeq_ = 0;   // frames numbered below this were made before the last stop(): never sent
     std::atomic<int> viewers_{0};
     std::atomic<int> maxHeight_{1080};
 

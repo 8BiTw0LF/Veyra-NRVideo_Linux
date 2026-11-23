@@ -89,8 +89,8 @@ QVariantList PlayerBridge::setupCheck() {
     // a locked 30 fps game with frame generation and no pacing repair: a tip, not a fault
     if (live && s_.frameGen != veyamux::FrameGenMode::Off && !s_.pacingRepair && content.contentFps > 24 && content.contentFps < 36)
         out << item("pacing", "info", L("A 30 fps game with frame generation", "Et 30 fps-spil med frame generation"),
-                    L("If the motion judders now and then, Even out frame pacing moves every picture to an even rhythm (+1 refresh of delay).",
-                      "Hvis bevægelsen hakker indimellem, flytter Jævn billedrytme hvert billede til en jævn rytme (+1 opdatering forsinkelse)."),
+                    L("If the motion judders now and then, Even out frame pacing moves every picture to an even rhythm (about half a refresh of delay).",
+                      "Hvis bevægelsen hakker indimellem, flytter Jævn billedrytme hvert billede til en jævn rytme (cirka en halv opdatering forsinkelse)."),
                     L("Turn it on", "Slå den til"));
     // upscaling a picture that is already as large as the window: work without a sharper result
     if (live && s_.enabled && s_.scale > 1.001f && !s_.retroTv && !s_.pixelActive() && window_) {
