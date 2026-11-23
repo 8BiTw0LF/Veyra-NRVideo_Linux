@@ -166,8 +166,9 @@ needed for its own frame generation**, and everything else works without it:
   </p>
   - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
     now (not over the internet).
-- **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
-  one marked with ★. If you pick a compressed MJPEG mode where the card also has an uncompressed one, VeyAmux says so. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
+- **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG). The best
+  come first: the largest uncompressed mode (recommended), 1080p uncompressed, and the same size at 60 fps. Mark up to
+  three **favourite signals** with ☆; they come first, the one used last on top. If you pick a compressed MJPEG mode where the card also has an uncompressed one, VeyAmux says so. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
 - **A window or a whole screen** (Wayland: KDE Plasma, GNOME, …): choose *Window or screen …* under **Capture**, and your
   desktop asks what to share, the same way OBS and Discord do. The picture gets all of VeyAmux's processing.
@@ -218,8 +219,8 @@ needed for its own frame generation**, and everything else works without it:
 - **Screen check**: if frame generation asks for more frames than the screen shows (30 fps × 3 on a 60 Hz screen),
   VeyAmux says so and what to change.
 - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of 33/33,
-  and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first (costs one refresh of delay,
-  about 17 ms at 60 Hz).
+  and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first. It holds a picture only
+  as long as the rhythm needs (about half a refresh plus decoding), and F3 shows the hold.
 - **120 Hz rule**: when the capture runs at about 120 fps, AMD FSR frame generation pauses (doubling would only add
   latency) and resumes below 80 fps.
 - **VRR mode**: with frame generation off, VeyAmux shows the game's own frames at an even pace (e.g. 45 fps), so a VRR
