@@ -1398,6 +1398,7 @@ QString PlayerBridge::lastCaptureDevice() const {
     // the same card may come back under another /dev/videoN after being re-plugged
     QSettings q;
     const QString dev = q.value("cap/device").toString(), name = q.value("cap/name").toString();
+    if (veyamux::CaptureSource::isDemo(dev.toStdString())) return {};   // saved by 1.9 and earlier: the start screen instead
     if (!name.isEmpty() && veyamux::watch::cardName(dev) != name)
         if (const QString d = veyamux::watch::findDeviceByName(name); !d.isEmpty()) return d;
     return dev;
@@ -1464,7 +1465,13 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
                    ? veyamux::CaptureMode{} : mode;
     curDevice_ = path;
     curAudio_ = audioSource;
-    QSettings q; q.setValue("cap/device", screenCast ? QStringLiteral("screencast") : path); q.setValue("cap/audio", audioSource);
+    QSettings q;
+    // The demo is not remembered as the last source: the Steam shortcut starts with --capture last, and trying the demo
+    // once (on a handheld without a capture card, say) would otherwise make every later start load Abyssal Garden.
+    if (!veyamux::CaptureSource::isDemo(path.toStdString())) {
+        q.setValue("cap/device", screenCast ? QStringLiteral("screencast") : path);
+        q.setValue("cap/audio", audioSource);
+    }
     if (const QString n = screenCast ? QString() : veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
     updateLsfgMultiplier();
     if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
@@ -1704,7 +1711,8 @@ void PlayerBridge::restartWithSource() {
         if (old[i] == "--probe-ui" || old[i] == "--fullscreen" || !old[i].startsWith("--")) continue;
         args << old[i];
     }
-    if (engine_.isOpen() && engine_.isLive()) args << "--capture" << "last";
+    if (engine_.isOpen() && engine_.isLive()) args << "--capture" << (demoActive_ ? curDevice_ : QStringLiteral("last"));   // the demo is not "last"
+
     else if (engine_.isOpen() && !openFile_.isEmpty()) args << openFile_;
     if (window_ && window_->visibility() == QWindow::FullScreen) args << "--fullscreen";
     engine_.close();   // release the capture card before the new instance opens it
