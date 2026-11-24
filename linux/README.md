@@ -27,6 +27,9 @@
 
 ## New in 1.9
 
+**1.9.1:** VeyAmux no longer starts in the demo every time after you have tried it once (the Steam shortcut starts on
+the last source, and the demo was remembered as one).
+
 - **Find the best signal:** a test in the capture window (C) plays each sensible mode of your card for a few seconds
   and measures what reaches *your* PC: frame rate, how evenly the pictures are shown, broken pictures, delay, CPU and
   GPU. It names the best mode for **30, 60 and 120 fps games**, the one with the least delay, the sharpest, and one it

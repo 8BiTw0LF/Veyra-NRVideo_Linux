@@ -104,7 +104,9 @@ void onCrash(int sig) {
 QString gitSha() { return QStringLiteral(VEYAMUX_GIT_SHA); }
 
 QString buildVersion(const QString& base) {
-    return kDebugBuild ? base + "." + QString::number(VEYAMUX_BUILD_NUMBER) : base;
+    // VeyAmux Debug: major.minor.build (1.9.1 -> 1.9.74). The patch part is left out so the version keeps three parts,
+    // the way installed debug builds before 1.9.1 compare it (part by part)
+    return kDebugBuild ? base.section('.', 0, 1) + "." + QString::number(VEYAMUX_BUILD_NUMBER) : base;
 }
 
 QString debugDir() { return dirPath; }

@@ -16,7 +16,9 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 `scripts/fetch-tools.sh` henter DXC, linuxdeploy og appimagetool automatisk. Kør AppImage uden FUSE: `APPIMAGE_EXTRACT_AND_RUN=1`.
 
 ## Versionsnumre
-VeyAmux har sine egne versionsnumre: **1.0, 1.1 … 1.9, 2.0, 2.1** og så videre, ét trin for hver opdatering på GitHub.
+VeyAmux har sine egne versionsnumre: **1.0, 1.1 … 1.9**, derefter små rettelser som **1.9.1, 1.9.2** … indtil der er
+noget stort nok til **2.0**. VeyAmux Debug hedder `<major>.<minor>.<CI-kørselsnummer>` (fx 1.9.74, også for 1.9.1),
+så ældre debug-byg, der sammenligner del for del, stadig finder nye byg; nye sammenligner kun kørselsnummeret.
 VeyAmux udgives kun som AppImage (Flatpak-udgaven er fjernet efter 1.1).
 - **Tagget** hedder `VeyAmux-V.<version>` (fx `VeyAmux-V.1.0`), både i VeyAmux-repoet og i fork'en. Udgivelsen får
   samme navn.

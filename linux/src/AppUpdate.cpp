@@ -120,6 +120,11 @@ QString fileHash(const QString& path, QCryptographicHash::Algorithm a) {
 
 bool newer(const QString& a, const QString& b) {
     const QStringList x = a.split('.'), y = b.split('.');
+#ifdef VEYAMUX_DEBUG_BUILD
+    // VeyAmux Debug: the last part is the CI build number, which only grows; the base before it can gain a part
+    // (1.9.72 -> 1.9.1.73), so comparing part by part would call the newer build older
+    if (x.size() >= 3 && y.size() >= 3) return x.last().toInt() > y.last().toInt();
+#endif
     for (int i = 0; i < std::max(x.size(), y.size()); ++i) {
         const int p = i < x.size() ? x[i].toInt() : 0, q = i < y.size() ? y[i].toInt() : 0;
         if (p != q) return p > q;
