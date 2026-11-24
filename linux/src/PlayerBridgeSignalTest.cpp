@@ -298,52 +298,70 @@ void PlayerBridge::finishSignalTest(bool restore) {
     for (auto& r : sig_.rows) { r.tags.clear(); if (r.measured && r.keepsUp) ok.push_back(&r); }
     SigRow* rec = nullptr;
     if (!ok.empty()) {
-        double maxFps = 0, bestDelay = 1e9;
+        // What the game sent during the test, as the middle of the measurements (one wanders with the scene, and a
+        // single high one must not decide). It only picks which of the verdicts below is "Recommended".
+        std::vector<double> cs;
+        for (const auto& r : sig_.rows) if (r.measured && r.content > 1) cs.push_back(r.content);
+        std::sort(cs.begin(), cs.end());
+        sig_.content = cs.empty() ? 0 : std::round(cs[cs.size() / 2]);
+        double bestDelay = 1e9;
         long maxPix = 1;
-        // what the console sends, from the highest of the measurements: one game's measured rate wanders with the
-        // scene, so each mode is judged against the same value (a 120 fps mode is no smoother when the game sends 60)
-        double content = 0;
-        for (const auto& r : sig_.rows) if (r.measured) content = std::max(content, r.content);
-        auto rate = [content](const SigRow& r) { return content > 1 ? std::min(r.nominal, std::round(content)) : r.nominal; };
+        bool fast120 = false;
         for (auto* r : ok) {
-            maxFps = std::max(maxFps, rate(*r));
             maxPix = std::max(maxPix, pixels(r->mode));
             if (r->delay > 0) bestDelay = std::min(bestDelay, r->delay);
+            if (r->nominal > 100) fast120 = true;
         }
-        // smoothness first (a game's frame rate is what you feel most), then sharpness (compressed counts a little
-        // less), then delay and how evenly the pictures came
-        for (auto* r : ok) {
-            const double interval = 1000.0 / std::max(1.0, r->nominal);
-            r->score = 50.0 * rate(*r) / maxFps
-                     + 25.0 * std::sqrt(double(pixels(r->mode)) / double(maxPix)) * (isMjpeg(r->mode.fourcc) ? 0.85 : 1.0)
-                     // delay by the milliseconds it adds (a ratio would make 6 against 3 ms look as bad as 40 against 20)
-                     + 15.0 * (r->delay > 0 && bestDelay < 1e9 ? 1.0 - std::min(1.0, (r->delay - bestDelay) / 33.0) : 0.5)
-                     + 10.0 * (1.0 - std::min(1.0, r->jitter / (0.5 * interval)));
-            if (r->decode == 2 && r->cpu > 100.0 * 0.5 * double(sysconf(_SC_NPROCESSORS_ONLN))) r->score -= 10;   // CPU nearly full
-        }
+        // The best mode depends on the game: with a 30 fps game a 60 or 120 fps mode only repeats pictures (no
+        // smoother, often more judder over USB); with a 60 fps game a 30 fps mode loses half the frames. So every
+        // mode is scored for a 30, a 60 and (when the card has such a mode) a 120 fps game:
+        //   55 × smoothness: the game's frames this mode carries (at most its own rate), shown evenly - uneven
+        //        showing (jitter) is judder you see, ±a quarter of the game's frame time halves it (floor 0.3);
+        //   25 × sharpness (compressed counts a little less);
+        //   20 × delay, by the milliseconds it adds over the fastest mode.
+        auto scoreFor = [&](const SigRow& r, double game) {
+            const double rate = std::min(r.nominal, game);
+            const double even = std::clamp(1.0 - r.jitter / (0.5 * 1000.0 / rate), 0.3, 1.0);
+            double sc = 55.0 * rate * even / game
+                      + 25.0 * std::sqrt(double(pixels(r.mode)) / double(maxPix)) * (isMjpeg(r.mode.fourcc) ? 0.85 : 1.0)
+                      + 20.0 * (r.delay > 0 && bestDelay < 1e9 ? 1.0 - std::min(1.0, (r.delay - bestDelay) / 33.0) : 0.5);
+            if (r.decode == 2 && r.cpu > 100.0 * 0.5 * double(sysconf(_SC_NPROCESSORS_ONLN))) sc -= 10;   // CPU nearly full
+            return sc;
+        };
         auto pick = [&](auto better) { SigRow* b = nullptr; for (auto* r : ok) if (!b || better(*r, *b)) b = r; return b; };
-        rec = pick([](const SigRow& a, const SigRow& b) { return a.score > b.score; });
+        auto bestFor = [&](double game) { return pick([&](const SigRow& a, const SigRow& b) { return scoreFor(a, game) > scoreFor(b, game); }); };
+        SigRow* b30 = bestFor(30);
+        SigRow* b60 = bestFor(60);
+        SigRow* b120 = fast120 ? bestFor(120) : nullptr;
+        // the recommendation: the verdict for the game that was running (60 when it could not be measured)
+        const double g = sig_.content;
+        rec = g > 1 && g < 45 ? b30 : g > 90 && b120 ? b120 : b60;
+        for (auto* r : ok) r->score = scoreFor(*r, g > 1 && g < 45 ? 30 : g > 90 && b120 ? 120 : 60);
         SigRow* fast = pick([](const SigRow& a, const SigRow& b) { return a.delay > 0 && (b.delay <= 0 || a.delay < b.delay - 0.05); });
-        SigRow* smooth = pick([&](const SigRow& a, const SigRow& b) {
-            return rate(a) > rate(b) + 1 || (std::abs(rate(a) - rate(b)) <= 1 && a.jitter < b.jitter);
-        });
         SigRow* sharp = pick([](const SigRow& a, const SigRow& b) {
             if (pixels(a.mode) != pixels(b.mode)) return pixels(a.mode) > pixels(b.mode);
             if (isMjpeg(a.mode.fourcc) != isMjpeg(b.mode.fourcc)) return !isMjpeg(a.mode.fourcc);
             return a.nominal > b.nominal;
         });
         if (rec) rec->tags << L("Recommended", "Anbefalet");
+        if (b30) b30->tags << L("Best for 30 fps games", "Bedst til 30 fps-spil");
+        if (b60) b60->tags << L("Best for 60 fps games", "Bedst til 60 fps-spil");
+        if (b120) b120->tags << L("Best for 120 fps games", "Bedst til 120 fps-spil");
         if (fast) fast->tags << L("Least delay", "Mindst forsinkelse");
-        if (smooth) smooth->tags << L("Smoothest", "Mest flydende");
         if (sharp) sharp->tags << L("Sharpest", "Skarpest");
     }
     if (sig_.text.isEmpty()) {
-        if (rec) sig_.text = L("Done. Recommended on this PC: %1", "Færdig. Anbefalet på denne pc: %1").arg(QString::fromStdString(rec->mode.label));
+        if (rec && sig_.content > 1)
+            sig_.text = L("Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)",
+                          "Færdig. Anbefalet på denne pc: %1 (spillet sendte ca. %2 fps under testen)")
+                            .arg(QString::fromStdString(rec->mode.label)).arg(sig_.content, 0, 'f', 0);
+        else if (rec) sig_.text = L("Done. Recommended on this PC: %1", "Færdig. Anbefalet på denne pc: %1").arg(QString::fromStdString(rec->mode.label));
         else if (!sig_.rows.empty())
             sig_.text = L("Done, but no mode kept up on this PC. Try another USB port (USB 3, directly on the PC).",
                           "Færdig, men ingen tilstand kunne følge med på denne pc. Prøv en anden USB-port (USB 3, direkte på pc'en).");
     }
-    if (rec) qInfo("Signal test: recommended %s (decode %d)", rec->mode.label.c_str(), rec->decode);
+    if (rec) qInfo("Signal test: recommended %s (decode %d), game %.0f fps", rec->mode.label.c_str(), rec->decode, sig_.content);
+    for (const auto& r : sig_.rows) if (r.measured) qInfo("Signal test: score %.1f %s decode %d", r.score, r.mode.label.c_str(), r.decode);
     if (restore) {
         // back to what was playing; with nothing before, the recommendation stays on (the picture behind the dialog)
         if (sig_.hadCapture) startCapture(sig_.savedDevice, sig_.savedMode, sig_.savedAudio);
@@ -430,12 +448,13 @@ void PlayerBridge::sampleSignalTest() {
                                      .arg(fps, 0, 'f', 1).arg(m.fps, 0, 'f', 0);
         sig_.rows.push_back(r);
     };
-    row(mode(V4L2_PIX_FMT_NV12, 3840, 2160, 60), 0, 60.0, 60, 5.6, 0, 19.8, 30, 1.2, "", 0);
-    row(mode(V4L2_PIX_FMT_NV12, 3840, 2160, 30), 0, 30.0, 60, 0.1, 0, 17.2, 9, 1.2, "", 0);
-    row(mode(V4L2_PIX_FMT_NV12, 1920, 1080, 60), 0, 59.9, 60, 1.5, 0, 5.8, 10, 0.9, "", 0);
-    row(mode(V4L2_PIX_FMT_NV12, 2560, 1440, 120), 0, 60.0, 60, 1.2, 0, 8.1, 14, 1.0, "", 0);
-    row(mode(V4L2_PIX_FMT_MJPEG, 3840, 2160, 60), 1, 60.0, 60, 1.1, 0, 26.0, 12, 1.2, "GPU (VA-API)", 8.0);
-    row(mode(V4L2_PIX_FMT_MJPEG, 3840, 2160, 60), 2, 59.8, 60, 1.9, 1, 29.5, 104, 1.2, "CPU", 10.2);
+    // the numbers of a real run (RX 9070 XT, Live Gamer Ultra 2.1, a 30 fps game)
+    row(mode(V4L2_PIX_FMT_NV12, 3840, 2160, 60), 0, 60.0, 30, 5.7, 0, 20, 30, 1.2, "", 0);
+    row(mode(V4L2_PIX_FMT_NV12, 3840, 2160, 30), 0, 30.0, 30, 0.2, 0, 17, 9, 1.2, "", 0);
+    row(mode(V4L2_PIX_FMT_NV12, 1920, 1080, 60), 0, 60.0, 30, 1.4, 0, 6, 10, 1.0, "", 0);
+    row(mode(V4L2_PIX_FMT_NV12, 2560, 1440, 120), 0, 120.0, 30, 0.8, 0, 15, 35, 1.1, "", 0);
+    row(mode(V4L2_PIX_FMT_MJPEG, 3840, 2160, 60), 1, 59.7, 30, 0.7, 0, 40, 36, 1.2, "GPU (VA-API)", 16.3);
+    row(mode(V4L2_PIX_FMT_MJPEG, 3840, 2160, 60), 2, 60.0, 30, 0.9, 0, 33, 106, 1.2, "CPU", 14.9);
     sig_.text.clear();
     finishSignalTest(false);
 }

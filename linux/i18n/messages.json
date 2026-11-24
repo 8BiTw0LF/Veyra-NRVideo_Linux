@@ -366,7 +366,11 @@
   "decoding %1 ms on %2": "Dekodierung %1 ms auf %2",
   "delay %1 ms": "Verzögerung %1 ms",
   "even ±%1 ms": "gleichmäßig ±%1 ms",
-  " (fetching %1 ms)": " (Abholen %1 ms)"
+  " (fetching %1 ms)": " (Abholen %1 ms)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Fertig. Empfohlen auf diesem PC: %1 (das Spiel sendete während des Tests etwa %2 fps)",
+  "Best for 30 fps games": "Am besten für 30-fps-Spiele",
+  "Best for 60 fps games": "Am besten für 60-fps-Spiele",
+  "Best for 120 fps games": "Am besten für 120-fps-Spiele"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -594,7 +598,11 @@
   "decoding %1 ms on %2": "decodificación %1 ms en %2",
   "delay %1 ms": "retraso %1 ms",
   "even ±%1 ms": "regularidad ±%1 ms",
-  " (fetching %1 ms)": " (recogida %1 ms)"
+  " (fetching %1 ms)": " (recogida %1 ms)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Listo. Recomendado en este PC: %1 (el juego envió unos %2 fps durante la prueba)",
+  "Best for 30 fps games": "Mejor para juegos a 30 fps",
+  "Best for 60 fps games": "Mejor para juegos a 60 fps",
+  "Best for 120 fps games": "Mejor para juegos a 120 fps"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -822,7 +830,11 @@
   "decoding %1 ms on %2": "décodage %1 ms sur %2",
   "delay %1 ms": "latence %1 ms",
   "even ±%1 ms": "régularité ±%1 ms",
-  " (fetching %1 ms)": " (récupération %1 ms)"
+  " (fetching %1 ms)": " (récupération %1 ms)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Terminé. Recommandé sur ce PC : %1 (le jeu envoyait environ %2 ips pendant le test)",
+  "Best for 30 fps games": "Idéal pour les jeux à 30 ips",
+  "Best for 60 fps games": "Idéal pour les jeux à 60 ips",
+  "Best for 120 fps games": "Idéal pour les jeux à 120 ips"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1050,7 +1062,11 @@
   "decoding %1 ms on %2": "dekoding %1 ms på %2",
   "delay %1 ms": "forsinkelse %1 ms",
   "even ±%1 ms": "jevnhet ±%1 ms",
-  " (fetching %1 ms)": " (henting %1 ms)"
+  " (fetching %1 ms)": " (henting %1 ms)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Ferdig. Anbefalt på denne PC-en: %1 (spillet sendte ca. %2 fps under testen)",
+  "Best for 30 fps games": "Best for spill i 30 fps",
+  "Best for 60 fps games": "Best for spill i 60 fps",
+  "Best for 120 fps games": "Best for spill i 120 fps"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1278,7 +1294,11 @@
   "decoding %1 ms on %2": "декодирование %1 мс на %2",
   "delay %1 ms": "задержка %1 мс",
   "even ±%1 ms": "равномерность ±%1 мс",
-  " (fetching %1 ms)": " (получение %1 мс)"
+  " (fetching %1 ms)": " (получение %1 мс)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Готово. Рекомендуется для этого ПК: %1 (игра во время теста выдавала около %2 к/с)",
+  "Best for 30 fps games": "Лучше для игр 30 к/с",
+  "Best for 60 fps games": "Лучше для игр 60 к/с",
+  "Best for 120 fps games": "Лучше для игр 120 к/с"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1506,6 +1526,10 @@
   "decoding %1 ms on %2": "avkodning %1 ms på %2",
   "delay %1 ms": "fördröjning %1 ms",
   "even ±%1 ms": "jämnhet ±%1 ms",
-  " (fetching %1 ms)": " (hämtning %1 ms)"
+  " (fetching %1 ms)": " (hämtning %1 ms)",
+  "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Klart. Rekommenderas på den här datorn: %1 (spelet skickade cirka %2 fps under testet)",
+  "Best for 30 fps games": "Bäst för spel i 30 fps",
+  "Best for 60 fps games": "Bäst för spel i 60 fps",
+  "Best for 120 fps games": "Bäst för spel i 120 fps"
  }
 }

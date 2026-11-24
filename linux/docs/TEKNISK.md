@@ -562,10 +562,12 @@ tilbage til CPU), og MJPEG 1080p hvis kortet ikke har ukomprimeret 1080p.
   mellem billederne ved DQBUF (`takeArrivals`: pauser > 1,5 × intervallet), jævnhed som spredningen mellem de viste
   billeder (`shownTimes`; ved DQBUF er de næsten altid jævne, det ujævne er hvornår billedet er klar), ødelagte, `pipelineMs`, CPU for hele
   processen, GPU-tid (`gpuSums`), afkodningsvej/-tid og spillets egen fps (ContentProbe).
-- *Følger med*: ≥ 97 % af tilstandens fps, < 2 % ødelagte, højst 2 % pauser. Blandt dem: point = 50 × fps (højst den højeste spil-fps
-  målt i hele testen, så alle tilstande måles mod samme værdi) / bedste + 25 × √(pixels/største) (MJPEG × 0,85) + 15 × (1 − ekstra forsinkelse/33 ms) + 10 ×
-  jævnhed (jitter mod et halvt interval); −10 hvis CPU-afkodningen bruger over halvdelen af CPU'en. Mærker: Anbefalet
-  (flest point), Mindst forsinkelse, Mest flydende, Skarpest.
+- *Følger med*: ≥ 97 % af tilstandens fps, < 2 % ødelagte, højst 2 % pauser. Hver tilstand der følger med, får point
+  for et 30-, et 60- og (hvis kortet har en tilstand over 100 fps) et 120 fps-spil: 55 × min(tilstandens fps, spillets)
+  × jævnhed / spillets fps + 25 × √(pixels/største) (MJPEG × 0,85) + 20 × (1 − ekstra forsinkelse/33 ms), hvor jævnhed
+  = 1 − jitter / et halvt billedinterval af spillet, mindst 0,3; −10 hvis CPU-afkodningen bruger over halvdelen af
+  CPU'en. Mærker: *Bedst til 30/60/120 fps-spil*, *Anbefalet* (den for spillet der kørte: medianen af de målte
+  spil-fps, 60 hvis den ikke kunne måles), *Mindst forsinkelse*, *Skarpest*. Pointene logges.
 - Bagefter startes det, der kørte før; kørte intet, bliver den anbefalede stående. Brugerens billedindstillinger
   gælder under testen (så GPU-tiden er den rigtige). Resultaterne logges (`Signal test: …`) og kommer med i fejlrapporten.
 - `VEYAMUX_TEST_SIGNALTEST=1` viser dialogen med opdigtede eksempelresultater (skærmbilleder uden kort).

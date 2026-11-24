@@ -725,6 +725,7 @@ private:
         uint64_t del0 = 0, cor0 = 0;
         double delaySum = 0;
         int delayN = 0;
+        double content = 0;            // the game's own frame rate during the test (0 = not measured)
         int decodeOverride = -1;       // while testing: the MJPEG decoding startCapture uses instead of the setting
     } sig_;
     void signalTick();
