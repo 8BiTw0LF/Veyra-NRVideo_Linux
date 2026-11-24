@@ -1,33 +1,40 @@
-## VeyAmux-V.1.8
+## VeyAmux-V.1.9
 
-### Smoother frame pacing, less delay
-- **Even out frame pacing** now holds a picture only as long as it has to. Before, every picture waited one extra
-  capture refresh, even when there was nothing to even out. And with MJPEG at 60 fps, decoding took longer than that
-  refresh, so the pictures came out uneven again (17/50 ms instead of 33/33). Now the hold follows the slowest recent
-  picture. The rhythm is even, and a signal that is already even gets almost no extra delay. F3 shows the hold in ms.
-- **A new picture is drawn at once.** Before, Qt waited for the compositor's next frame on Wayland, which added a little
-  jitter to every picture.
-- **Steam's gamescope session (SteamOS, Big Picture):** frame generation was reported to stop a few seconds after the
-  mouse stopped moving. While frame generation runs there, VeyAmux now keeps the pointer alive. The pointer stays
-  invisible and the controls stay hidden.
+### Find the best signal
+A capture card offers many modes, and which one works best depends on the whole PC: the USB controller, the graphics
+card (AMD, Intel or NVIDIA) and the CPU. Press **C**, then *Find the best signal for this PC…*. VeyAmux plays each
+sensible mode for about 7 seconds with your own picture settings and measures what reaches your PC:
+- the frame rate against what the mode promises, how evenly the pictures are shown, pauses and broken pictures;
+- the delay inside VeyAmux, CPU and GPU;
+- for MJPEG: decoding on the graphics card and on the CPU, and how long each takes.
 
-### Capture list
-- The best modes come first: the largest uncompressed mode (on a 4K card: **4K NV12 30**, the default), then
-  **1080p NV12 30** (a quarter of the USB traffic, so much less delay), then **4K MJPEG 60** for 60 fps games.
-- **Favourite signals:** click ☆ on up to three modes. They come first, and the one used last is chosen automatically.
+It then names the **best mode for 30, 60 and 120 fps games** (and 240 on a 240 Hz screen), the one with the **least
+delay**, the **sharpest**, and **recommends** the one for the game that ran during the test. Each row has **Use** and ☆
+(favourite). Keep the game running and moving while it measures; it takes about a minute.
 
-### Fixes from a code review
-A code review ([MarkStokes-outlook/VeyAmux](https://github.com/MarkStokes-outlook/VeyAmux/issues)) found real
-problems. What was fixed and why: [docs/REVIEW-FIXES.md](docs/REVIEW-FIXES.md). The most important ones:
-- **Capture cards:** a picture read straight from the card's buffer was handed back to the card at once, so the card
-  could write a new picture into it while VeyAmux was still copying it. This could cause torn or out-of-order frames.
-- Recording and streaming no longer change resolution, or stop, when the window is resized. A recording that could not
-  be saved completely now says so.
-- Resizing the window no longer stalls the graphics card or resets noise reduction and anti-flicker.
-- The OBS browser source can no longer be read by web pages.
-- The settings file with the stream key and the Remote Play keys is readable by your user only.
-- Updates are checked harder: the update must come from GitHub, have the right size and be a real AppImage.
-- The build tools are fixed versions checked by SHA-256.
+### MJPEG on the graphics card
+MJPEG is decoded on the graphics card where it can be (VA-API on AMD and Intel, NVDEC on NVIDIA) and on the CPU
+otherwise, and goes to the GPU as NV12, a third of the data it used to be. F3 and the performance report show where it
+is decoded, how long it takes and how many broken pictures came in. On some cards fetching the decoded picture back
+costs as much as the decoding saves; the test above shows which is faster on yours.
+
+### Frame generation up to 240 fps
+The pause for fast games (frame generation stopped at about 120 fps) now follows the screen. On a 240 Hz screen a
+120 fps signal is doubled to 240 fps. On a 120 Hz screen it pauses as before, since the extra frames could not be shown
+and would only add delay. With Lossless Scaling 3× the limit is counted for 3×.
+
+### Fixes
+- **Switching signals:** in 1.8 the picture could freeze when you changed mode, or when the card reconnected after the
+  console changed resolution. A capture buffer still held by the renderer kept the old stream open, so the card
+  refused the new one as busy. Buffers now go back as soon as the picture is on the graphics card.
+- **FSR 3.1 is faster:** it reuses the motion estimate that temporal noise reduction and anti-flicker already make,
+  instead of computing its own (about 3 ms less GPU time per 4K picture with all three on).
+- F3's frame times count only new pictures, not redraws of the same one.
+
+### VeyAmux Debug
+**[VeyAmux Debug](https://github.com/8BiTw0LF/VeyAmux/releases/tag/debug-build)** is a new test build made after every
+change. It runs next to VeyAmux with its own settings, writes a full bug report (machine, driver, displays, capture
+card, settings with secrets hidden, log and crashes) and has a benchmark of what every setting costs on your machine.
 
 ### Download
 Already on 1.6 or newer? VeyAmux offers the update by itself (on the start screen and under *System*). Otherwise,

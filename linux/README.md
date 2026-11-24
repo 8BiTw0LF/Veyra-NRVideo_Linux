@@ -25,6 +25,28 @@
 
 ---
 
+## New in 1.9
+
+- **Find the best signal:** a test in the capture window (C) plays each sensible mode of your card for a few seconds
+  and measures what reaches *your* PC: frame rate, how evenly the pictures are shown, broken pictures, delay, CPU and
+  GPU. It names the best mode for **30, 60 and 120 fps games**, the one with the least delay, the sharpest, and one it
+  recommends for the game you ran, each with **Use** and ☆. The answer depends on the USB controller, graphics card
+  and CPU, so it is the same test on AMD, Intel and NVIDIA.
+- **MJPEG decoded on the graphics card:** VA-API on AMD and Intel, NVDEC on NVIDIA, the CPU when neither can. The
+  picture goes to the GPU as NV12 (a third of the data). F3 shows where it is decoded and how long it takes.
+- **Frame generation up to 240 fps:** the pause for fast games now follows the screen. On a 240 Hz screen a 120 fps
+  signal is doubled to 240 fps; on a 120 Hz screen it pauses as before, since the extra frames could not be shown.
+- **Switching signals works again:** in 1.8 the picture could freeze when you changed mode or the card reconnected.
+- **Faster FSR 3.1:** it reuses the motion estimate that noise reduction and anti-flicker already make (about 3 ms
+  less GPU time per 4K picture with all three on).
+- **[VeyAmux Debug](#veyamux-debug-test-build):** a test build next to VeyAmux, with full bug reports and a benchmark
+  of what every setting costs on your machine.
+
+<p align="center">
+  <img src="docs/images/signal-test.png" width="560" alt="Find the best signal: six modes of a 4K capture card measured, with Recommended and Best for 30 fps games on 4K30 NV12, Least delay on 1080p60, Best for 60 and 120 fps games on 1440p120, and MJPEG decoded on the graphics card and the CPU">
+  <br><sub>Find the best signal on an RX 9070 XT with a Live Gamer Ultra 2.1 and a 30 fps game.</sub>
+</p>
+
 ## New in 1.8
 
 - **Smoother frame pacing, less delay:** *Even out frame pacing* holds each picture only as long as it has to.
@@ -37,32 +59,11 @@
 - **Fixes from a code review:** capture buffers, recording while the window is resized, resize stalls, the OBS
   source, private settings, checked updates and build tools. See [what was fixed and why](docs/REVIEW-FIXES.md).
 
-## New in 1.7
-
-- **PlayStation Remote Play by IP address:** if the console is not found, type its IP address. VeyAmux asks it
-  directly, which also works across subnets, VPNs and firewalls (such as Bazzite's) that drop the answer to the
-  network-wide search, and the console can be registered even if it never answers the search.
-
-## New in 1.6
-
-- **A new start screen and menu:** the sources as three large cards, and a menu with six tabs (Picture, Frame
-  generation, Display, Sound, Record, System). It grows with the screen, so it reads well from the couch, and LB / RB
-  switch tabs on a controller.
-- **Updates from inside VeyAmux:** it looks for a new version on GitHub by itself (at most twice a day). One click
-  downloads it, checks it against the release's checksum and puts it in place; Gear Lever is no longer needed.
-- **Smoother frame generation:** repeated frames are now found by comparing the whole picture, so a small movement
-  seen from a still camera is no longer thrown away as a repeat. VeyAmux also warns when frame generation asks for
-  more frames than the screen can show, and when the capture card sends compressed MJPEG while it has an
-  uncompressed mode.
-- **Picture:** SMAA anti-aliasing, and texture, clarity and dehaze.
-- **Comparison clips:** the original picture next to VeyAmux's (split, side by side, vertical 9:16 or a sweeping
-  reveal), and clip markers (**F6**) while recording.
-- **Check my setup:** finds what costs sharpness, smoothness or sound, each with a button that fixes it, and a
-  performance report to copy into bug reports.
-
-Several of these come from [PushFPS](https://github.com/DosukaSOL/PushFPS) 4.1 (GPL-3.0). New in 1.5: frame pacing
-repair, sharp fit-to-window scaling, HUD lock and the VRR warning. New in 1.4: SGSR upscaling and Abyssal Garden in
-720p. [All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
+New in 1.7: Remote Play by IP address. New in 1.6: the start screen and tabbed menu, updates from inside VeyAmux,
+full-picture repeat detection, SMAA, texture/clarity/dehaze, comparison clips and *Check my setup* (several from
+[PushFPS](https://github.com/DosukaSOL/PushFPS) 4.1, GPL-3.0). New in 1.5: frame pacing repair, sharp fit-to-window
+scaling, HUD lock and the VRR warning. New in 1.4: SGSR upscaling and Abyssal Garden in 720p.
+[All release notes](https://github.com/8BiTw0LF/VeyAmux/releases)
 
 <p align="center">
   <img src="docs/images/steam-artwork.jpg" width="640" alt="VeyAmux's Steam library artwork: the background with the logo over it, the portrait cover and the wide cover">
@@ -171,8 +172,9 @@ needed for its own frame generation**, and everything else works without it:
   three **favourite signals** with ☆; they come first, the one used last on top. If you pick a compressed MJPEG mode where the card also has an uncompressed one, VeyAmux says so. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
 - **Find the best signal** (in the capture dialog): VeyAmux plays each sensible mode of the card for a few seconds on
-  *your* PC and measures what arrives: frame rate, how evenly, broken pictures, delay, CPU and GPU. It names the mode
-  with the least delay, the smoothest, the sharpest and one it recommends, with a **Use** button and ☆ on each. The
+  *your* PC and measures what arrives: frame rate, how evenly, broken pictures, delay, CPU and GPU. It names the best
+  mode for 30, 60 and 120 fps games (240 on a 240 Hz screen), the one with the least delay, the sharpest and one it
+  recommends for the game that ran, with a **Use** button and ☆ on each. The
   answer depends on the whole machine (USB controller, graphics card, CPU), so it is the same test on AMD, Intel and NVIDIA.
 - **MJPEG decoded on the graphics card**: VA-API on AMD and Intel, NVDEC on NVIDIA, the CPU when neither can. The
   picture goes to the GPU as NV12 (a third of the data of RGBA). F3 shows where it is decoded and how long it takes.
@@ -385,7 +387,7 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 | Motion does not look smoother | The display's refresh rate must match (see step 4). Log: `~/.config/VeyAmux/lsfg-vk.log` |
 | Lossless Scaling stutters or the picture seems to come and go | Turn VRR off (KDE: *Display & Monitor → Adaptive sync: Never*); VeyAmux warns when it is on. With a game locked to 30 fps, also turn on *Even out frame pacing*. |
 | Frame generation stops a few seconds after the mouse stops (Steam Big Picture / SteamOS) | Fixed in 1.8: VeyAmux keeps the pointer alive in gamescope while frame generation runs. To turn it off: `VEYAMUX_GAMESCOPE_KEEPALIVE=0`. |
-| The delay is high with 4K NV12 | Mostly USB transfer, see [Latency](#latency). Choose 1080p NV12 for the least delay. |
+| The delay is high with 4K NV12 | Mostly USB transfer, see [Latency](#latency). Choose 1080p NV12 for the least delay, or run *Find the best signal* under Capture (C). |
 | "Device or resource busy" | Another program (or a hung VeyAmux) uses the capture card. VeyAmux retries for 5 seconds and shows which program holds it. |
 | No 4K @ 60 HDR mode | Many cards only send HDR (P010) at 4K30 or 1440p60 over USB. Use 4K60 NV12 (SDR), 1440p60 P010 with upscaling, or 4K30 P010 with frame generation. |
 | HDR games look washed out | Choose a **P010 (HDR)** mode under Capture (C), and set *HDR capture: source peak brightness* to the game's HDR calibration. |
