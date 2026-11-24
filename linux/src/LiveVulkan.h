@@ -20,14 +20,24 @@
 
 class QQuickWindow;
 
+// One drawn picture's timing (ms), for the diagnostic report: see onBeforeRendering
+struct PaceSample { double due = 0, handed = 0, draw = 0, total = 0, gap = 0; };
+
 class LiveVulkan : public QObject {
     Q_OBJECT
 public:
     LiveVulkan(QQuickWindow* window, veyamux::VkContext* ctx, const QString& shaderDir, QObject* parent = nullptr);
+    // the timing of the last drawn pictures (up to ~900), oldest first
+    std::vector<PaceSample> paceSamples() { std::lock_guard l(paceM_); return {pace_.begin(), pace_.end()}; }
+    veyamux::VkContext* context() const { return ctx_; }
+    // the benchmark: GPU time per frame, unsmoothed, since resetGpuSums()
+    veyamux::GpuTimer::Sums gpuSums() const;
+    void resetGpuSums();
     ~LiveVulkan() override;
 
     bool init(std::string& error);                         // load pipelines (call before the window renders)
-    void submit(veyamux::RawFrame& frame);                   // capture thread; swaps: `frame` gets a used buffer back
+    void submit(veyamux::RawFrame& frame);
+    void dropPending();   // any thread: a picture waiting to be drawn gives its capture buffer back                   // capture thread; swaps: `frame` gets a used buffer back
     void setSettings(const veyamux::EnhanceSettings& s);
     void setActive(bool on);
     bool active() const { return active_.load(); }
@@ -85,6 +95,9 @@ private:
     // frame generation pacing
     std::chrono::steady_clock::time_point lastArrival_{};
     void requestFrame();   // draw a new picture as soon as possible
+    std::chrono::steady_clock::time_point prevDrawStart_{};
+    std::mutex paceM_;
+    std::deque<PaceSample> pace_;
     double frameMs_ = 1000.0 / 60.0;     // smoothed capture interval
     std::atomic<uint64_t> seq_{0};        // bumps for every real frame rendered
     std::atomic<uint64_t> lastHandle_{0};
@@ -100,5 +113,5 @@ private:
     std::thread streamThread_;
     std::atomic<bool> streamQuit_{false};
     void streamLoop();
-    void publish(uint64_t handle, int w, int h, bool recreated);
+    void publish(uint64_t handle, int w, int h, bool recreated, bool newPicture);
 };

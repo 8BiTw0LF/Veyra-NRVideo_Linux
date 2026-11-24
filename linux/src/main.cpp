@@ -1,6 +1,7 @@
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
 #include "PlayerBridge.h"
+#include "Diagnostics.h"
 #include "Gamepad.h"
 #include "VideoItem.h"
 #include "VkContext.h"
@@ -105,13 +106,34 @@ int main(int argc, char** argv) {
         qputenv("LIBVA_DRIVERS_PATH", "/usr/lib64/dri:/usr/lib/x86_64-linux-gnu/dri:/usr/lib/dri:/usr/lib/va");
 
     QCoreApplication::setOrganizationName("VeyAmux");
-    QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("1.8");
+    // VeyAmux Debug runs next to VeyAmux with its own settings (~/.config/VeyAmux/VeyAmux-Debug.conf) and data folder
+    QCoreApplication::setApplicationName(veyamux::diag::kDebugBuild ? "VeyAmux-Debug" : "VeyAmux");
+    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("1.8"));
+    {
+        // the UI probe and the card watcher are helper processes: no log file of their own
+        bool helper = false;
+        for (int i = 1; i < argc; ++i)
+            if (std::strcmp(argv[i], "--probe-ui") == 0 || std::strcmp(argv[i], "--watch") == 0) helper = true;
+        veyamux::diag::install(!helper);
+    }
+    // VeyAmux Debug: the switches of the Debug tab are environment variables, set here for this run
+    if (veyamux::diag::kDebugBuild) {
+        QSettings q;
+        q.beginGroup("debug/env");
+        for (const QString& k : q.childKeys())
+            if (k.startsWith("VEYAMUX_") && !qEnvironmentVariableIsSet(k.toLatin1().constData())) {
+                qputenv(k.toLatin1().constData(), q.value(k).toString().toLatin1());
+                qInfo("Debug switch: %s=%s", qPrintable(k), qPrintable(q.value(k).toString()));
+            }
+    }
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        const QString now = base + "/VeyAmux/VeyAmux.conf", before = base + "/Veyra/Veyra.conf";
+        const QString now = base + "/VeyAmux/" + QCoreApplication::applicationName() + ".conf", before = base + "/Veyra/Veyra.conf";
         if (!QFileInfo::exists(now) && QFileInfo::exists(before) && QDir().mkpath(base + "/VeyAmux")) QFile::copy(before, now);
+        // VeyAmux Debug starts from a copy of VeyAmux's settings; after that the two are separate
+        if (veyamux::diag::kDebugBuild && !QFileInfo::exists(now) && QFileInfo::exists(base + "/VeyAmux/VeyAmux.conf"))
+            QFile::copy(base + "/VeyAmux/VeyAmux.conf", now);
         // The settings hold the stream key and the PlayStation registration keys: only this user may read them.
         // (Qt keeps a file's permissions when it rewrites it.)
         QDir().mkpath(base + "/VeyAmux");
@@ -136,8 +158,8 @@ int main(int argc, char** argv) {
         else qputenv("QSG_NO_VSYNC", "1");
     }
     QApplication app(argc, argv);
-    QGuiApplication::setApplicationDisplayName("VeyAmux");
-    QGuiApplication::setDesktopFileName(QStringLiteral("veyamux"));
+    QGuiApplication::setApplicationDisplayName(veyamux::diag::kDebugBuild ? "VeyAmux Debug" : "VeyAmux");
+    QGuiApplication::setDesktopFileName(veyamux::diag::kDebugBuild ? QStringLiteral("veyamux-debug") : QStringLiteral("veyamux"));
 
     QString openFile, grabPath, capturePath;
     bool startPanel = false, startDialog = false;
@@ -326,6 +348,8 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
+    // Test hook: the capture dialog's signal test with sample results (VEYAMUX_TEST_SIGNALTEST=1, for screenshots)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_SIGNALTEST")) player.sampleSignalTest();
     engine.load(QUrl("qrc:/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;
     auto* win = qobject_cast<QQuickWindow*>(engine.rootObjects().first());

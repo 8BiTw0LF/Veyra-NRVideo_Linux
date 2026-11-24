@@ -103,6 +103,10 @@ void PlayerBridge::installUpdate() {
 }
 
 void PlayerBridge::openReleasePage() {
-    QDesktopServices::openUrl(QUrl(updRelease_.page.isEmpty() ? QStringLiteral("https://github.com/8BiTw0LF/VeyAmux/releases/latest")
-                                                               : updRelease_.page));
+#ifdef VEYAMUX_DEBUG_BUILD
+    const QString fallback = QStringLiteral("https://github.com/8BiTw0LF/VeyAmux/releases/tag/debug-build");
+#else
+    const QString fallback = QStringLiteral("https://github.com/8BiTw0LF/VeyAmux/releases/latest");
+#endif
+    QDesktopServices::openUrl(QUrl(updRelease_.page.isEmpty() ? fallback : updRelease_.page));
 }

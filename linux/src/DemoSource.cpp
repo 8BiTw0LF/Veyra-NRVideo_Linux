@@ -1,4 +1,5 @@
 // VeyAmux for Linux: the demo scene as a source (see DemoSource.h).
+#include <pthread.h>
 #include "DemoSource.h"
 #include "CaptureSource.h"
 
@@ -148,7 +149,7 @@ Engine* engine() {
     static std::once_flag once;
     std::call_once(once, [] {
         e = new Engine;
-        e->th = std::thread([] { engine()->run(); });
+        e->th = std::thread([] { pthread_setname_np(pthread_self(), "vx-demo"); engine()->run(); });
     });
     return e;
 }

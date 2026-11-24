@@ -1,4 +1,5 @@
 #include "MediaEngine.h"
+#include <pthread.h>
 #include "FramePacingRepair.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
@@ -27,6 +28,10 @@ extern "C" {
 #include <utility>
 
 namespace veyamux {
+namespace {
+// thread names show up in the benchmark's CPU list, top and perf (15 characters at most)
+void threadName(const char* n) { pthread_setname_np(pthread_self(), n); }
+}
 namespace {
 using steady = std::chrono::steady_clock;
 double secs(steady::duration d) { return std::chrono::duration<double>(d).count(); }
@@ -184,12 +189,12 @@ bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGp
     vpkts_.abort = apkts_.abort = false;
     clock_.setRunning(false);
     clock_.set(0.0);
-    demux_ = std::thread([this] { demuxLoop(); });
+    demux_ = std::thread([this] { threadName("vx-demux"); demuxLoop(); });
     if (vIndex_ >= 0) {
-        vdec_ = std::thread([this] { videoLoop(); });
-        render_ = std::thread([this] { renderLoop(); });
+        vdec_ = std::thread([this] { threadName("vx-vdecode"); videoLoop(); });
+        render_ = std::thread([this] { threadName("vx-render"); renderLoop(); });
     }
-    if (aIndex_ >= 0) adec_ = std::thread([this] { audioLoop(); });
+    if (aIndex_ >= 0) adec_ = std::thread([this] { threadName("vx-adecode"); audioLoop(); });
     return true;
 }
 
@@ -210,7 +215,7 @@ void MediaEngine::joinAll() {
 void MediaEngine::close() {
     if (!fmt_ && !live_) return;
     joinAll();
-    cap_.reset();
+    { std::lock_guard l(capM_); cap_.reset(); }
     live_ = false;
     rawLive_ = false;
     clearQueue(vpkts_);
@@ -257,8 +262,9 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
                               std::string& error, bool rawToGpu) {
     close();
     auto cap = std::make_unique<CaptureSource>();
+    cap->setMjpegDecode(mjpegDecode_.load());
     if (!cap->open(devicePath, mode, error)) return false;
-    cap_ = std::move(cap);
+    { std::lock_guard l(capM_); cap_ = std::move(cap); }
     info_ = {};
     info_.title = "Capture: " + (cap_->cardName().empty() ? devicePath : cap_->cardName());
     info_.hasVideo = true;
@@ -279,11 +285,27 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     live_ = true;
     rawLive_ = rawToGpu;
     playing_ = true;
-    capThread_ = std::thread([this] { captureLoop(); });
-    if (rawToGpu) pacer_ = std::thread([this] { pacerLoop(); });
-    if (!rawToGpu) render_ = std::thread([this] { renderLoop(); });
-    if (!audioSource.empty()) capAudioThread_ = std::thread([this] { captureAudioLoop(); });
+    capThread_ = std::thread([this] { threadName("vx-capture"); captureLoop(); });
+    if (rawToGpu) pacer_ = std::thread([this] { threadName("vx-pacer"); pacerLoop(); });
+    if (!rawToGpu) render_ = std::thread([this] { threadName("vx-render"); renderLoop(); });
+    if (!audioSource.empty()) capAudioThread_ = std::thread([this] { threadName("vx-capaudio"); captureAudioLoop(); });
     return true;
+}
+
+MediaEngine::CaptureStats MediaEngine::captureStats() const {
+    std::lock_guard l(capM_);
+    CaptureStats st;
+    if (!cap_ || !live_.load()) return st;
+    st.delivered = cap_->deliveredFrames();
+    st.corrupt = cap_->corruptFrames();
+    st.decodePath = cap_->mjpegDecodePath();
+    st.decodeMs = cap_->mjpegDecodeMs();
+    return st;
+}
+
+std::vector<double> MediaEngine::takeCaptureArrivals() {
+    std::lock_guard l(capM_);
+    return cap_ && live_.load() ? cap_->takeArrivals() : std::vector<double>{};
 }
 
 void MediaEngine::captureLoop() {
@@ -308,6 +330,15 @@ void MediaEngine::captureLoop() {
     // Reopens the device with the same mode: when the card is unplugged, or when it stops delivering after the
     // console changes resolution/refresh rate/HDR (many UVC cards stall until the stream is restarted).
     auto reopen = [&]() -> bool {
+        // Every capture buffer must be given back first: a mapping still held keeps the old device file open, and the
+        // card then refuses the new stream as busy.
+        raw.hold.reset(); raw.ext = nullptr;
+        {
+            std::lock_guard l(pace_m_);
+            for (auto& p : paced_) { p.frame.hold.reset(); p.frame.ext = nullptr; }
+            paced_.clear();
+        }
+        if (cb_.onReleaseLive) cb_.onReleaseLive();
         cap_->close();
         std::string e;
         return cap_->open(capPath_, capMode_, e);
@@ -922,7 +953,7 @@ void MediaEngine::audioLoop() {
 
 void MediaEngine::startGpu() {
     if (gpuStarted_.exchange(true)) return;
-    gpuThread_ = std::thread([this] { ensureGpu(); });
+    gpuThread_ = std::thread([this] { threadName("vx-gpuinit"); ensureGpu(); });
 }
 
 void MediaEngine::ensureGpu() {

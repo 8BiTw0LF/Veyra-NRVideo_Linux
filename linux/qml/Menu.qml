@@ -28,7 +28,7 @@ Rectangle {
         { key: "tabSound", icon: "icons/volume.svg" },
         { key: "tabRecord", icon: "icons/record.svg" },
         { key: "tabSystem", icon: "icons/system.svg" }
-    ]
+    ].concat(player.debugBuild ? [{ key: "tabDebug", icon: "icons/bug.svg" }] : [])
     readonly property var scales: [1.0, 1.5, 2.0, 3.0]
 
     readonly property real designW: 600
@@ -104,6 +104,13 @@ Rectangle {
             Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "VeyAmux"; color: Theme.heading
                 font.pixelSize: 22 * Theme.headScale; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
             Text { font.family: Theme.font; text: player.appVersion; color: Theme.dim; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+            Rectangle {   // VeyAmux Debug: always visible, so a screenshot shows which build it is
+                visible: player.debugBuild
+                anchors.verticalCenter: parent.verticalCenter
+                width: dbgPill.implicitWidth + 16; height: 22; radius: 11 * Theme.round; color: Theme.warn
+                Text { id: dbgPill; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 12; font.weight: Font.Bold; color: "#1a1020"; text: "DEBUG" }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: menu.tab = 6 }
+            }
             Rectangle {   // a new version: one click to the System tab
                 visible: player.updateState === "available" || player.updateState === "ready"
                 anchors.verticalCenter: parent.verticalCenter
@@ -127,7 +134,7 @@ Rectangle {
                 required property var modelData
                 required property int index
                 readonly property bool sel: menu.tab === index
-                width: (tabBar.width - 5 * tabBar.spacing) / 6; height: 62; radius: 12 * Theme.round
+                width: (tabBar.width - (menu.tabs.length - 1) * tabBar.spacing) / menu.tabs.length; height: 62; radius: 12 * Theme.round
                 color: sel ? Theme.accentSoft : (tMa.containsMouse ? Theme.surfaceHover : "transparent")
                 border.color: sel ? Theme.accentLine : "transparent"; border.width: 1
                 Column {
@@ -562,6 +569,87 @@ Rectangle {
                                 }
                             }
                         }
+                    }
+                }
+
+                // ======================================== Debug (VeyAmux Debug only)
+                Column {
+                    id: dbgPage
+                    visible: player.debugBuild && menu.tab === 6
+                    width: parent.width; spacing: 16
+                    property var switches: player.debugBuild ? player.debugSwitches() : []
+                    Column {
+                        width: parent.width; spacing: 8
+                        Title { text: tr("dbgTitle") }
+                        Hint { text: player.buildInfo + "\n" + tr("dbgHint") }
+                    }
+                    Sep {}
+                    // ---- the full report
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("dbgReport") }
+                        Hint { text: tr("dbgReportHint") }
+                        Rectangle {
+                            width: parent.width; height: 96; radius: 8 * Theme.round; color: Theme.surface
+                            border.color: noteIn.activeFocus ? Theme.accent : Theme.surfaceHover
+                            Flickable {
+                                id: noteFlick
+                                anchors { fill: parent; margins: 10 }
+                                contentHeight: noteIn.implicitHeight; clip: true
+                                TextEdit {
+                                    id: noteIn; width: noteFlick.width; wrapMode: TextEdit.Wrap; selectByMouse: true
+                                    color: Theme.text; font.family: Theme.font; font.pixelSize: 15
+                                    Text { font.family: Theme.font; visible: !parent.text && !parent.activeFocus; text: tr("dbgNote"); color: Theme.dim; font.pixelSize: 15; width: parent.width; wrapMode: Text.Wrap }
+                                }
+                            }
+                        }
+                        Flow {
+                            width: parent.width; spacing: 6
+                            Btn { text: tr("dbgSave"); primary: true; onClicked: player.saveReport(noteIn.text) }
+                            Btn { text: tr("dbgGitHub"); onClicked: player.reportOnGitHub(noteIn.text) }
+                            Btn { text: tr("dbgFolder"); onClicked: player.openReportFolder() }
+                            Btn { visible: player.lastReport !== ""; text: tr("dbgCopyPath"); onClicked: player.copyReportPath() }
+                        }
+                        Hint { visible: player.lastReport !== ""; text: tr("dbgSaved").replace("%1", player.lastReport) }
+                    }
+                    Sep {}
+                    // ---- the benchmark
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("dbgBench") }
+                        Hint { text: tr("dbgBenchHint") }
+                        Flow {
+                            width: parent.width; spacing: 6
+                            // the menu closes: it would be measured too (and the demo waits while it is open)
+                            Btn { visible: !player.benchRunning; text: tr("dbgBenchStart"); primary: player.hasMedia
+                                onClicked: { player.startBenchmark(); if (player.benchRunning) menu.closeRequested() } }
+                            Btn { visible: player.benchRunning; text: tr("dbgBenchStop"); danger: true; onClicked: player.stopBenchmark() }
+                            Btn { visible: !player.hasMedia && player.demoAvailable; text: tr("dbgBenchDemo"); onClicked: player.openDemo(60, 1080) }
+                        }
+                        Rectangle {
+                            visible: player.benchRunning
+                            width: parent.width; height: 8; radius: 4; color: Theme.surface
+                            Rectangle { width: parent.width * player.benchProgress; height: parent.height; radius: 4; gradient: Theme.sunset }
+                        }
+                        Hint { visible: player.benchText !== ""; text: player.benchText; color: Theme.label }
+                    }
+                    Sep {}
+                    // ---- switches (environment variables at the next start)
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("dbgSwitches") }
+                        Hint { text: tr("dbgSwitchesHint") }
+                        Repeater {
+                            model: dbgPage.switches
+                            delegate: Column {
+                                required property var modelData
+                                width: dbgPage.width; spacing: 2
+                                SwitchRow { text: modelData.title; checked: modelData.on
+                                    onToggled: (v) => { player.setDebugSwitch(modelData.env, v); dbgPage.switches = player.debugSwitches() } }
+                                Hint { text: modelData.detail; font.pixelSize: 12 }
+                            }
+                        }
+                        Btn { visible: player.debugRestartNeeded; text: tr("dbgRestart"); primary: true; onClicked: player.restartApp() }
                     }
                 }
             }

@@ -1,4 +1,5 @@
 // VeyAmux for Linux: instant replay and recording (see Recorder.h).
+#include <pthread.h>
 #include "Recorder.h"
 
 #include <algorithm>
@@ -169,7 +170,7 @@ struct Recorder::StreamOut {
     }
 };
 
-Recorder::Recorder() { thread_ = std::thread([this] { worker(); }); }
+Recorder::Recorder() { thread_ = std::thread([this] { pthread_setname_np(pthread_self(), "vx-encode"); worker(); }); }
 
 void Recorder::startStream(const std::string& url, int kbps) {
     { std::lock_guard l(qm_); streamUrl_ = url; targetKbps_ = std::clamp(kbps, 1000, 50000); streamStartPending_ = true; streamStopPending_ = false; }
@@ -320,7 +321,7 @@ void Recorder::worker() {
                 { std::lock_guard l(qm_); so->url = streamUrl_; }
                 so->par = par;
                 StreamOut* raw = so.get();
-                so->t = std::thread([raw] { raw->run(); });
+                so->t = std::thread([raw] { pthread_setname_np(pthread_self(), "vx-stream"); raw->run(); });
                 stream_ = std::move(so);
                 streamStart_ = Clock::now();
                 forceKey_ = true;

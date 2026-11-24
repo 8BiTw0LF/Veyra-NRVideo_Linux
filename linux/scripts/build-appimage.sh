@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds VeyAmux-x86_64.AppImage.
+# Builds VeyAmux-x86_64.AppImage, or with VEYAMUX_FLAVOR=debug VeyAmux-Debug-x86_64.AppImage (debug symbols, log file,
+# crash backtraces, report, benchmark; own settings and update channel; VEYAMUX_BUILD_NUMBER numbers it).
 # Needs (Ubuntu 24.04 names): cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-svg-dev
 #   qt6-wayland libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
 #   libpulse-dev libva-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts patchelf file
@@ -7,13 +8,24 @@
 #   python3 glslang-tools  (AMD FidelityFX shader generation)  qt6-shader-baker (qsb, HDR output shaders)  zsync (zsyncmake)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="${BUILD_DIR:-$ROOT/build}"; APPDIR="$BUILD/AppDir"; OUT="${OUT_DIR:-$ROOT/dist}"
+BUILD="$(realpath -m "${BUILD_DIR:-$ROOT/build}")"; APPDIR="$BUILD/AppDir"; OUT="$(realpath -m "${OUT_DIR:-$ROOT/dist}")"
 "$ROOT/scripts/fetch-tools.sh"
 T="$ROOT/.tools"; export APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1   # works without FUSE (containers/CI)
 
-cmake -G Ninja -S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DVEYAMUX_DXC_ROOT="$T/dxc"
+FLAVOR="${VEYAMUX_FLAVOR:-release}"
+if [ "$FLAVOR" = debug ]; then
+  NAME="VeyAmux-Debug-x86_64.AppImage"
+  CFG=(-DCMAKE_BUILD_TYPE=RelWithDebInfo -DVEYAMUX_DEBUG_BUILD=ON -DVEYAMUX_BUILD_NUMBER="${VEYAMUX_BUILD_NUMBER:-0}")
+  DEFAULT_UPDATE="gh-releases-zsync|8BiTw0LF|VeyAmux|debug-build|$NAME.zsync"
+else
+  NAME="VeyAmux-x86_64.AppImage"
+  CFG=(-DCMAKE_BUILD_TYPE=Release -DVEYAMUX_DEBUG_BUILD=OFF)
+  DEFAULT_UPDATE="gh-releases-zsync|8BiTw0LF|VeyAmux|latest|$NAME.zsync"
+fi
+cmake -G Ninja -S "$ROOT" -B "$BUILD" "${CFG[@]}" -DCMAKE_INSTALL_PREFIX=/usr -DVEYAMUX_DXC_ROOT="$T/dxc"
 cmake --build "$BUILD"
 rm -rf "$APPDIR"; DESTDIR="$APPDIR" cmake --install "$BUILD"
+[ "$FLAVOR" = debug ] && sed -i 's/^Name=VeyAmux$/Name=VeyAmux Debug/' "$APPDIR/usr/share/applications/veyamux.desktop"
 
 QMAKE="$(command -v qmake6 || echo /usr/lib/qt6/bin/qmake6)"; export QMAKE
 export QML_SOURCES_PATHS="$ROOT/qml"
@@ -38,6 +50,6 @@ find "$APPDIR" \( -name 'libvulkan.so*' -o -name 'libGL.so*' -o -name 'libEGL.so
 mkdir -p "$OUT"
 # Update information: AppImageUpdate / Gear Lever find new versions among the GitHub releases (upload the .zsync file
 # next to the AppImage in every release).
-UPDATE_INFO="${VEYAMUX_UPDATE_INFO:-gh-releases-zsync|8BiTw0LF|VeyAmux|latest|VeyAmux-x86_64.AppImage.zsync}"
-( cd "$OUT" && ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream --runtime-file "$T/appimage/runtime-x86_64" -u "$UPDATE_INFO" "$APPDIR" "VeyAmux-x86_64.AppImage" )
-echo "Built: $OUT/VeyAmux-x86_64.AppImage (+ .zsync for the release)"
+UPDATE_INFO="${VEYAMUX_UPDATE_INFO:-$DEFAULT_UPDATE}"
+( cd "$OUT" && ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream --runtime-file "$T/appimage/runtime-x86_64" -u "$UPDATE_INFO" "$APPDIR" "$NAME" )
+echo "Built: $OUT/$NAME (+ .zsync for the release)"

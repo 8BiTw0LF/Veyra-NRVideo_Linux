@@ -16,7 +16,14 @@ Item {
     signal remotePlay()             // "PlayStation Remote Play" was chosen
 
     visible: false
-    function openDialog() { refresh(); visible = true }
+    property bool testView: false   // "Find the best signal" replaces the lists while it runs and shows its results
+    function openDialog() { refresh(); testView = player.signalTestRunning; visible = true }
+    function closeDialog() {
+        if (player.signalTestRunning) player.stopSignalTest()
+        testView = false
+        visible = false
+        closed()
+    }
     readonly property bool isShare: devices.length > 0 && devIdx < devices.length && devices[devIdx].path === "screencast"
     readonly property int cardCount: devices.length - (player.screenCastAvailable() ? 1 : 0)
     function refresh() {
@@ -64,7 +71,7 @@ Item {
         if (srcIdx === 0) for (var j = 0; j < sources.length; ++j) if (sources[j].name !== "" && sources[j].name === want) srcIdx = j
     }
 
-    Rectangle { anchors.fill: parent; color: "#cc000000"; MouseArea { anchors.fill: parent; onClicked: { dlg.visible = false; dlg.closed() } } }
+    Rectangle { anchors.fill: parent; color: "#cc000000"; MouseArea { anchors.fill: parent; onClicked: dlg.closeDialog() } }
 
     component Row_: Rectangle {
         id: row
@@ -91,6 +98,7 @@ Item {
         Column {
             anchors { fill: parent; margins: 22 }
             spacing: 10
+            visible: !dlg.testView
             Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: tr("captureTitle"); color: Theme.heading; font.pixelSize: 20 * Theme.headScale; font.weight: Font.DemiBold }
 
             Section { text: tr("device") }
@@ -133,6 +141,10 @@ Item {
             Text { font.family: Theme.font; visible: dlg.modes.length > 0; width: parent.width; wrapMode: Text.Wrap
                 text: dlg.favFull ? tr("favoritesFull").arg(player.maxFavoriteModes()) : tr("favoritesHint").arg(player.maxFavoriteModes())
                 color: dlg.favFull ? Theme.warn : Theme.muted; font.pixelSize: 11; lineHeight: 1.15 }
+            // measures the card's modes on this PC (USB, graphics card, CPU) instead of guessing from the list
+            Text { font.family: Theme.font; visible: dlg.modes.length > 1 && !dlg.isShare; text: tr("sigButton"); color: Theme.accent
+                font.pixelSize: 12; font.weight: Font.DemiBold
+                MouseArea { anchors { fill: parent; margins: -4 } cursorShape: Qt.PointingHandCursor; onClicked: dlg.testView = true } }
 
             // a compressed mode where the card has an uncompressed one (after PushFPS 4.1): said, never switched for you
             Rectangle {
@@ -161,11 +173,13 @@ Item {
         }
 
         Rectangle {
+            visible: !dlg.testView
             anchors { left: parent.left; bottom: parent.bottom; margins: 22 }
             width: psT.implicitWidth + 28; height: 38; radius: 10 * Theme.round; color: m0.containsMouse ? Theme.surfaceHover : Theme.surface
             Text { id: psT; font.family: Theme.font; anchors.centerIn: parent; text: "PlayStation Remote Play"; color: Theme.text; font.pixelSize: 13 }
             MouseArea { id: m0; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { dlg.visible = false; dlg.closed(); dlg.remotePlay() } } }
         Row {
+            visible: !dlg.testView
             anchors { right: parent.right; bottom: parent.bottom; margins: 22 }
             spacing: 8
             Rectangle { width: 96; height: 38; radius: 10 * Theme.round; color: m1.containsMouse ? Theme.surfaceHover : Theme.surface
@@ -173,7 +187,7 @@ Item {
                 MouseArea { id: m1; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: dlg.refresh() } }
             Rectangle { width: 96; height: 38; radius: 10 * Theme.round; color: m2.containsMouse ? Theme.surfaceHover : Theme.surface
                 Text { font.family: Theme.font; anchors.centerIn: parent; text: tr("cancel"); color: Theme.text; font.pixelSize: 13 }
-                MouseArea { id: m2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { dlg.visible = false; dlg.closed() } } }
+                MouseArea { id: m2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: dlg.closeDialog() } }
             Rectangle { width: 120; height: 38; radius: 10 * Theme.round; opacity: dlg.devices.length > 0 && (dlg.modes.length > 0 || dlg.isShare) ? 1 : 0.4
                 color: m3.containsMouse ? Theme.accentHover : Theme.accent
                 Text { font.family: Theme.font; anchors.centerIn: parent; text: tr("start"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
@@ -183,6 +197,81 @@ Item {
                         if (dlg.isShare) { player.openScreenCast(dlg.sources[dlg.srcIdx].name, false); dlg.visible = false; dlg.closed(); return }
                         if (player.openCapture(dlg.devices[dlg.devIdx].path, dlg.modeIdx, dlg.sources[dlg.srcIdx].name)) { dlg.visible = false; dlg.closed() }
                     } } }
+        }
+        // ---- Find the best signal
+        Item {
+            id: sigView
+            visible: dlg.testView
+            anchors { fill: parent; margins: 22 }
+            readonly property var results: player.signalTestResults
+            Column {
+                id: sigHead
+                width: parent.width; spacing: 8
+                Text { font.family: Theme.headFont; width: parent.width; elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase
+                    text: tr("sigTitle"); color: Theme.heading; font.pixelSize: 20 * Theme.headScale; font.weight: Font.DemiBold }
+                Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 12; color: Theme.muted
+                    visible: sigView.results.length === 0 || player.signalTestRunning; text: tr("sigIntro") }
+                Rectangle { visible: player.signalTestRunning; width: parent.width; height: 6; radius: 3; color: Theme.surface
+                    Rectangle { width: parent.width * player.signalTestProgress; height: parent.height; radius: 3; color: Theme.accent
+                        Behavior on width { NumberAnimation { duration: 300 } } } }
+                Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; visible: text !== ""; text: player.signalTestText
+                    color: Theme.text; font.pixelSize: 13; font.weight: Font.Medium; lineHeight: 1.15 }
+            }
+            Flickable {
+                anchors { left: parent.left; right: parent.right; top: sigHead.bottom; topMargin: 10; bottom: sigNote.top; bottomMargin: 8 }
+                contentHeight: resCol.height; clip: true
+                Column { id: resCol; width: parent.width; spacing: 6
+                    Repeater { model: sigView.results
+                        Rectangle {
+                            width: resCol.width; height: rc.height + 16; radius: 8 * Theme.round
+                            color: modelData.recommended ? Theme.accentSoft : Theme.surface
+                            border.color: modelData.recommended ? Theme.accent : "transparent"
+                            opacity: modelData.keepsUp || !modelData.measured ? 1 : 0.75
+                            Column { id: rc
+                                anchors { left: parent.left; right: useBtn.left; top: parent.top; margins: 8; rightMargin: 8 }
+                                spacing: 3
+                                Text { font.family: Theme.font; width: parent.width; elide: Text.ElideRight; text: modelData.label; color: Theme.heading; font.pixelSize: 13; font.weight: Font.DemiBold }
+                                Flow { width: parent.width; spacing: 4; visible: modelData.tags.length > 0
+                                    Repeater { model: modelData.tags
+                                        Rectangle { height: 18; width: tagT.implicitWidth + 12; radius: 9; color: Theme.surfaceDeep; border.color: Theme.accent
+                                            Text { id: tagT; anchors.centerIn: parent; font.family: Theme.font; text: modelData; color: Theme.accent; font.pixelSize: 10; font.weight: Font.DemiBold } } } }
+                                Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; visible: text !== ""; text: modelData.stats; color: Theme.text; font.pixelSize: 11; lineHeight: 1.1 }
+                                Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; visible: text !== ""; text: modelData.flag; color: modelData.keepsUp ? Theme.muted : Theme.warn; font.pixelSize: 11; lineHeight: 1.1 }
+                            }
+                            Text { id: favS
+                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                text: modelData.favorite ? "★" : "☆"; font.pixelSize: 18
+                                color: modelData.favorite ? Theme.accent : (fsMa.containsMouse ? Theme.text : Theme.muted)
+                                MouseArea { id: fsMa; anchors { fill: parent; margins: -8 } hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { dlg.favFull = !player.toggleFavoriteSignal(index) } } }
+                            Rectangle { id: useBtn
+                                visible: modelData.measured && !player.signalTestRunning
+                                anchors { right: favS.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                                width: visible ? useT.implicitWidth + 22 : 0; height: 30; radius: 8 * Theme.round
+                                color: modelData.recommended ? (uMa.containsMouse ? Theme.accentHover : Theme.accent) : (uMa.containsMouse ? Theme.surfaceHover : Theme.surfaceDeep)
+                                Text { id: useT; anchors.centerIn: parent; font.family: Theme.font; text: tr("sigUse"); font.pixelSize: 12; font.weight: Font.DemiBold
+                                    color: modelData.recommended ? Theme.accentInk : Theme.text }
+                                MouseArea { id: uMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: if (player.useSignalResult(index)) { dlg.testView = false; dlg.visible = false; dlg.closed() } } }
+                        } } }
+            }
+            Text { id: sigNote; font.family: Theme.font; anchors { left: parent.left; right: parent.right; bottom: sigBtns.top; bottomMargin: 10 }
+                wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 11; color: Theme.muted
+                text: (dlg.favFull ? tr("favoritesFull").arg(player.maxFavoriteModes()) + "\n" : "") + tr("sigNote") }
+            Row {
+                id: sigBtns
+                anchors { right: parent.right; bottom: parent.bottom }
+                spacing: 8
+                Rectangle { width: Math.max(96, bT.implicitWidth + 28); height: 38; radius: 10 * Theme.round; color: bMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                    Text { id: bT; font.family: Theme.font; anchors.centerIn: parent; text: player.signalTestRunning ? tr("sigStop") : tr("sigBack"); color: Theme.text; font.pixelSize: 13 }
+                    MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: { if (player.signalTestRunning) player.stopSignalTest(); else { dlg.testView = false; dlg.favFull = false; dlg.modes = player.captureModes(dlg.devices[dlg.devIdx].path) } } } }
+                Rectangle { visible: !player.signalTestRunning; width: Math.max(120, sT.implicitWidth + 28); height: 38; radius: 10 * Theme.round
+                    color: sMa.containsMouse ? Theme.accentHover : Theme.accent
+                    Text { id: sT; font.family: Theme.font; anchors.centerIn: parent; text: sigView.results.length > 0 ? tr("sigAgain") : tr("sigStart"); color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    MouseArea { id: sMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: { dlg.favFull = false; player.startSignalTest(dlg.devices[dlg.devIdx].path, dlg.sources[dlg.srcIdx].name) } } }
+            }
         }
     }
 }

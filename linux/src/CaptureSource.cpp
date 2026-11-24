@@ -6,6 +6,7 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
 #include <libswscale/swscale.h>
@@ -262,6 +263,10 @@ FrameConverter::FrameConverter() = default;
 FrameConverter::~FrameConverter() {
     sws_freeContext(sws_);
     if (mjpeg_) avcodec_free_context(&mjpeg_);
+    if (hwDec_) avcodec_free_context(&hwDec_);
+    av_buffer_unref(&hwDevice_);
+    av_frame_free(&hwFrame_);
+    av_frame_free(&swFrame_);
     av_frame_free(&frame_);
     av_packet_free(&pkt_);
 }
@@ -301,6 +306,7 @@ bool FrameConverter::convert(const uint8_t* data, size_t size, std::vector<uint8
         pkt_->data = packet_.data();
         pkt_->size = int(size);
         if (avcodec_send_packet(mjpeg_, pkt_) < 0 || avcodec_receive_frame(mjpeg_, frame_) < 0) {
+            ++corrupt_;
             error = "Corrupt MJPEG frame";
             return false;
         }
@@ -335,6 +341,129 @@ bool FrameConverter::convert(const uint8_t* data, size_t size, std::vector<uint8
     int dstLines[4] = {w * 4, 0, 0, 0};
     sws_scale(sws_, planes, lines, 0, h, dst, dstLines);
     w_ = w; h_ = h;
+    return true;
+}
+
+namespace {
+AVPixelFormat gHwFmt = AV_PIX_FMT_NONE;   // the format the hardware decoder being opened hands out
+AVPixelFormat pickHw(AVCodecContext*, const AVPixelFormat* fmts) {
+    for (const AVPixelFormat* p = fmts; *p != AV_PIX_FMT_NONE; ++p)
+        if (*p == gHwFmt) return *p;
+    return AV_PIX_FMT_NONE;   // no hardware path for this picture: the decode fails and the CPU takes over
+}
+// NV12 from a decoded picture: NV12 as is, 4:2:0 / 4:2:2 planar (JPEG's own formats) with the chroma interleaved
+// (4:2:2 averaged down to 4:2:0). False for anything else.
+bool toNv12(const AVFrame* f, std::vector<uint8_t>& out, int& stride) {
+    const int w = f->width & ~1, h = f->height & ~1;
+    if (w <= 0 || h <= 0) return false;
+    const auto fmt = AVPixelFormat(f->format);
+    const bool nv12 = fmt == AV_PIX_FMT_NV12;
+    const bool p420 = fmt == AV_PIX_FMT_YUVJ420P || fmt == AV_PIX_FMT_YUV420P;
+    const bool p422 = fmt == AV_PIX_FMT_YUVJ422P || fmt == AV_PIX_FMT_YUV422P;
+    if (!nv12 && !p420 && !p422) return false;
+    stride = w;
+    out.resize(size_t(w) * h * 3 / 2);
+    for (int y = 0; y < h; ++y) std::memcpy(out.data() + size_t(y) * w, f->data[0] + size_t(y) * f->linesize[0], size_t(w));
+    uint8_t* uv = out.data() + size_t(w) * h;
+    const int cw = w / 2;
+    for (int y = 0; y < h / 2; ++y) {
+        uint8_t* d = uv + size_t(y) * w;
+        if (nv12) { std::memcpy(d, f->data[1] + size_t(y) * f->linesize[1], size_t(w)); continue; }
+        const int r0 = p422 ? 2 * y : y, r1 = p422 ? 2 * y + 1 : y;
+        const uint8_t* u0 = f->data[1] + size_t(r0) * f->linesize[1];
+        const uint8_t* v0 = f->data[2] + size_t(r0) * f->linesize[2];
+        const uint8_t* u1 = f->data[1] + size_t(r1) * f->linesize[1];
+        const uint8_t* v1 = f->data[2] + size_t(r1) * f->linesize[2];
+        for (int x = 0; x < cw; ++x) {
+            d[2 * x] = uint8_t((u0[x] + u1[x] + 1) >> 1);
+            d[2 * x + 1] = uint8_t((v0[x] + v1[x] + 1) >> 1);
+        }
+    }
+    return true;
+}
+} // namespace
+
+bool FrameConverter::openHw() {
+    hwTried_ = true;
+    const AVCodec* c = avcodec_find_decoder(AV_CODEC_ID_MJPEG);
+    if (!c) return false;
+    struct Try { AVHWDeviceType type; const char* name; };
+    // VA-API: AMD and Intel (and the graphics card VEYAMUX_VAAPI_DEVICE names); CUDA: NVIDIA's NVDEC
+    for (const Try& t : {Try{AV_HWDEVICE_TYPE_VAAPI, "VA-API"}, Try{AV_HWDEVICE_TYPE_CUDA, "NVDEC"}}) {
+        AVPixelFormat fmt = AV_PIX_FMT_NONE;
+        for (int i = 0;; ++i) {
+            const AVCodecHWConfig* cfg = avcodec_get_hw_config(c, i);
+            if (!cfg) break;
+            if (cfg->device_type == t.type && (cfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) { fmt = cfg->pix_fmt; break; }
+        }
+        if (fmt == AV_PIX_FMT_NONE) continue;   // this FFmpeg has no such path for MJPEG
+        const char* dev = t.type == AV_HWDEVICE_TYPE_VAAPI ? std::getenv("VEYAMUX_VAAPI_DEVICE") : nullptr;
+        AVBufferRef* device = nullptr;
+        if (av_hwdevice_ctx_create(&device, t.type, dev, nullptr, 0) < 0) continue;
+        AVCodecContext* ctx = avcodec_alloc_context3(c);
+        ctx->hw_device_ctx = av_buffer_ref(device);
+        ctx->get_format = pickHw;
+        ctx->flags |= AV_CODEC_FLAG_LOW_DELAY;
+        gHwFmt = fmt;
+        if (avcodec_open2(ctx, c, nullptr) < 0) { avcodec_free_context(&ctx); av_buffer_unref(&device); continue; }
+        hwDec_ = ctx;
+        hwDevice_ = device;
+        hwFrame_ = av_frame_alloc();
+        swFrame_ = av_frame_alloc();
+        path_ = t.type == AV_HWDEVICE_TYPE_VAAPI ? 1 : 2;
+        std::fprintf(stderr, "MJPEG: decoded on the graphics card (%s)\n", t.name);
+        return true;
+    }
+    return false;
+}
+
+bool FrameConverter::decodeNv12(const uint8_t* data, size_t size, std::vector<uint8_t>& nv12, int& w, int& h, int& stride,
+                                bool& fullRange, bool* unsupported, std::string& error) {
+    if (unsupported) *unsupported = false;
+    if (!mjpeg_) { if (unsupported) *unsupported = true; return false; }
+    const auto t0 = std::chrono::steady_clock::now();
+    if (size == 0 || size > size_t(INT32_MAX) - AV_INPUT_BUFFER_PADDING_SIZE) { ++corrupt_; error = "Corrupt MJPEG frame"; return false; }
+    packet_.resize(size + AV_INPUT_BUFFER_PADDING_SIZE);
+    std::memcpy(packet_.data(), data, size);
+    std::memset(packet_.data() + size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+    pkt_->data = packet_.data();
+    pkt_->size = int(size);
+    if (mjpegMode_ != kMjpegCpu && !hwTried_) openHw();
+    bool done = false;
+    if (hwDec_ && !hwFailed_ && mjpegMode_ != kMjpegCpu) {
+        // the graphics card: decode, then fetch the picture as NV12
+        const bool decoded = avcodec_send_packet(hwDec_, pkt_) >= 0 && avcodec_receive_frame(hwDec_, hwFrame_) >= 0;
+        av_frame_unref(swFrame_);
+        if (decoded && hwFrame_->format == gHwFmt && av_hwframe_transfer_data(swFrame_, hwFrame_, 0) == 0) {
+            swFrame_->width = hwFrame_->width; swFrame_->height = hwFrame_->height;
+            done = toNv12(swFrame_, nv12, stride);
+            fullRange = hwFrame_->color_range != AVCOL_RANGE_MPEG;   // JPEG is full range unless flagged
+            w = swFrame_->width & ~1; h = swFrame_->height & ~1;
+        }
+        av_frame_unref(hwFrame_);
+        // A picture the graphics card cannot decode or hand over goes to the CPU. If the CPU manages what the card
+        // did not three times running, the card cannot do this card's JPEGs: the CPU decodes from then on.
+        if (done) hwMisses_ = 0;
+    }
+    if (!done) {
+        if (avcodec_send_packet(mjpeg_, pkt_) < 0 || avcodec_receive_frame(mjpeg_, frame_) < 0) {
+            ++corrupt_;   // neither could decode it: the card sent a broken picture
+            error = "Corrupt MJPEG frame";
+            return false;
+        }
+        if (hwDec_ && !hwFailed_ && mjpegMode_ != kMjpegCpu && ++hwMisses_ >= 3) {
+            hwFailed_ = true;
+            std::fprintf(stderr, "MJPEG: the graphics card cannot decode this card's pictures; decoding on the CPU\n");
+        }
+        done = toNv12(frame_, nv12, stride);
+        fullRange = frame_->color_range != AVCOL_RANGE_MPEG;
+        w = frame_->width & ~1; h = frame_->height & ~1;
+        if (!done) { if (unsupported) *unsupported = true; return false; }
+        path_ = 3;
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    const double old = decodeMs_.load();
+    decodeMs_ = old <= 0 ? ms : old + 0.1 * (ms - old);
     return true;
 }
 
@@ -463,6 +592,8 @@ void CaptureSource::close() {
     bufs_.clear();
     ::close(fd_);
     fd_ = -1;
+    std::lock_guard l(arrM_);
+    lastArrival_ = {};   // the gap across a reopen is not the card's rhythm
 }
 
 namespace {
@@ -510,6 +641,15 @@ bool CaptureSource::dequeueNewest(v4l2_buffer& held, std::string& error) {
             if (errno == EAGAIN) break;
             error = std::string("VIDIOC_DQBUF: ") + std::strerror(errno);
             return false;
+        }
+        ++delivered_n_;                                     // every picture the card sent (also ones skipped for latency)
+        if (b.flags & V4L2_BUF_FLAG_ERROR) ++badBuffers_;   // the driver marked it broken (USB trouble)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            std::lock_guard l(arrM_);
+            if (lastArrival_.time_since_epoch().count() && arrivals_.size() < 2400)
+                arrivals_.push_back(std::chrono::duration<double, std::milli>(now - lastArrival_).count());
+            lastArrival_ = now;
         }
         probeRaw(b);                                    // every delivered frame, including ones dropped for latency
         if (got) xioctl(fd_, VIDIOC_QBUF, &held);      // a newer frame exists: hand the stale buffer straight back
@@ -667,6 +807,23 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
                 if (sparse) out.repeat = !delivered_.changed(src + off, w_, h_, rawStride_, step, true);
                 else { out.repeat = !newSinceDelivered_; newSinceDelivered_ = false; }   // see probeRaw
                 res = Result::Frame;
+            }
+        } else if (isMjpeg(fourcc_) && !mjpegRgba_) {
+            // MJPEG as NV12 (decoded on the graphics card when it can): 12 MB instead of 33 MB to upload at 4K, and
+            // the colour conversion runs on the GPU
+            std::string ce;
+            int w = 0, h = 0, stride = 0;
+            bool full = true, unsupported = false;
+            if (conv_.decodeNv12(src, len, out.data, w, h, stride, full, &unsupported, ce)) {
+                out.fmt = RawFrame::NV12;
+                out.w = w; out.h = h; out.stride = stride;
+                out.fullRange = full;
+                const bool isNew = rawCompare_.changed(out.data.data(), w, h, stride, 1);
+                probe_.feed(out.data.data(), w, h, stride, 1, out.captured, isNew ? 1 : 0);
+                out.repeat = !isNew;
+                res = Result::Frame;
+            } else if (unsupported) {
+                mjpegRgba_ = true;   // a JPEG layout NV12 cannot carry: RGBA from now on
             }
         } else {
             std::string ce;

@@ -35,8 +35,10 @@ public:
 
     // `input`: linear RGB (0..1) RGBA16F, render size, GENERAL layout, SAMPLED|TRANSFER_SRC usage.
     // `output`: linear RGBA16F, display size, GENERAL layout, STORAGE usage.
+    // sharedMotion: this frame's motion field (input size, from the chain's shared MotionEstimator), so FSR does not
+    // estimate it again; null: FSR estimates it itself
     bool record(VkCommandBuffer cb, const ImageRes& input, const ImageRes& output, bool reset, float frameTimeMs,
-                std::string& error);
+                std::string& error, const ImageRes* sharedMotion = nullptr);
     void setMotionSign(float s) { motionSign_ = s; }
     void setSharpness(float s) { rcas_ = s; }   // AMD RCAS strength 0..1 (0 = off)
     void release();

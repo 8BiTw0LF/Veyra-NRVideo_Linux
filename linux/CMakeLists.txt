@@ -8,6 +8,16 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# VeyAmux Debug: a test build that runs next to the normal one (own settings, own update channel), with debug
+# symbols, a log file, crash backtraces, the full diagnostic report, the benchmark and a Debug tab in the menu.
+option(VEYAMUX_DEBUG_BUILD "Build VeyAmux Debug" OFF)
+set(VEYAMUX_BUILD_NUMBER "0" CACHE STRING "Build number of VeyAmux Debug (CI: the workflow run number)")
+execute_process(COMMAND git rev-parse --short=10 HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                OUTPUT_VARIABLE VEYAMUX_GIT_SHA OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(NOT VEYAMUX_GIT_SHA)
+  set(VEYAMUX_GIT_SHA "unknown")
+endif()
+
 find_package(Vulkan REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -103,6 +113,16 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
 add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
+target_compile_definitions(veyamux_core PUBLIC VEYAMUX_GIT_SHA="${VEYAMUX_GIT_SHA}" VEYAMUX_BUILD_NUMBER=${VEYAMUX_BUILD_NUMBER})
+if(VEYAMUX_DEBUG_BUILD)
+  target_compile_definitions(veyamux_core PUBLIC VEYAMUX_DEBUG_BUILD=1)
+endif()
+# CI: VeyAmux's own code with AddressSanitizer + UndefinedBehaviorSanitizer (not the build tools, such as ffx_reflect)
+option(VEYAMUX_SANITIZE "Build VeyAmux's code and tests with ASan + UBSan" OFF)
+if(VEYAMUX_SANITIZE)
+  target_compile_options(veyamux_core PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+  target_link_options(veyamux_core PUBLIC -fsanitize=address,undefined)
+endif()
 target_include_directories(veyamux_core PUBLIC src third_party/smaa)
 target_link_libraries(veyamux_core PUBLIC Vulkan::Vulkan veyamux_ffx Threads::Threads)
 target_compile_options(veyamux_core PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_compat.h")
@@ -126,6 +146,8 @@ target_link_libraries(veyamux_media PUBLIC veyamux_core PkgConfig::FFMPEG PkgCon
 find_package(Threads REQUIRED)
 add_executable(veyamux-ps-decode-test src/ps_decode_test.cpp)
 target_link_libraries(veyamux-ps-decode-test PRIVATE veyamux_media)
+add_executable(veyamux-mjpeg-test src/mjpeg_test.cpp)
+target_link_libraries(veyamux-mjpeg-test PRIVATE veyamux_media)
 add_executable(veyamux-play-test src/play_test.cpp)
 target_link_libraries(veyamux-play-test PRIVATE veyamux_media)
 add_dependencies(veyamux-play-test veyamux_shaders)
@@ -154,7 +176,7 @@ endif()
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -172,7 +194,7 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/Menu.qml qml/CaptureDialog.qml qml/RemotePlayDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
-  qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg
+  qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg qml/icons/bug.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)

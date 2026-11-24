@@ -1,5 +1,6 @@
 // VeyAmux for Linux - V4L2 capture-card input (UVC HDMI capture dongles, Elgato/AVerMedia/etc. in UVC mode).
 #pragma once
+#include <atomic>
 #include <chrono>
 #include "ContentProbe.h"
 #include <cstdint>
@@ -13,6 +14,7 @@ struct v4l2_buffer;
 struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
+struct AVBufferRef;
 
 namespace veyamux { class ScreenCastStream; }
 namespace veyamux::demo { class Stream; }
@@ -48,7 +50,34 @@ public:
     bool init(uint32_t fourcc, int w, int h, int stride, std::string& error);
     bool convert(const uint8_t* data, size_t size, std::vector<uint8_t>& rgba, std::string& error);
     void setFullRange(bool v) { fullRange_ = v; }
+
+    // MJPEG for the GPU path: decoded to NV12 (Y rows, then interleaved UV rows, `stride` bytes each) instead of
+    // RGBA, so only 1.5 bytes a pixel go to the graphics card and the colour conversion runs there.
+    // How: kMjpegAuto tries the graphics card's JPEG decoder (VA-API on AMD/Intel, NVDEC through CUDA on NVIDIA) and
+    // falls back to the CPU; kMjpegGpu / kMjpegCpu force one (the signal test compares them).
+    // False: a corrupt picture (counted) or a format it cannot hand over as NV12 (then *unsupported is set).
+    enum { kMjpegAuto = 0, kMjpegGpu = 1, kMjpegCpu = 2 };
+    void setMjpegDecode(int mode) { mjpegMode_ = mode; }
+    bool decodeNv12(const uint8_t* data, size_t size, std::vector<uint8_t>& nv12, int& w, int& h, int& stride,
+                    bool& fullRange, bool* unsupported, std::string& error);
+    // "GPU (VA-API)", "GPU (NVDEC)", "CPU", or empty before the first picture
+    std::string decodePath() const {
+        switch (path_.load()) { case 1: return "GPU (VA-API)"; case 2: return "GPU (NVDEC)"; case 3: return "CPU"; default: return {}; }
+    }
+    double decodeMs() const { return decodeMs_.load(); }     // average time to decode one picture (and hand it over)
+    uint64_t corruptFrames() const { return corrupt_.load(); }
 private:
+    bool openHw();
+    int mjpegMode_ = kMjpegAuto;
+    AVCodecContext* hwDec_ = nullptr;   // the MJPEG decoder bound to the graphics card
+    AVBufferRef* hwDevice_ = nullptr;
+    AVFrame* hwFrame_ = nullptr;
+    AVFrame* swFrame_ = nullptr;
+    bool hwTried_ = false, hwFailed_ = false;
+    int hwMisses_ = 0;   // pictures in a row the graphics card failed and the CPU decoded
+    std::atomic<int> path_{0};          // 1 VA-API, 2 NVDEC, 3 CPU (read from other threads)
+    std::atomic<double> decodeMs_{0};
+    std::atomic<uint64_t> corrupt_{0};
     uint32_t fourcc_ = 0; int w_ = 0, h_ = 0, stride_ = 0; bool fullRange_ = false;
     int pixFmt_ = -1;
     SwsContext* sws_ = nullptr;
@@ -106,6 +135,16 @@ public:
     ContentProbe::Result content() const { return probe_.result(); }
     // read(): was the frame just returned a repeat of the previous one?
     bool lastWasRepeat() const { return lastRepeat_; }
+    // MJPEG: how it is decoded (FrameConverter::kMjpeg*; set before open), and what happened
+    void setMjpegDecode(int mode) { conv_.setMjpegDecode(mode); }
+    std::string mjpegDecodePath() const { return conv_.decodePath(); }
+    double mjpegDecodeMs() const { return conv_.decodeMs(); }
+    // pictures the card delivered (readLatest), and broken ones: marked by the driver or undecodable JPEGs
+    uint64_t deliveredFrames() const { return delivered_n_; }
+    uint64_t corruptFrames() const { return conv_.corruptFrames() + badBuffers_; }
+    // the gaps (ms) between pictures as they came off the card since the last call (at most ~20 s worth); for
+    // measuring how evenly a mode is delivered
+    std::vector<double> takeArrivals() { std::lock_guard l(arrM_); std::vector<double> v; v.swap(arrivals_); return v; }
 private:
     struct Buf { void* start = nullptr; size_t length = 0; };
     bool dequeueNewest(v4l2_buffer& held, std::string& error);
@@ -138,6 +177,11 @@ private:
     PictureCompare rawCompare_;       // uncompressed formats: every buffer the card delivers against the last new picture
     bool newSinceDelivered_ = true;   // a new picture came since the last frame handed out (it is not a repeat)
     bool lastRepeat_ = false;
+    bool mjpegRgba_ = false;          // this card's JPEGs cannot become NV12: the RGBA path
+    std::atomic<uint64_t> delivered_n_{0}, badBuffers_{0};
+    mutable std::mutex arrM_;
+    std::vector<double> arrivals_;    // ms between pictures as they came off the card (takeArrivals)
+    std::chrono::steady_clock::time_point lastArrival_{};
     void probeRaw(const v4l2_buffer& b);
     void probeRgba(const std::vector<uint8_t>& rgba);
 };

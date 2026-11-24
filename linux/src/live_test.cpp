@@ -31,6 +31,14 @@ int main(int argc, char** argv) {
     };
     const size_t tight = size_t(W) * H * 3 / 2;
     for (int i = 0; i < 4; ++i) frame(W, tight, 1280, 720, true);
+    // the benchmark's GPU sums count every measured frame
+    chain.resetGpuSums();
+    for (int i = 0; i < 4; ++i) frame(W, tight, 1280, 720, true);
+    {
+        const auto g = chain.gpuSums();
+        std::printf("GPU sums: %d frames, %.2f ms per frame\n", g.frames, g.frames ? g.total / g.frames : 0.0);
+        if (g.frames < 2) std::printf("note: no GPU timestamps counted (the driver may not support them)\n");
+    }
     const uint64_t gen = chain.liveGeneration();
     for (int i = 0; i < 20; ++i) frame(W, tight, 1000 + i * 16, 560 + i * 10, true);   // the window is dragged bigger
     std::printf("window resizes: %d new display generations\n", int(chain.liveGeneration() - gen));
@@ -38,6 +46,24 @@ int main(int argc, char** argv) {
     frame(padded, size_t(padded) * H * 3 / 2, 1280, 720, true);
     frame(W, tight - 1000, 1280, 720, false);   // short: must be refused
     frame(W, tight, 1280, 720, true);
+    // a redraw from the picture already on the GPU (the capture buffer went back after the upload)
+    auto redraw = [&](int fitW, int fitH, bool expectOk) {
+        LiveInput in;
+        in.fmt = LiveInput::NV12; in.w = W; in.h = H; in.stride = W; in.reuse = true;
+        s.fitW = fitW; s.fitH = fitH;
+        ctx.beginFrame();
+        std::string e;
+        const bool ok = chain.recordLive(ctx.cmd(), 0, in, s, e, 16.7f);
+        if (!ctx.submitAndWait(e)) { ++failures; return; }
+        if (ok != expectOk) { std::fprintf(stderr, "redraw %dx%d: %s (%s)\n", fitW, fitH, ok ? "drawn" : "not drawn", e.c_str()); ++failures; }
+    };
+    frame(W, tight, 1280, 720, true);
+    redraw(1280, 720, true);    // same output: drawn from the GPU copy
+    redraw(1100, 620, true);    // the window resized: still drawn (only the display images were made again)
+    s.scale = 2.0f;             // a new output size makes every image again: nothing to redraw until the next picture
+    redraw(1280, 720, false);
+    frame(W, tight, 1280, 720, true);
+    redraw(1280, 720, true);
     std::printf("%s\n", failures ? "FAILED" : "OK");
     return failures ? 1 : 0;
 }

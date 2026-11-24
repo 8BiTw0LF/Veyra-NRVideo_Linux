@@ -60,6 +60,8 @@ public:
         // swaps it with a frame it no longer needs, so the capture thread gets an already allocated buffer back (no new
         // allocation and page faults for every picture: 12 MB per 4K NV12 frame).
         std::function<void(RawFrame&)> onLiveFrame;
+        // the card is about to be reopened: drop every capture buffer not yet drawn (capture thread)
+        std::function<void()> onReleaseLive;
         // Audio as heard (48 kHz stereo s16, before volume), with the time its first sample plays. Recording tap.
         std::function<void(const int16_t*, int frames, std::chrono::steady_clock::time_point)> onAudio;
     };
@@ -79,6 +81,17 @@ public:
     bool openCapture(const std::string& devicePath, const CaptureMode& mode, const std::string& audioSource,
                      std::string& error, bool rawToGpu = false);
     bool isRawLive() const { return rawLive_.load(); }
+    // MJPEG cards: how the pictures are decoded (0 automatic: the graphics card when it can, 1 graphics card, 2 CPU);
+    // takes effect on the next openCapture
+    void setMjpegDecode(int mode) { mjpegDecode_ = mode; }
+    struct CaptureStats {
+        uint64_t delivered = 0, corrupt = 0;   // pictures from the card since it was opened, and broken ones
+        std::string decodePath;                 // MJPEG: "GPU (VA-API)", "GPU (NVDEC)", "CPU"; empty otherwise
+        double decodeMs = 0;                    // MJPEG: average decode time per picture
+    };
+    CaptureStats captureStats() const;
+    // gaps (ms) between the card's pictures since the last call (see CaptureSource::takeArrivals)
+    std::vector<double> takeCaptureArrivals();
     // Live capture only: what the signal actually carries (content frame rate, estimated rendering resolution).
     ContentProbe::Result liveContent() const { return live_.load() && cap_ ? cap_->content() : ContentProbe::Result{}; }
     const MediaInfo& info() const { return info_; }
@@ -203,6 +216,8 @@ public:
     double pacingRepairShare();
     double pacingHoldMs() const { return pacingHold_.load(); }   // the delay the even rhythm costs now
 private:
+    std::atomic<int> mjpegDecode_{0};
+    mutable std::mutex capM_;      // cap_ against captureStats()/takeCaptureArrivals() from the UI thread
     std::string capAudioSource_;
     std::string capPath_;          // for reconnecting after the card drops out or stalls on a signal change
     CaptureMode capMode_{};

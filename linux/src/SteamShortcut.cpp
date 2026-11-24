@@ -314,7 +314,12 @@ Result addShortcut(const QString& exe, const QString& icon, const QString& launc
     if (steamRunning()) { r.message = "Close Steam first"; return r; }
     const QByteArray exeQ = "\"" + exe.toUtf8() + "\"";
     const QByteArray dirQ = "\"" + QFileInfo(exe).absolutePath().toUtf8() + "/\"";
+    // VeyAmux Debug gets its own shortcut next to VeyAmux's
+#ifdef VEYAMUX_DEBUG_BUILD
+    const QByteArray name = "VeyAmux Debug";
+#else
     const QByteArray name = "VeyAmux";
+#endif
     // Steam's id for a non-Steam shortcut: CRC32 of exe + name with the top bit set
     const QByteArray idSrc = exeQ + name;
     const uint32_t appid = crc32(idSrc) | 0x80000000u;

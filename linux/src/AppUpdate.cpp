@@ -19,8 +19,17 @@
 namespace update {
 namespace {
 
+#ifdef VEYAMUX_DEBUG_BUILD
+// VeyAmux Debug follows the rolling pre-release "debug-build" (a new build after every change on main); its version
+// is in the release's name ("VeyAmux Debug 1.8.123")
+constexpr const char* kApi = "https://api.github.com/repos/8BiTw0LF/VeyAmux/releases/tags/debug-build";
+constexpr const char* kAsset = "VeyAmux-Debug-x86_64.AppImage";
+constexpr bool kVersionInName = true;
+#else
 constexpr const char* kApi = "https://api.github.com/repos/8BiTw0LF/VeyAmux/releases/latest";
 constexpr const char* kAsset = "VeyAmux-x86_64.AppImage";
+constexpr bool kVersionInName = false;
+#endif
 constexpr qint64 kMaxAppImage = 1024ll * 1024 * 1024;
 
 struct Sink {
@@ -127,7 +136,8 @@ bool latest(Release& out, QString& error) {
     const QJsonObject o = QJsonDocument::fromJson(body).object();
     out.tag = o.value("tag_name").toString();
     // tags are "VeyAmux-V.<version>"
-    const auto m = QRegularExpression(QStringLiteral("(\\d+(?:\\.\\d+)*)\\s*$")).match(out.tag);
+    const auto m = QRegularExpression(QStringLiteral("(\\d+(?:\\.\\d+)*)\\s*$"))
+                       .match(kVersionInName ? o.value("name").toString() : out.tag);
     out.version = m.hasMatch() ? m.captured(1) : QString();
     out.notes = o.value("body").toString();
     out.page = o.value("html_url").toString();

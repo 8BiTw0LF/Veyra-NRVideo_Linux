@@ -1,5 +1,7 @@
 // QML-facing wrapper around veyamux::MediaEngine.
 #pragma once
+#include <map>
+#include <array>
 #include "AppUpdate.h"
 #include <algorithm>
 #include <cmath>
@@ -32,6 +34,19 @@
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
+    // VeyAmux Debug (PlayerBridgeDebug.cpp): the Debug tab, the full report and the benchmark
+    Q_PROPERTY(bool debugBuild READ debugBuild CONSTANT)
+    Q_PROPERTY(QString buildInfo READ buildInfo CONSTANT)
+    Q_PROPERTY(bool benchRunning READ benchRunning NOTIFY benchChanged)
+    Q_PROPERTY(QString benchText READ benchText NOTIFY benchChanged)
+    Q_PROPERTY(double benchProgress READ benchProgress NOTIFY benchChanged)
+    Q_PROPERTY(QString lastReport READ lastReport NOTIFY benchChanged)
+    Q_PROPERTY(bool debugRestartNeeded READ debugRestartNeeded NOTIFY benchChanged)
+    // "Find the best signal" in the capture dialog (PlayerBridgeSignalTest.cpp)
+    Q_PROPERTY(bool signalTestRunning READ signalTestRunning NOTIFY signalTestChanged)
+    Q_PROPERTY(QString signalTestText READ signalTestText NOTIFY signalTestChanged)
+    Q_PROPERTY(double signalTestProgress READ signalTestProgress NOTIFY signalTestChanged)
+    Q_PROPERTY(QVariantList signalTestResults READ signalTestResults NOTIFY signalTestChanged)
     // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
@@ -406,7 +421,35 @@ public:
     Q_INVOKABLE QVariantList setupCheck();          // [{id, kind, title, detail, fix}] (PlayerBridgeSetup.cpp)
     Q_INVOKABLE void applySetupFix(const QString& id);
     Q_INVOKABLE QString perfReport();
-    Q_INVOKABLE void copyPerfReport();       // F6: notes this moment of the recording in "<recording>-markers.txt"
+    Q_INVOKABLE void copyPerfReport();
+    // --- VeyAmux Debug ---
+    bool debugBuild() const;
+    QString buildInfo() const;
+    Q_INVOKABLE QString saveReport(const QString& note);   // the full report as a Markdown file; returns its path
+    Q_INVOKABLE void openReportFolder();
+    Q_INVOKABLE void reportOnGitHub(const QString& note);  // a new GitHub issue with the summary (the file is attached by hand)
+    Q_INVOKABLE void copyReportPath();
+    Q_INVOKABLE void startBenchmark();
+    Q_INVOKABLE void stopBenchmark();
+    bool benchRunning() const { return bench_.running; }
+    QString benchText() const { return bench_.text; }
+    double benchProgress() const { return bench_.steps.empty() ? 0.0 : double(bench_.step) / double(bench_.steps.size()); }
+    QString lastReport() const { return lastReport_; }
+    // --- Find the best signal: plays each sensible mode of the card for a few seconds on this PC and measures what
+    // arrives (frame rate, evenness, broken pictures), the delay, CPU and GPU, MJPEG on the graphics card and on the
+    // CPU. The card's own list cannot say which mode this machine (AMD, Intel or NVIDIA, USB controller, CPU) handles best.
+    Q_INVOKABLE bool startSignalTest(const QString& path, const QString& audioSource);
+    Q_INVOKABLE void stopSignalTest();
+    Q_INVOKABLE bool useSignalResult(int row);            // starts that mode (and its MJPEG decoding)
+    Q_INVOKABLE bool toggleFavoriteSignal(int row);
+    bool signalTestRunning() const { return sig_.running; }
+    QString signalTestText() const { return sig_.text; }
+    double signalTestProgress() const { return sig_.cands.empty() ? 0.0 : double(sig_.i) / double(sig_.cands.size()); }
+    QVariantList signalTestResults() const;
+    void sampleSignalTest();   // test hook: made-up results, to show the dialog without a card
+    Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
+    Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
+    bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
     int markers() const { return int(markers_.size()); }
     QString updateState() const { return updState_; }
     QString updateVersion() const { return updRelease_.version; }
@@ -555,6 +598,8 @@ signals:
     void recChanged();
     void overlayChanged();
     void overlayTick();
+    void benchChanged();
+    void signalTestChanged();
     void recTick();
 
 private:
@@ -616,6 +661,82 @@ private:
         }
     };
     bool gamescope_ = false, pointerHidden_ = false;
+    // the benchmark: one step = settings for a few seconds, measured (PlayerBridgeDebug.cpp)
+    struct BenchStep {
+        QString section, name;
+        std::function<void(veyamux::EnhanceSettings&)> set;
+        bool lowRes = false;        // runs on the card's 1080p mode (upscaling a 4K card's picture would make 8K)
+        bool moreFrames = false;    // frame generation: the frame rate is meant to rise
+    };
+    struct BenchRow {
+        QString section, name, source, threads, flag;
+        double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
+        std::array<double, veyamux::GpuTimer::kStages> stages{};
+        int samples = 0, gpuFrames = 0;
+    };
+    struct Bench {
+        bool running = false;
+        std::vector<BenchStep> steps;
+        size_t step = 0;
+        veyamux::EnhanceSettings saved;
+        QString text, source;
+        QStringList notes;              // what was left out and why
+        std::vector<BenchRow> rows;
+        BenchRow cur;
+        double t0 = 0;                  // ms (steady clock) when the current phase began
+        long long cpuTicks0 = 0;
+        std::map<int, std::pair<QString, long long>> threads0;   // tid -> (name, ticks) when measuring began
+        QTimer* timer = nullptr;
+        int phase = 0;                  // 0 prepare (every step briefly, so shaders are built), 1 settle, 2 measure, 3 source restart
+        size_t prep = 0;                // the step being prepared
+        bool retried = false;           // this step was measured again because it looked wrong
+        bool onLowRes = false;          // the card runs its 1080p mode now
+        int switchTries = 0;
+        double refFps = 0, refJitter = 0;
+        veyamux::CaptureMode savedMode, lowMode;
+        QString device, audio;
+        QString csv;
+    } bench_;
+    QString lastReport_;
+    struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
+    struct SigRow {
+        veyamux::CaptureMode mode;
+        int decode = 0;
+        QString decodePath, flag;      // flag: why it was not measured / did not keep up
+        double nominal = 0, fps = 0, content = 0, jitter = 0, delay = 0, cpu = 0, gpu = 0, decodeMs = 0, corruptPct = 0, score = 0;
+        int drops = 0;
+        bool measured = false, keepsUp = false;
+        QStringList tags;              // Recommended, Least delay, Smoothest, Sharpest
+    };
+    struct SigTest {
+        bool running = false;
+        std::vector<SigCand> cands;
+        size_t i = 0;
+        int phase = 0;                 // 0 start the mode, 1 settle, 2 measure
+        double t0 = 0;
+        int tries = 0;
+        QString path, audio, text;
+        bool hadCapture = false;
+        veyamux::CaptureMode savedMode;
+        QString savedDevice, savedAudio;
+        std::vector<SigRow> rows;
+        QTimer* timer = nullptr;
+        long long cpu0 = 0;
+        uint64_t del0 = 0, cor0 = 0;
+        double delaySum = 0;
+        int delayN = 0;
+        int decodeOverride = -1;       // while testing: the MJPEG decoding startCapture uses instead of the setting
+    } sig_;
+    void signalTick();
+    void finishSignalTest(bool restore);
+    static QString captureModeKey(const veyamux::CaptureMode& m);
+    bool debugRestart_ = false;
+    void benchTick();
+    void benchApplyStep();
+    void finishBenchmark();
+    void stopBenchmark(bool save);
+    QString benchTable() const;
+    QString paceSummary();
     QElapsedTimer nudgeUntil_;
     std::shared_ptr<UiGate> psQuit_ = std::make_shared<UiGate>();   // VeyAmux is closing
     QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
@@ -641,6 +762,7 @@ private:
     QImage compareLabel(const QString& text, bool accent) const;
     veyamux::CaptureMode curMode_;   // the capture card mode in use (fourcc 0: none / not a card)
     QString curDevice_, curAudio_;
+    QString lastCaptureError_;   // why the last capture did not start (benchmark, report)
     QString gpuDevice_;              // the Vulkan device's name (performance report)
     bool overRefreshNoticed_ = false;
     void checkOverRefresh();

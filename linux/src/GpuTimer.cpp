@@ -54,6 +54,10 @@ void GpuTimer::collect(int slot) {
     const float total = float(double((last - t0) & mask_) * periodNs_ * 1e-6);
     if (total < 0 || total > 1000) return;                // wrap-around or garbage
     std::lock_guard g(m_);
+    ++sums_.frames;
+    sums_.total += total;
+    for (int i = 0; i < kStages; ++i)
+        if (st[size_t(i)] >= 0) { sums_.stage[size_t(i)] += st[size_t(i)]; ++sums_.ran[size_t(i)]; }
     auto ema = [](float old, float v) { return old < 0 ? v : old + 0.1f * (v - old); };
     total_ = ema(total_, total);
     for (int i = 0; i < kStages; ++i) {
@@ -80,6 +84,9 @@ void GpuTimer::mark(VkCommandBuffer cb, Stage s) {
 }
 
 void GpuTimer::collectNow(int slot) { if (pool_) collect(((slot % kSlots) + kSlots) % kSlots); }
+
+void GpuTimer::resetSums() { std::lock_guard g(m_); sums_ = Sums{}; }
+GpuTimer::Sums GpuTimer::sums() const { std::lock_guard g(m_); return sums_; }
 
 float GpuTimer::totalMs() const { std::lock_guard g(m_); return total_; }
 std::array<float, GpuTimer::kStages> GpuTimer::stageMs() const { std::lock_guard g(m_); return stage_; }

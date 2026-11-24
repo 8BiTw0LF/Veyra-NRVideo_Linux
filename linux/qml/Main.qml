@@ -89,6 +89,12 @@ Window {
             Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "VeyAmux"; color: Theme.heading
                 font.pixelSize: 26 * Theme.headScale * startCol.k; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
             Text { font.family: Theme.font; text: player.appVersion; color: Theme.dim; font.pixelSize: 13 * startCol.k; anchors.verticalCenter: parent.verticalCenter }
+            Rectangle {   // VeyAmux Debug
+                visible: player.debugBuild
+                anchors.verticalCenter: parent.verticalCenter
+                width: dbgStart.implicitWidth + 16 * startCol.k; height: 22 * startCol.k; radius: 11 * startCol.k * Theme.round; color: Theme.warn
+                Text { id: dbgStart; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 12 * startCol.k; font.weight: Font.Bold; color: "#1a1020"; text: "DEBUG" }
+            }
         }
         Row {
             anchors { right: parent.right; top: parent.top; rightMargin: 24 * startCol.k; topMargin: 22 * startCol.k }
@@ -288,6 +294,20 @@ Window {
         width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18 * Theme.round; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.okLine
         Text { font.family: Theme.font; id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
+    }
+
+    // VeyAmux Debug: the benchmark runs with the menu closed; its progress and a stop button
+    Rectangle {
+        visible: player.benchRunning
+        anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 90 }
+        width: Math.min(parent.width - 40, benchRow.implicitWidth + 32); height: 44; radius: 22 * Theme.round; color: Theme.toast
+        border.color: Theme.warn
+        Row {
+            id: benchRow; anchors.centerIn: parent; spacing: 14
+            Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; text: player.benchText; color: Theme.text; font.pixelSize: 14 }
+            Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; text: t("dbgBenchStop"); color: Theme.warn; font.pixelSize: 14; font.weight: Font.Bold
+                MouseArea { anchors { fill: parent; margins: -8 } cursorShape: Qt.PointingHandCursor; onClicked: player.stopBenchmark() } }
+        }
     }
 
     // frame-time overlay (F3)
@@ -579,5 +599,9 @@ Window {
         }
     }
     }   // hdrRoot
-    Component.onCompleted: { hideTimer.start(); if (startDialog) capDlg.openDialog() }
+    Component.onCompleted: {
+        hideTimer.start()
+        if (startDialog) capDlg.openDialog()
+        if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
+    }
 }

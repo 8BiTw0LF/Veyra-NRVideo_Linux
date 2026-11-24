@@ -1,5 +1,6 @@
 #include "ContentProbe.h"
 
+#include <pthread.h>
 #include <cstring>
 
 #include <algorithm>
@@ -42,7 +43,7 @@ float interp(const std::vector<float>& z, float k) {
 }
 } // namespace
 
-ContentProbe::ContentProbe() { thread_ = std::thread([this] { worker(); }); }
+ContentProbe::ContentProbe() { thread_ = std::thread([this] { pthread_setname_np(pthread_self(), "vx-probe"); worker(); }); }
 
 ContentProbe::~ContentProbe() {
     { std::lock_guard l(m_); quit_ = true; }

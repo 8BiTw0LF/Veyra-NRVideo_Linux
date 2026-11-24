@@ -145,7 +145,7 @@ bool FsrUpscaler::ensure(uint32_t inW, uint32_t inH, uint32_t outW, uint32_t out
 }
 
 bool FsrUpscaler::record(VkCommandBuffer cb, const ImageRes& input, const ImageRes& output, bool reset, float frameTimeMs,
-                         std::string& error) {
+                         std::string& error, const ImageRes* sharedMotion) {
     if (!p_ || !p_->upOk || p_->inW != input.width || p_->inH != input.height || p_->outW != output.width || p_->outH != output.height) {
         if (!ensure(input.width, input.height, output.width, output.height, error)) { p_.reset(); return false; }
         reset = true;
@@ -179,6 +179,8 @@ bool FsrUpscaler::record(VkCommandBuffer cb, const ImageRes& input, const ImageR
         VkImageSubresourceRange rng{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         vkCmdClearColorImage(cb, s.fixedMv.image, VK_IMAGE_LAYOUT_GENERAL, &v, 1, &rng);
         ctx_.computeBarrier();
+    } else if (motionSign_ != 0.0f && sharedMotion && sharedMotion->width == input.width && sharedMotion->height == input.height) {
+        motion = sharedMotion;   // estimated once for the whole chain
     } else if (motionSign_ != 0.0f) {
         motion = s.motion->record(cb, input, reset, error);
         if (!motion) return false;
