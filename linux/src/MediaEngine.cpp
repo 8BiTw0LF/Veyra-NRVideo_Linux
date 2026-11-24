@@ -300,6 +300,7 @@ MediaEngine::CaptureStats MediaEngine::captureStats() const {
     st.corrupt = cap_->corruptFrames();
     st.decodePath = cap_->mjpegDecodePath();
     st.decodeMs = cap_->mjpegDecodeMs();
+    st.copyMs = cap_->mjpegCopyMs();
     return st;
 }
 

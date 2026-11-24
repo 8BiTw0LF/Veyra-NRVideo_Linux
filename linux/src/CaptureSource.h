@@ -66,6 +66,7 @@ public:
     }
     double decodeMs() const { return decodeMs_.load(); }     // average time to decode one picture (and hand it over)
     uint64_t corruptFrames() const { return corrupt_.load(); }
+    double copyMs() const { return path_.load() == 3 ? 0.0 : copyMs_.load(); }   // graphics card: the copy part
 private:
     bool openHw();
     int mjpegMode_ = kMjpegAuto;
@@ -77,6 +78,9 @@ private:
     int hwMisses_ = 0;   // pictures in a row the graphics card failed and the CPU decoded
     std::atomic<int> path_{0};          // 1 VA-API, 2 NVDEC, 3 CPU (read from other threads)
     std::atomic<double> decodeMs_{0};
+    std::atomic<double> copyMs_{0};     // of decodeMs_: fetching the picture from the graphics card
+    std::atomic<bool> mapped_{false};   // fetched by mapping (else FFmpeg's transfer)
+    bool noMap_ = false;                // mapping failed once: the transfer from then on
     std::atomic<uint64_t> corrupt_{0};
     uint32_t fourcc_ = 0; int w_ = 0, h_ = 0, stride_ = 0; bool fullRange_ = false;
     int pixFmt_ = -1;
@@ -139,6 +143,7 @@ public:
     void setMjpegDecode(int mode) { conv_.setMjpegDecode(mode); }
     std::string mjpegDecodePath() const { return conv_.decodePath(); }
     double mjpegDecodeMs() const { return conv_.decodeMs(); }
+    double mjpegCopyMs() const { return conv_.copyMs(); }
     // pictures the card delivered (readLatest), and broken ones: marked by the driver or undecodable JPEGs
     uint64_t deliveredFrames() const { return delivered_n_; }
     uint64_t corruptFrames() const { return conv_.corruptFrames() + badBuffers_; }

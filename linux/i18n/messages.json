@@ -365,7 +365,8 @@
   "This card has only one usable mode: there is nothing to compare.": "Diese Karte hat nur einen brauchbaren Modus: Es gibt nichts zu vergleichen.",
   "decoding %1 ms on %2": "Dekodierung %1 ms auf %2",
   "delay %1 ms": "Verzögerung %1 ms",
-  "even ±%1 ms": "gleichmäßig ±%1 ms"
+  "even ±%1 ms": "gleichmäßig ±%1 ms",
+  " (fetching %1 ms)": " (Abholen %1 ms)"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -592,7 +593,8 @@
   "This card has only one usable mode: there is nothing to compare.": "Esta capturadora solo tiene un modo útil: no hay nada que comparar.",
   "decoding %1 ms on %2": "decodificación %1 ms en %2",
   "delay %1 ms": "retraso %1 ms",
-  "even ±%1 ms": "regularidad ±%1 ms"
+  "even ±%1 ms": "regularidad ±%1 ms",
+  " (fetching %1 ms)": " (recogida %1 ms)"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -819,7 +821,8 @@
   "This card has only one usable mode: there is nothing to compare.": "Cette carte n'a qu'un seul mode utilisable : rien à comparer.",
   "decoding %1 ms on %2": "décodage %1 ms sur %2",
   "delay %1 ms": "latence %1 ms",
-  "even ±%1 ms": "régularité ±%1 ms"
+  "even ±%1 ms": "régularité ±%1 ms",
+  " (fetching %1 ms)": " (récupération %1 ms)"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1046,7 +1049,8 @@
   "This card has only one usable mode: there is nothing to compare.": "Dette kortet har bare én brukbar modus: det er ingenting å sammenligne.",
   "decoding %1 ms on %2": "dekoding %1 ms på %2",
   "delay %1 ms": "forsinkelse %1 ms",
-  "even ±%1 ms": "jevnhet ±%1 ms"
+  "even ±%1 ms": "jevnhet ±%1 ms",
+  " (fetching %1 ms)": " (henting %1 ms)"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1273,7 +1277,8 @@
   "This card has only one usable mode: there is nothing to compare.": "У этой карты только один пригодный режим: сравнивать нечего.",
   "decoding %1 ms on %2": "декодирование %1 мс на %2",
   "delay %1 ms": "задержка %1 мс",
-  "even ±%1 ms": "равномерность ±%1 мс"
+  "even ±%1 ms": "равномерность ±%1 мс",
+  " (fetching %1 ms)": " (получение %1 мс)"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1500,6 +1505,7 @@
   "This card has only one usable mode: there is nothing to compare.": "Det här kortet har bara ett användbart läge: det finns inget att jämföra.",
   "decoding %1 ms on %2": "avkodning %1 ms på %2",
   "delay %1 ms": "fördröjning %1 ms",
-  "even ±%1 ms": "jämnhet ±%1 ms"
+  "even ±%1 ms": "jämnhet ±%1 ms",
+  " (fetching %1 ms)": " (hämtning %1 ms)"
  }
 }

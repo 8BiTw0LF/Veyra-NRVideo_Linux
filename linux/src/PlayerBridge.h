@@ -703,7 +703,7 @@ private:
         veyamux::CaptureMode mode;
         int decode = 0;
         QString decodePath, flag;      // flag: why it was not measured / did not keep up
-        double nominal = 0, fps = 0, content = 0, jitter = 0, delay = 0, cpu = 0, gpu = 0, decodeMs = 0, corruptPct = 0, score = 0;
+        double nominal = 0, fps = 0, content = 0, jitter = 0, delay = 0, cpu = 0, gpu = 0, decodeMs = 0, copyMs = 0, corruptPct = 0, score = 0;
         int drops = 0;
         bool measured = false, keepsUp = false;
         QStringList tags;              // Recommended, Least delay, Smoothest, Sharpest

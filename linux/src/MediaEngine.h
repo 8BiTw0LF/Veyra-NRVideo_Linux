@@ -88,6 +88,7 @@ public:
         uint64_t delivered = 0, corrupt = 0;   // pictures from the card since it was opened, and broken ones
         std::string decodePath;                 // MJPEG: "GPU (VA-API)", "GPU (NVDEC)", "CPU"; empty otherwise
         double decodeMs = 0;                    // MJPEG: average decode time per picture
+        double copyMs = 0;                      // MJPEG on the graphics card: of that, fetching the picture
     };
     CaptureStats captureStats() const;
     // gaps (ms) between the card's pictures since the last call (see CaptureSource::takeArrivals)

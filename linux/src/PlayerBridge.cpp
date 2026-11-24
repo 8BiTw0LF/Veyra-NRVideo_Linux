@@ -480,6 +480,7 @@ void PlayerBridge::updateOverlay() {
             // MJPEG: where it is decoded and what one picture costs (the card's own compressing is not measurable)
             s += L("\nMJPEG decoded on: %1 · %2 ms per picture", "\nMJPEG afkodet på: %1 · %2 ms pr. billede")
                      .arg(QString::fromStdString(cs.decodePath)).arg(cs.decodeMs, 0, 'f', 1);
+            if (cs.copyMs > 0.05) s += L(" (fetching %1 ms)", " (hentning %1 ms)").arg(cs.copyMs, 0, 'f', 1);
             if (cs.corrupt) s += L(" · %1 broken", " · %1 i stykker").arg(cs.corrupt);
         }
         if (engine_.isLive() && s_.pacingRepair && s_.frameGen != veyamux::FrameGenMode::Off) {

@@ -12,6 +12,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 #include <algorithm>
+#include <immintrin.h>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -351,9 +352,31 @@ AVPixelFormat pickHw(AVCodecContext*, const AVPixelFormat* fmts) {
         if (*p == gHwFmt) return *p;
     return AV_PIX_FMT_NONE;   // no hardware path for this picture: the decode fails and the CPU takes over
 }
+// Copies rows out of memory the CPU reads slowly: a picture the graphics card maps for reading sits in write-combined
+// (uncached) memory, where ordinary loads crawl (~1-2 GB/s, 8+ ms for one 4K picture). SSE4.1 streaming loads
+// (MOVNTDQA) read it at full speed.
+__attribute__((target("sse4.1"))) void streamCopySse41(uint8_t* dst, const uint8_t* src, size_t n) {
+    size_t i = 0;
+    for (; i + 64 <= n; i += 64) {
+        const __m128i a = _mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<uint8_t*>(src + i)));
+        const __m128i b = _mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<uint8_t*>(src + i + 16)));
+        const __m128i c = _mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<uint8_t*>(src + i + 32)));
+        const __m128i d = _mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<uint8_t*>(src + i + 48)));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst + i), a);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst + i + 16), b);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst + i + 32), c);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst + i + 48), d);
+    }
+    if (i < n) std::memcpy(dst + i, src + i, n - i);
+}
+void copyRow(uint8_t* dst, const uint8_t* src, size_t n, bool uncached) {
+    static const bool sse41 = __builtin_cpu_supports("sse4.1");
+    if (uncached && sse41 && (reinterpret_cast<uintptr_t>(src) & 15) == 0) streamCopySse41(dst, src, n);
+    else std::memcpy(dst, src, n);
+}
 // NV12 from a decoded picture: NV12 as is, 4:2:0 / 4:2:2 planar (JPEG's own formats) with the chroma interleaved
 // (4:2:2 averaged down to 4:2:0). False for anything else.
-bool toNv12(const AVFrame* f, std::vector<uint8_t>& out, int& stride) {
+bool toNv12(const AVFrame* f, std::vector<uint8_t>& out, int& stride, bool uncached = false) {
     const int w = f->width & ~1, h = f->height & ~1;
     if (w <= 0 || h <= 0) return false;
     const auto fmt = AVPixelFormat(f->format);
@@ -363,12 +386,12 @@ bool toNv12(const AVFrame* f, std::vector<uint8_t>& out, int& stride) {
     if (!nv12 && !p420 && !p422) return false;
     stride = w;
     out.resize(size_t(w) * h * 3 / 2);
-    for (int y = 0; y < h; ++y) std::memcpy(out.data() + size_t(y) * w, f->data[0] + size_t(y) * f->linesize[0], size_t(w));
+    for (int y = 0; y < h; ++y) copyRow(out.data() + size_t(y) * w, f->data[0] + size_t(y) * f->linesize[0], size_t(w), uncached);
     uint8_t* uv = out.data() + size_t(w) * h;
     const int cw = w / 2;
     for (int y = 0; y < h / 2; ++y) {
         uint8_t* d = uv + size_t(y) * w;
-        if (nv12) { std::memcpy(d, f->data[1] + size_t(y) * f->linesize[1], size_t(w)); continue; }
+        if (nv12) { copyRow(d, f->data[1] + size_t(y) * f->linesize[1], size_t(w), uncached); continue; }
         const int r0 = p422 ? 2 * y : y, r1 = p422 ? 2 * y + 1 : y;
         const uint8_t* u0 = f->data[1] + size_t(r0) * f->linesize[1];
         const uint8_t* v0 = f->data[2] + size_t(r0) * f->linesize[2];
@@ -433,12 +456,31 @@ bool FrameConverter::decodeNv12(const uint8_t* data, size_t size, std::vector<ui
     if (hwDec_ && !hwFailed_ && mjpegMode_ != kMjpegCpu) {
         // the graphics card: decode, then fetch the picture as NV12
         const bool decoded = avcodec_send_packet(hwDec_, pkt_) >= 0 && avcodec_receive_frame(hwDec_, hwFrame_) >= 0;
+        const auto t1 = std::chrono::steady_clock::now();
         av_frame_unref(swFrame_);
-        if (decoded && hwFrame_->format == gHwFmt && av_hwframe_transfer_data(swFrame_, hwFrame_, 0) == 0) {
-            swFrame_->width = hwFrame_->width; swFrame_->height = hwFrame_->height;
-            done = toNv12(swFrame_, nv12, stride);
-            fullRange = hwFrame_->color_range != AVCOL_RANGE_MPEG;   // JPEG is full range unless flagged
-            w = swFrame_->width & ~1; h = swFrame_->height & ~1;
+        if (decoded && hwFrame_->format == gHwFmt) {
+            // Read the picture where it lies (mapped, one copy with streaming loads) rather than have FFmpeg copy it
+            // into a frame of its own first (two copies, the first with slow loads from uncached memory). NVDEC and
+            // drivers that cannot map fall back to the transfer.
+            bool mapped = false;
+            if (!noMap_) {
+                swFrame_->format = AV_PIX_FMT_NONE;
+                mapped = av_hwframe_map(swFrame_, hwFrame_, AV_HWFRAME_MAP_READ) == 0;
+                if (!mapped) { av_frame_unref(swFrame_); noMap_ = true; }
+            }
+            if (mapped || av_hwframe_transfer_data(swFrame_, hwFrame_, 0) == 0) {
+                swFrame_->width = hwFrame_->width; swFrame_->height = hwFrame_->height;
+                done = toNv12(swFrame_, nv12, stride, mapped);
+                fullRange = hwFrame_->color_range != AVCOL_RANGE_MPEG;   // JPEG is full range unless flagged
+                w = swFrame_->width & ~1; h = swFrame_->height & ~1;
+            }
+            av_frame_unref(swFrame_);
+            if (done) {
+                const double c = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
+                const double old = copyMs_.load();
+                copyMs_ = old <= 0 ? c : old + 0.1 * (c - old);
+                mapped_ = mapped;
+            }
         }
         av_frame_unref(hwFrame_);
         // A picture the graphics card cannot decode or hand over goes to the CPU. If the CPU manages what the card

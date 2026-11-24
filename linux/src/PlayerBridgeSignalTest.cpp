@@ -231,13 +231,27 @@ void PlayerBridge::signalTick() {
     const uint64_t got = st.delivered - sig_.del0;
     r.fps = double(got) / secs;
     const double interval = 1000.0 / std::max(1.0, r.nominal);
-    if (iv.size() >= 4) {
-        double mean = 0;
-        for (double v : iv) mean += v;
-        mean /= double(iv.size());
-        double var = 0;
-        for (double v : iv) { var += (v - mean) * (v - mean); if (v > 1.5 * interval) ++r.drops; }
-        r.jitter = std::sqrt(var / double(iv.size()));
+    // pauses: gaps between the card's pictures as they came off USB
+    for (double v : iv) if (v > 1.5 * interval) ++r.drops;
+    // evenness: as the pictures were drawn, which is what you see. The moment a picture leaves the card is nearly
+    // always even; what is not is when it is ready (USB transfer of a large picture, decoding), and that shows here.
+    double arrivalSd = 0;
+    auto sd = [](const std::vector<double>& v) {
+        if (v.size() < 4) return 0.0;
+        double mean = 0, var = 0;
+        for (double x : v) mean += x;
+        mean /= double(v.size());
+        for (double x : v) var += (x - mean) * (x - mean);
+        return std::sqrt(var / double(v.size()));
+    };
+    arrivalSd = sd(iv);
+    if (liveVk_) {
+        const std::vector<double> shown = liveVk_->shownTimes();
+        std::vector<double> gaps;
+        for (size_t k = 1; k < shown.size(); ++k) if (shown[k - 1] >= sig_.t0) gaps.push_back(shown[k] - shown[k - 1]);
+        r.jitter = gaps.size() >= 4 ? sd(gaps) : arrivalSd;
+    } else {
+        r.jitter = arrivalSd;
     }
     r.corruptPct = got ? 100.0 * double(st.corrupt - sig_.cor0) / double(got) : 0;
     r.delay = sig_.delayN ? sig_.delaySum / sig_.delayN : 0;
@@ -247,6 +261,7 @@ void PlayerBridge::signalTick() {
     if (const auto ct = engine_.liveContent(); ct.contentFps > 1 && !ct.staticPicture) r.content = ct.contentFps;
     r.decodePath = QString::fromStdString(st.decodePath);
     r.decodeMs = st.decodeMs;
+    r.copyMs = st.copyMs;
     if (c.decode == 1 && r.decodePath == "CPU") {
         // the graphics card could not decode it (no VA-API / NVDEC JPEG decoder): it ran on the CPU instead, so the
         // separate CPU run of this mode would measure the same thing
@@ -268,9 +283,9 @@ void PlayerBridge::signalTick() {
                              .arg(r.fps, 0, 'f', 1).arg(r.nominal, 0, 'f', 0);
     else if (!cleanOk) r.flag = L("%1 % of the pictures were broken.", "%1 % af billederne var i stykker.").arg(r.corruptPct, 0, 'f', 1);
     else if (!evenOk) r.flag = L("%1 pauses where pictures went missing.", "%1 pauser hvor billeder manglede.").arg(r.drops);
-    qInfo("Signal test: %s decode=%d path=%s fps %.2f/%.2f jitter %.2f drops %d corrupt %.2f%% delay %.1f cpu %.0f%% gpu %.2f decode %.1f ms%s",
-          c.mode.label.c_str(), c.decode, qPrintable(r.decodePath), r.fps, r.nominal, r.jitter, r.drops, r.corruptPct, r.delay, r.cpu, r.gpu,
-          r.decodeMs, r.keepsUp ? "" : " (does not keep up)");
+    qInfo("Signal test: %s decode=%d path=%s fps %.2f/%.2f jitter %.2f (arrival %.2f) drops %d corrupt %.2f%% delay %.1f cpu %.0f%% gpu %.2f decode %.1f ms (copy %.1f) content %.1f%s",
+          c.mode.label.c_str(), c.decode, qPrintable(r.decodePath), r.fps, r.nominal, r.jitter, arrivalSd, r.drops, r.corruptPct, r.delay, r.cpu, r.gpu,
+          r.decodeMs, r.copyMs, r.content, r.keepsUp ? "" : " (does not keep up)");
     nextCandidate(std::move(r));
 }
 
@@ -285,7 +300,11 @@ void PlayerBridge::finishSignalTest(bool restore) {
     if (!ok.empty()) {
         double maxFps = 0, bestDelay = 1e9;
         long maxPix = 1;
-        auto rate = [](const SigRow& r) { return r.content > 1 ? std::min(r.nominal, r.content) : r.nominal; };   // pictures per second that differ
+        // what the console sends, from the highest of the measurements: one game's measured rate wanders with the
+        // scene, so each mode is judged against the same value (a 120 fps mode is no smoother when the game sends 60)
+        double content = 0;
+        for (const auto& r : sig_.rows) if (r.measured) content = std::max(content, r.content);
+        auto rate = [content](const SigRow& r) { return content > 1 ? std::min(r.nominal, std::round(content)) : r.nominal; };
         for (auto* r : ok) {
             maxFps = std::max(maxFps, rate(*r));
             maxPix = std::max(maxPix, pixels(r->mode));
@@ -353,7 +372,8 @@ QVariantList PlayerBridge::signalTestResults() const {
             parts << L("CPU %1 %", "CPU %1 %").arg(r.cpu, 0, 'f', 0);
             if (r.gpu > 0) parts << L("GPU %1 ms", "GPU %1 ms").arg(r.gpu, 0, 'f', 1);
             if (!r.decodePath.isEmpty() && r.decodeMs > 0)
-                parts << L("decoding %1 ms on %2", "afkodning %1 ms på %2").arg(r.decodeMs, 0, 'f', 1).arg(r.decodePath);
+                parts << L("decoding %1 ms on %2", "afkodning %1 ms på %2").arg(r.decodeMs, 0, 'f', 1).arg(r.decodePath)
+                             + (r.copyMs > 0.05 ? L(" (fetching %1 ms)", " (hentning %1 ms)").arg(r.copyMs, 0, 'f', 1) : QString());
             if (r.corruptPct > 0.05) parts << L("%1 % broken", "%1 % i stykker").arg(r.corruptPct, 0, 'f', 1);
         }
         e["stats"] = parts.join(" · ");

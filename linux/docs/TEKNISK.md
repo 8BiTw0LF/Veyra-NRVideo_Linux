@@ -542,8 +542,10 @@ Tryk **C** (eller kamera-ikonet). Vælg enhed, tilstand (★ = anbefalet, ≥50 
 `FrameConverter::decodeNv12` (`src/CaptureSource.cpp`) afkoder kortets JPEG'er til NV12, så kun 1,5 byte pr. pixel går
 til GPU'en (33 MB RGBA ved 4K før). Fuld range kommer fra JPEG'ens `color_range`; matrixen følger størrelsen (709 for HD).
 - **Grafikkortet:** FFmpeg-hwaccel (`avcodec_get_hw_config`): først VA-API (AMD/Intel; `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128`
-  vælger kortet, når der er flere), så CUDA/NVDEC (NVIDIA). Billedet hentes med `av_hwframe_transfer_data`. Tre fejl i
-  træk → CPU resten af sessionen.
+  vælger kortet, når der er flere), så CUDA/NVDEC (NVIDIA). Billedet hentes med `av_hwframe_map(READ)` og kopieres én
+  gang med SSE4.1-streaming-loads (MOVNTDQA), fordi den mappede hukommelse er write-combined og almindelige læsninger dér
+  er meget langsomme (først målt: 17 ms afkodning+hentning på GPU mod 15 ms på CPU). Kan der ikke mappes (NVDEC), bruges
+  `av_hwframe_transfer_data`. Hentetiden vises for sig (F3, signaltesten, loggen). Tre fejl i træk → CPU resten af sessionen.
 - **CPU:** libavcodec med 2 tråde; 4:2:2 (yuvj422p) midles ned til 4:2:0.
 - Indstillingen `cap/mjpegDecode`: 0 automatisk (grafikkort når muligt), 1 grafikkort, 2 CPU. Sættes af *Brug* i
   signaltesten; sendes til `MediaEngine::setMjpegDecode` før `openCapture`.
@@ -557,10 +559,11 @@ den største, MJPEG i største størrelse på grafikkortet og på CPU'en (CPU-k�
 tilbage til CPU), og MJPEG 1080p hvis kortet ikke har ukomprimeret 1080p.
 - Hver kandidat: `startCapture` (3 forsøg), vent til billeder kommer (højst 10 s; intet fra den første = intet signal,
   testen stopper), 2,5 s indsvingning, 4 s måling: leverede billeder/s (`CaptureSource::deliveredFrames`), mellemrum
-  mellem billederne ved DQBUF (`takeArrivals`: jitter, pauser > 1,5 × intervallet), ødelagte, `pipelineMs`, CPU for hele
+  mellem billederne ved DQBUF (`takeArrivals`: pauser > 1,5 × intervallet), jævnhed som spredningen mellem de viste
+  billeder (`shownTimes`; ved DQBUF er de næsten altid jævne, det ujævne er hvornår billedet er klar), ødelagte, `pipelineMs`, CPU for hele
   processen, GPU-tid (`gpuSums`), afkodningsvej/-tid og spillets egen fps (ContentProbe).
-- *Følger med*: ≥ 97 % af tilstandens fps, < 2 % ødelagte, højst 2 % pauser. Blandt dem: point = 50 × fps (spillets egen,
-  højst tilstandens) / bedste + 25 × √(pixels/største) (MJPEG × 0,85) + 15 × (1 − ekstra forsinkelse/33 ms) + 10 ×
+- *Følger med*: ≥ 97 % af tilstandens fps, < 2 % ødelagte, højst 2 % pauser. Blandt dem: point = 50 × fps (højst den højeste spil-fps
+  målt i hele testen, så alle tilstande måles mod samme værdi) / bedste + 25 × √(pixels/største) (MJPEG × 0,85) + 15 × (1 − ekstra forsinkelse/33 ms) + 10 ×
   jævnhed (jitter mod et halvt interval); −10 hvis CPU-afkodningen bruger over halvdelen af CPU'en. Mærker: Anbefalet
   (flest point), Mindst forsinkelse, Mest flydende, Skarpest.
 - Bagefter startes det, der kørte før; kørte intet, bliver den anbefalede stående. Brugerens billedindstillinger
