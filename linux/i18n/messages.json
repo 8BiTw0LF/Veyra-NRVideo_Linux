@@ -370,7 +370,10 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Fertig. Empfohlen auf diesem PC: %1 (das Spiel sendete während des Tests etwa %2 fps)",
   "Best for 30 fps games": "Am besten für 30-fps-Spiele",
   "Best for 60 fps games": "Am besten für 60-fps-Spiele",
-  "Best for 120 fps games": "Am besten für 120-fps-Spiele"
+  "Best for 120 fps games": "Am besten für 120-fps-Spiele",
+  "Best for 240 fps games": "Am besten für 240-fps-Spiele",
+  "The game is already as fast as the screen: frame generation paused": "Das Spiel ist schon so schnell wie der Bildschirm: Frame Generation pausiert",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Das Spiel ist schon so schnell wie der Bildschirm: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um es zu stoppen"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -602,7 +605,10 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Listo. Recomendado en este PC: %1 (el juego envió unos %2 fps durante la prueba)",
   "Best for 30 fps games": "Mejor para juegos a 30 fps",
   "Best for 60 fps games": "Mejor para juegos a 60 fps",
-  "Best for 120 fps games": "Mejor para juegos a 120 fps"
+  "Best for 120 fps games": "Mejor para juegos a 120 fps",
+  "Best for 240 fps games": "Mejor para juegos a 240 fps",
+  "The game is already as fast as the screen: frame generation paused": "El juego ya va tan rápido como la pantalla: generación de fotogramas en pausa",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "El juego ya va tan rápido como la pantalla: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerlo"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -834,7 +840,10 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Terminé. Recommandé sur ce PC : %1 (le jeu envoyait environ %2 ips pendant le test)",
   "Best for 30 fps games": "Idéal pour les jeux à 30 ips",
   "Best for 60 fps games": "Idéal pour les jeux à 60 ips",
-  "Best for 120 fps games": "Idéal pour les jeux à 120 ips"
+  "Best for 120 fps games": "Idéal pour les jeux à 120 ips",
+  "Best for 240 fps games": "Idéal pour les jeux à 240 ips",
+  "The game is already as fast as the screen: frame generation paused": "Le jeu est déjà aussi rapide que l'écran : génération d'images en pause",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Le jeu est déjà aussi rapide que l'écran : Lossless Scaling continue de générer des images. Mettez la génération d'images sur Désactivé pour l'arrêter"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1066,7 +1075,10 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Ferdig. Anbefalt på denne PC-en: %1 (spillet sendte ca. %2 fps under testen)",
   "Best for 30 fps games": "Best for spill i 30 fps",
   "Best for 60 fps games": "Best for spill i 60 fps",
-  "Best for 120 fps games": "Best for spill i 120 fps"
+  "Best for 120 fps games": "Best for spill i 120 fps",
+  "Best for 240 fps games": "Best for spill i 240 fps",
+  "The game is already as fast as the screen: frame generation paused": "Spillet er allerede like raskt som skjermen: bildegenerering satt på pause",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spillet er allerede like raskt som skjermen: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe det"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1298,7 +1310,10 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Готово. Рекомендуется для этого ПК: %1 (игра во время теста выдавала около %2 к/с)",
   "Best for 30 fps games": "Лучше для игр 30 к/с",
   "Best for 60 fps games": "Лучше для игр 60 к/с",
-  "Best for 120 fps games": "Лучше для игр 120 к/с"
+  "Best for 120 fps games": "Лучше для игр 120 к/с",
+  "Best for 240 fps games": "Лучше для игр 240 к/с",
+  "The game is already as fast as the screen: frame generation paused": "Игра уже так же быстра, как экран: генерация кадров приостановлена",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Игра уже так же быстра, как экран: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить это"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1530,6 +1545,9 @@
   "Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)": "Klart. Rekommenderas på den här datorn: %1 (spelet skickade cirka %2 fps under testet)",
   "Best for 30 fps games": "Bäst för spel i 30 fps",
   "Best for 60 fps games": "Bäst för spel i 60 fps",
-  "Best for 120 fps games": "Bäst för spel i 120 fps"
+  "Best for 120 fps games": "Bäst för spel i 120 fps",
+  "Best for 240 fps games": "Bäst för spel i 240 fps",
+  "The game is already as fast as the screen: frame generation paused": "Spelet är redan lika snabbt som skärmen: bildgenerering pausad",
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spelet är redan lika snabbt som skärmen: Lossless Scaling fortsätter att skapa bilder. Sätt bildgenerering till Av för att stoppa det"
  }
 }

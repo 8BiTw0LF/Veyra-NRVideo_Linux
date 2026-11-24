@@ -56,11 +56,11 @@ long pixels(const CaptureMode& m) { return long(m.w) * m.h; }
 // The modes worth measuring: the sharpest uncompressed one at its highest rate (and at 30 fps), 1080p uncompressed,
 // a size in between when it reaches a higher rate than the largest, and MJPEG at its largest size (graphics card and
 // CPU), plus MJPEG 1080p when that is faster than 1080p uncompressed.
-std::vector<CaptureMode> pickModes(const std::vector<CaptureMode>& all, std::vector<int>& decodes) {
+std::vector<CaptureMode> pickModes(const std::vector<CaptureMode>& all, std::vector<int>& decodes, double maxFps) {
     std::vector<CaptureMode> raw, mj;
     for (const auto& m : all) {
-        // below 25 is no use for games; above 120 no console sends (a 240 fps mode only repeats pictures over USB)
-        if (m.fps < 24.5 || m.fps > 121) continue;
+        // below 25 is no use for games; above what the screen shows (at least 120) the extra pictures are never seen
+        if (m.fps < 24.5 || m.fps > maxFps) continue;
         if (rawRank(m.fourcc) >= 0) raw.push_back(m);
         else if (isMjpeg(m.fourcc)) mj.push_back(m);
     }
@@ -105,6 +105,11 @@ std::vector<CaptureMode> pickModes(const std::vector<CaptureMode>& all, std::vec
         });
         if (!mid) mid = best(raw, [tp, topFps](const CaptureMode& m) { return pixels(m) < tp && pixels(m) > 1920L * 1080 && m.fps > topFps + 1; });
         add(mid, 0);
+        // the fastest uncompressed mode, when it is faster still (1080p 240 for a 240 Hz screen)
+        const CaptureMode* fastest = nullptr;
+        for (const auto& m : raw)
+            if (!fastest || m.fps > fastest->fps + 0.5 || (std::abs(m.fps - fastest->fps) <= 0.5 && pixels(m) > pixels(*fastest))) fastest = &m;
+        if (fastest && fastest->fps > std::max(topFps, mid ? mid->fps : 0.0) + 1) add(fastest, 0);
     }
     if (const CaptureMode* m = best(mj, any)) { add(m, 1); add(m, 2); }
     // a card without uncompressed 1080p: its MJPEG 1080p
@@ -122,7 +127,7 @@ bool PlayerBridge::startSignalTest(const QString& path, const QString& audioSour
         return false;
     sig_ = SigTest{};
     std::vector<int> decodes;
-    const auto modes = pickModes(veyamux::listCaptureModes(path.toStdString()), decodes);
+    const auto modes = pickModes(veyamux::listCaptureModes(path.toStdString()), decodes, std::max(121.0, displayHz() * 1.05));
     if (modes.size() < 2) {
         sig_.text = L("This card has only one usable mode: there is nothing to compare.", "Kortet har kun én brugbar tilstand: der er intet at sammenligne.");
         emit signalTestChanged();
@@ -306,11 +311,12 @@ void PlayerBridge::finishSignalTest(bool restore) {
         sig_.content = cs.empty() ? 0 : std::round(cs[cs.size() / 2]);
         double bestDelay = 1e9;
         long maxPix = 1;
-        bool fast120 = false;
+        bool fast120 = false, fast240 = false;
         for (auto* r : ok) {
             maxPix = std::max(maxPix, pixels(r->mode));
             if (r->delay > 0) bestDelay = std::min(bestDelay, r->delay);
             if (r->nominal > 100) fast120 = true;
+            if (r->nominal > 200) fast240 = true;
         }
         // The best mode depends on the game: with a 30 fps game a 60 or 120 fps mode only repeats pictures (no
         // smoother, often more judder over USB); with a 60 fps game a 30 fps mode loses half the frames. So every
@@ -333,10 +339,12 @@ void PlayerBridge::finishSignalTest(bool restore) {
         SigRow* b30 = bestFor(30);
         SigRow* b60 = bestFor(60);
         SigRow* b120 = fast120 ? bestFor(120) : nullptr;
+        SigRow* b240 = fast240 ? bestFor(240) : nullptr;
         // the recommendation: the verdict for the game that was running (60 when it could not be measured)
         const double g = sig_.content;
-        rec = g > 1 && g < 45 ? b30 : g > 90 && b120 ? b120 : b60;
-        for (auto* r : ok) r->score = scoreFor(*r, g > 1 && g < 45 ? 30 : g > 90 && b120 ? 120 : 60);
+        const double gameRate = g > 1 && g < 45 ? 30 : g > 180 && b240 ? 240 : g > 90 && b120 ? 120 : 60;
+        rec = gameRate == 30 ? b30 : gameRate == 240 ? b240 : gameRate == 120 ? b120 : b60;
+        for (auto* r : ok) r->score = scoreFor(*r, gameRate);
         SigRow* fast = pick([](const SigRow& a, const SigRow& b) { return a.delay > 0 && (b.delay <= 0 || a.delay < b.delay - 0.05); });
         SigRow* sharp = pick([](const SigRow& a, const SigRow& b) {
             if (pixels(a.mode) != pixels(b.mode)) return pixels(a.mode) > pixels(b.mode);
@@ -347,6 +355,7 @@ void PlayerBridge::finishSignalTest(bool restore) {
         if (b30) b30->tags << L("Best for 30 fps games", "Bedst til 30 fps-spil");
         if (b60) b60->tags << L("Best for 60 fps games", "Bedst til 60 fps-spil");
         if (b120) b120->tags << L("Best for 120 fps games", "Bedst til 120 fps-spil");
+        if (b240) b240->tags << L("Best for 240 fps games", "Bedst til 240 fps-spil");
         if (fast) fast->tags << L("Least delay", "Mindst forsinkelse");
         if (sharp) sharp->tags << L("Sharpest", "Skarpest");
     }

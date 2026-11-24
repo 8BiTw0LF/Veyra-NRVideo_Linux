@@ -364,8 +364,11 @@ spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HD
 - Fejler capture-kortet (frakoblet), forsøger VeyAmux at åbne det igen hvert sekund med samme tilstand. Kommer der intet
   billede i 3 s, genstartes streamen (hvert 3. sekund) – mange UVC-kort går i stå, når konsollen skifter
   opløsning/Hz/HDR.
-- Kører capture med ≥ 95 fps (tilstandens fps eller målt indhold) i 1 s, sættes frame generation på pause (lsfg-vk-
-  multiplikator 1, indstillingen bevares); under 80 fps i 2 s starter den igen.
+- Frame generation sættes på pause (lsfg-vk-multiplikator 1, indstillingen bevares), når capture-fps (tilstandens eller
+  målt indhold) × multiplikatoren i 1 s er over 1,5 × skærmens Hz, og starter igen under 1,3 × i 2 s. På 120 Hz med 2×:
+  pause over 90 fps, igen under 78 (som de gamle faste 95/80); på 240 Hz kører et 120 fps-signal videre til 240 fps.
+  Signaltesten tager tilstande med op til skærmens Hz (mindst 120), også den hurtigste (fx 1080p240), og mærker
+  *Bedst til 240 fps-spil*, når en sådan tilstand følger med.
 
 ## Lyd
 Capture-lyden går igennem i blokke på 5 ms (før 20 ms) med ca. 20 ms kø ud (før 50 ms); pipewire-pulse sænker sin

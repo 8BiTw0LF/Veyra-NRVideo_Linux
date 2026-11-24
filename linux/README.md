@@ -227,8 +227,9 @@ needed for its own frame generation**, and everything else works without it:
 - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of 33/33,
   and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first. It holds a picture only
   as long as the rhythm needs (about half a refresh plus decoding), and F3 shows the hold.
-- **120 Hz rule**: when the capture runs at about 120 fps, AMD FSR frame generation pauses (doubling would only add
-  latency) and resumes below 80 fps.
+- **Screen-aware pause**: when the game is already about as fast as the screen (120 fps on a 120 Hz screen), AMD FSR
+  frame generation pauses, since the extra frames could not be shown and would only add latency. On a 240 Hz screen a
+  120 fps signal is doubled to 240 fps.
 - **VRR mode**: with frame generation off, VeyAmux shows the game's own frames at an even pace (e.g. 45 fps), so a VRR
   display can follow the game.
 

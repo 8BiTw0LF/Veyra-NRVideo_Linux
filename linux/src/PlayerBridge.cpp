@@ -842,9 +842,12 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
     return t;
 }
 
-// A 120 Hz capture (signal mode or a game running at ~120 fps) needs no generated frames: 2x would ask for 240 fps,
-// more than the display shows, and only adds latency and GPU load. Frame generation is paused (multiplier 1, the
-// setting itself is kept) after 1 s at >= 95 fps and resumes after 2 s below 80 fps.
+// A game that is already about as fast as the screen needs no generated frames: 120 fps × 2 on a 120 Hz screen asks for
+// 240 pictures it cannot show, and only adds latency and GPU load. On a 240 Hz screen the same 120 fps signal doubled
+// is exactly what it shows, so it keeps going. Frame generation is paused (multiplier 1, the setting itself is kept)
+// after 1 s with the generated rate above 1.5 × the screen's refresh, and resumes after 2 s below 1.3 × (on a 120 Hz
+// screen with 2×: pause above 90 fps, resume below 78 fps, as the old fixed 95/80).
+
 void PlayerBridge::updatePixelGrid() {
     if (!s_.pixelActive() || s_.pixelGrid != 1 || !engine_.isOpen() || !engine_.isLive()) { gridStable_ = 0; return; }
     const auto c = engine_.liveContent();
@@ -866,8 +869,10 @@ void PlayerBridge::checkHighRate() {
         const bool share = engine_.info().videoCodec == "PipeWire";
         rate = std::max(share ? 0.0 : engine_.info().fps, c.staticPicture ? 0.0 : c.contentFps);
     }
-    const bool high = live && rate >= 95.0;
-    const bool low = !live || rate < 80.0;
+    const double mult = s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3.0 : 2.0;
+    const double hz = std::max(30.0, displayHz());
+    const bool high = live && rate * mult > 1.5 * hz;
+    const bool low = !live || rate * mult < 1.3 * hz;
     fgHighTicks_ = high ? fgHighTicks_ + 1 : 0;
     fgLowTicks_ = low ? fgLowTicks_ + 1 : 0;
     bool change = false;
@@ -880,11 +885,12 @@ void PlayerBridge::checkHighRate() {
         // lsfg-vk cannot pause: say once that it keeps going and how to stop it
         if (fgPaused_ && !lsfgHighNoticed_) {
             lsfgHighNoticed_ = true;
-            showNotice(L("120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it",
-                         "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den"));
+            showNotice(L("The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it",
+                         "Spillet er allerede lige så hurtigt som skærmen: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den"));
         }
     } else if (s_.frameGen == veyamux::FrameGenMode::FsrFree) {
-        showNotice(fgPaused_ ? L("120 Hz signal: frame generation paused", "120 Hz-signal: frame generation sat på pause")
+        showNotice(fgPaused_ ? L("The game is already as fast as the screen: frame generation paused",
+                                 "Spillet er allerede lige så hurtigt som skærmen: frame generation sat på pause")
                              : L("Frame generation resumed", "Frame generation kører igen"));
     }
     updateLsfgMultiplier();
