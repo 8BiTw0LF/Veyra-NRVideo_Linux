@@ -582,6 +582,14 @@ QVariantList GameLibrary::systems() const {
     return out;
 }
 
+// PNG, JPEG or WebP (box art fetched by an older debug build can be a link's text instead)
+bool GameLibrary::isPicture(const QString& path) {
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) return false;
+    const QByteArray h = f.read(12);
+    return h.startsWith("\x89PNG") || h.startsWith("\xff\xd8\xff") || (h.startsWith("RIFF") && h.mid(8, 4) == "WEBP");
+}
+
 QString GameLibrary::coverPath(const QString& systemId, const QString& romPath) const {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/games/covers/" + systemId + "/";
     const QString stem = QFileInfo(romPath).completeBaseName();
@@ -595,7 +603,7 @@ QVariantMap GameLibrary::itemFor(const Entry& e) const {
     return QVariantMap{{"key", e.path}, {"title", e.title},
                        {"sub", QString(s ? s->name : "") + (e.region.isEmpty() ? QString()
                                 : " · " + (e.region == "usa" ? QStringLiteral("USA") : e.region.left(1).toUpper() + e.region.mid(1)))},
-                       {"image", QFile::exists(cover) ? QUrl::fromLocalFile(cover).toString() : QString()},
+                       {"image", isPicture(cover) ? QUrl::fromLocalFile(cover).toString() : QString()},
                        {"kind", "game"}, {"system", e.system}};
 }
 
@@ -713,7 +721,7 @@ void GameLibrary::downloadCovers() {
     std::vector<Entry> todo;
     {
         std::lock_guard l(m_);
-        for (const auto& e : entries_) if (!QFile::exists(coverPath(e.system, e.path))) todo.push_back(e);
+        for (const auto& e : entries_) if (!isPicture(coverPath(e.system, e.path))) todo.push_back(e);
     }
     if (todo.empty()) { emit message("gamesCoversDone", "0", false); return; }
     if (working_) return;
@@ -734,19 +742,33 @@ void GameLibrary::downloadCovers() {
             const QString stem = e.thumb.isEmpty() ? QFileInfo(e.path).completeBaseName() : e.thumb;
             const QString dest = coverPath(e.system, e.path);
             QDir().mkpath(QFileInfo(dest).absolutePath());
+            // a downloaded file is kept only when it is a picture. On GitHub many box art files are symbolic links
+            // to another name ("Star Fox (USA) (Rev 2).png" -> "Star Fox (USA).png"), which come back as that name in
+            // a few bytes of text: then that file is fetched instead.
+            auto take = [&](const QString& url, int depth, auto&& self) -> bool {
+                QString err;
+                if (!httpsDownload(url, dest + ".part", 8 << 20, {}, err)) { QFile::remove(dest + ".part"); return false; }
+                if (isPicture(dest + ".part")) { QFile::remove(dest); return QFile::rename(dest + ".part", dest); }
+                QFile f(dest + ".part");
+                QString link;
+                if (f.open(QIODevice::ReadOnly) && f.size() < 512) link = QString::fromUtf8(f.readAll()).trimmed();
+                f.close();
+                QFile::remove(dest + ".part");
+                if (depth > 0 || link.isEmpty() || !link.endsWith(".png", Qt::CaseInsensitive) || link.contains('\n')) return false;
+                const QString base = url.left(url.lastIndexOf('/') + 1);
+                QString target = link.section('/', -1);
+                return self(base + QString::fromUtf8(QUrl::toPercentEncoding(target)), depth + 1, self);
+            };
             auto fetch = [&](const QString& name) {
                 const QString url = "https://thumbnails.libretro.com/" + QString::fromUtf8(QUrl::toPercentEncoding(thumbs)) + "/Named_Boxarts/"
                                     + QString::fromUtf8(QUrl::toPercentEncoding(name)) + ".png";
-                QString err;
-                if (httpsDownload(url, dest + ".part", 8 << 20, {}, err)) { QFile::remove(dest); return QFile::rename(dest + ".part", dest); }
+                if (take(url, 0, take)) return true;
                 // the same files on GitHub (libretro-thumbnails), when the thumbnail server is down
                 QString repo = thumbs;
                 repo.replace(' ', '_');
                 const QString gh = "https://raw.githubusercontent.com/libretro-thumbnails/" + QString::fromUtf8(QUrl::toPercentEncoding(repo))
                                    + "/master/Named_Boxarts/" + QString::fromUtf8(QUrl::toPercentEncoding(name)) + ".png";
-                if (httpsDownload(gh, dest + ".part", 8 << 20, {}, err)) { QFile::remove(dest); return QFile::rename(dest + ".part", dest); }
-                QFile::remove(dest + ".part");
-                return false;
+                return take(gh, 0, take);
             };
             bool done = false;
             for (const auto& set : sets) { thumbs = set; if ((done = fetch(thumbnailName(stem)))) break; }

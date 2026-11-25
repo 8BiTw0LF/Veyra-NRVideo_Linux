@@ -93,6 +93,7 @@ private:
     void save() const;
     void scanThread(QString root);
     static bool isBiosFile(const QString& path, const QString& root);
+    static bool isPicture(const QString& path);
     void copyBios(const QStringList& files);
     void groupDiscs(std::vector<Entry>& found);
     void setBusy(const QString& key, const QString& arg = {}, int p = -1);

@@ -177,6 +177,12 @@ void setOptionDefault(const char* key, const char* value) {
 }
 
 bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
+    // a core may pass no data to say "none" (GPGX does for the disc control of a cartridge): only the commands
+    // that handle that may go on
+    if (!data && cmd != RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE && cmd != RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE
+        && cmd != RETRO_ENVIRONMENT_SHUTDOWN && cmd != RETRO_ENVIRONMENT_GET_INPUT_BITMASKS && cmd != RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME
+        && cmd != RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS)
+        return false;
     switch (cmd) {
     case RETRO_ENVIRONMENT_SET_ROTATION: rotation = *static_cast<const unsigned*>(data) & 3; return true;
     case RETRO_ENVIRONMENT_GET_OVERSCAN: *static_cast<bool*>(data) = false; return true;
@@ -209,11 +215,13 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
     case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION: *static_cast<unsigned*>(data) = 1; return true;
     case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: {
         const auto* d = static_cast<const retro_disk_control_callback*>(data);
+        if (!d) { diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; return true; }   // no discs (a cartridge)
         diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
         return true;
     }
     case RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE: {
         const auto* d = static_cast<const retro_disk_control_ext_callback*>(data);
+        if (!d) { diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; return true; }   // no discs (a cartridge)
         diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
         return true;
     }
