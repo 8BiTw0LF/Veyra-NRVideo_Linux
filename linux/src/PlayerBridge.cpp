@@ -4,6 +4,7 @@
 #include "Sandbox.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
+#include "Libretro.h"
 #include "PulseDevices.h"
 #include <cstring>
 #include <QLocale>
@@ -142,6 +143,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         checkHighRate();
         checkOverRefresh();
         updatePixelGrid();
+        pollRetroMessage();
         if (demoActive_) {
             const double p = veyamux::demo::progress();
             if (p != demoProgress_) {
@@ -954,6 +956,12 @@ QString PlayerBridge::mediaInfo() const {
     const auto& i = engine_.info();
     if (!engine_.isOpen()) return {};
     QStringList p;
+    if (retroActive_) {   // a game: the emulator, the console's own picture size and rate
+        const auto r = veyamux::retro::info();
+        p << QString::fromStdString(r.core).trimmed();
+        if (r.w > 0) p << QString("%1×%2 @ %3 fps").arg(r.w).arg(r.h).arg(r.fps, 0, 'f', 2) + outputFpsText(r.fps);
+        return p.join(" · ");
+    }
     if (i.hasVideo && engine_.isLive()) {
         // A capture card always sends its fixed signal (e.g. 3840x2160 @ 60): lead with what the game actually renders
         // (measured frame rate, estimated resolution with "~"), the signal after it.
@@ -994,15 +1002,45 @@ void PlayerBridge::showNotice(const QString& s) {
 
 bool PlayerBridge::openUrl(const QUrl& url) { return openPath(url.isLocalFile() ? url.toLocalFile() : url.toString()); }
 
-bool PlayerBridge::openPath(const QString& path) {
-    std::string err;
-    openFile_ = path;
+bool PlayerBridge::openPath(const QString& path) { return openMedia(path, {}); }
+
+bool PlayerBridge::openStream(const QString& url, const QString& headers, const QString& title) {
+    const bool ok = openMedia(url, headers);
+    if (ok && !title.isEmpty()) { streamTitle_ = title; emit mediaChanged(); }
+    return ok;
+}
+
+void PlayerBridge::closeMedia() {
+    if (engine_.isOpen()) emit closing();
+    if (liveVk_) liveVk_->setActive(false);
+    if (portal_) portal_->closeSession();
+    engine_.close();
+    { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     demoActive_ = false;
+    retroActive_ = false;
+    retroKeys_ = 0;
+    veyamux::retro::setKeys(0);
+    openFile_.clear();
+    streamTitle_.clear();
+    setStatus({});
+    emit mediaChanged();
+    lastPlaying_ = false;
+    emit playingChanged();
+}
+
+bool PlayerBridge::openMedia(const QString& path, const QString& headers) {
+    std::string err;
+    if (engine_.isOpen()) emit closing();
+    // a server stream is not reopened after a restart (its token is in the headers)
+    openFile_ = headers.isEmpty() ? path : QString();
+    streamTitle_.clear();
+    demoActive_ = false;
+    retroActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     // the picture goes straight to the window's Vulkan frame when it can (VEYAMUX_FILE_GPU=0: the CPU way)
     const bool zeroCopy = liveVk_ != nullptr && qEnvironmentVariable("VEYAMUX_FILE_GPU") != "0";
-    if (!engine_.open(path.toStdString(), err, zeroCopy)) {
+    if (!engine_.open(path.toStdString(), err, zeroCopy, headers.toStdString())) {
         setStatus(translateMessage(QString::fromStdString(err)));
         emit mediaChanged();
         return false;
@@ -1452,7 +1490,11 @@ void PlayerBridge::openScreenCast(const QString& audioSource, bool useLast) {
 
 bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource) {
     const bool screenCast = veyamux::CaptureSource::isScreenCast(path.toStdString());
+    if (engine_.isOpen()) emit closing();
+    openFile_.clear();
+    streamTitle_.clear();
     demoActive_ = veyamux::CaptureSource::isDemo(path.toStdString());
+    retroActive_ = veyamux::CaptureSource::isRetro(path.toStdString());
     veyamux::demo::releaseAll();
     if (!screenCast && portal_) portal_->closeSession();   // a capture card replaces the shared window
     std::string err;
@@ -1469,17 +1511,17 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
         return false;
     }
     curMode_ = screenCast || veyamux::CaptureSource::isDemo(path.toStdString()) || veyamux::CaptureSource::isRemotePlay(path.toStdString())
-                   ? veyamux::CaptureMode{} : mode;
+                   || retroActive_ ? veyamux::CaptureMode{} : mode;
     curDevice_ = path;
     curAudio_ = audioSource;
     QSettings q;
     // The demo is not remembered as the last source: the Steam shortcut starts with --capture last, and trying the demo
     // once (on a handheld without a capture card, say) would otherwise make every later start load Abyssal Garden.
-    if (!veyamux::CaptureSource::isDemo(path.toStdString())) {
+    if (!veyamux::CaptureSource::isDemo(path.toStdString()) && !retroActive_) {
         q.setValue("cap/device", screenCast ? QStringLiteral("screencast") : path);
         q.setValue("cap/audio", audioSource);
     }
-    if (const QString n = screenCast ? QString() : veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
+    if (const QString n = screenCast || retroActive_ ? QString() : veyamux::watch::cardName(path); !n.isEmpty()) q.setValue("cap/name", n);   // for the plug-in watcher
     updateLsfgMultiplier();
     if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
     if (zeroCopy) { liveVk_->setSettings(s_); liveVk_->setActive(true); }
@@ -1761,7 +1803,8 @@ void PlayerBridge::restartWithSource() {
         if (old[i] == "--probe-ui" || old[i] == "--fullscreen" || !old[i].startsWith("--")) continue;
         args << old[i];
     }
-    if (engine_.isOpen() && engine_.isLive()) args << "--capture" << (demoActive_ ? curDevice_ : QStringLiteral("last"));   // the demo is not "last"
+    // (a game is not started again: the emulator would lose what is not saved)
+    if (engine_.isOpen() && engine_.isLive() && !retroActive_) args << "--capture" << (demoActive_ ? curDevice_ : QStringLiteral("last"));   // the demo is not "last"
 
     else if (engine_.isOpen() && !openFile_.isEmpty()) args << openFile_;
     if (window_ && window_->visibility() == QWindow::FullScreen) args << "--fullscreen";
@@ -1834,6 +1877,10 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         "That address has no login code (it should contain \"code=\")",
         "No access token from PlayStation Network (the code is used once: log in again)",
         "PlayStation Network sent no account number", "PlayStation Network answered ",
+        // games (Libretro.cpp)
+        "State saved", "State loaded", "No saved state yet", "Could not save the state", "Could not load the state",
+        "This emulator cannot save states", "The emulator could not start the game (a missing BIOS file? See the BIOS folder)",
+        "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(veyamux-linux VERSION 2.0.1 LANGUAGES C CXX)
+project(veyamux-linux VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -137,18 +137,23 @@ pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
 # ---- chiaki-ng (PlayStation Remote Play, AGPL-3.0) ----
 include(cmake/chiaki.cmake)
 
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 target_include_directories(veyamux_media PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
 target_link_libraries(veyamux_media PRIVATE ${CMAKE_DL_LIBS})
+# zip files (games, downloaded emulator cores)
+pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
+target_link_libraries(veyamux_media PRIVATE PkgConfig::ZLIB)
 target_link_libraries(veyamux_media PUBLIC veyamux_core PkgConfig::FFMPEG PkgConfig::PULSE Threads::Threads veyamux_chiaki)
 find_package(Threads REQUIRED)
 add_executable(veyamux-ps-decode-test src/ps_decode_test.cpp)
 target_link_libraries(veyamux-ps-decode-test PRIVATE veyamux_media)
 add_executable(veyamux-mjpeg-test src/mjpeg_test.cpp)
 target_link_libraries(veyamux-mjpeg-test PRIVATE veyamux_media)
+add_executable(veyamux-retro-test src/retro_test.cpp)
+target_link_libraries(veyamux-retro-test PRIVATE veyamux_media)
 add_executable(veyamux-play-test src/play_test.cpp)
 target_link_libraries(veyamux-play-test PRIVATE veyamux_media)
 add_dependencies(veyamux-play-test veyamux_shaders)
@@ -177,7 +182,7 @@ endif()
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/Download.cpp src/Download.h src/Fsr4Addon.cpp src/Fsr4Addon.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp src/LowLatency.cpp src/LowLatency.h src/ScreenTiming.cpp src/ScreenTiming.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/Download.cpp src/Download.h src/Fsr4Addon.cpp src/Fsr4Addon.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp src/LowLatency.cpp src/LowLatency.h src/ScreenTiming.cpp src/ScreenTiming.h src/PlayerBridgeGames.cpp src/GameLibrary.cpp src/GameLibrary.h src/MediaLibrary.cpp src/MediaLibrary.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -192,10 +197,11 @@ foreach(f pq_video hdr_window)
 endforeach()
 qt_add_resources(veyamux "hdrshaders" PREFIX "/" FILES ${QSB_FILES})
 qt_add_resources(veyamux "qml" PREFIX "/" FILES
-  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/Menu.qml qml/CaptureDialog.qml qml/RemotePlayDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
+  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/Menu.qml qml/CaptureDialog.qml qml/RemotePlayDialog.qml qml/Library.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
   qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg qml/icons/bug.svg
+  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)

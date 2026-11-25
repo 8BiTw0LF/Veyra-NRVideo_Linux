@@ -3,6 +3,7 @@
 #include "FramePacingRepair.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
+#include "Libretro.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -111,7 +112,7 @@ bool MediaEngine::openVideoDecoder(bool tryHw, std::string& error) {
     return true;
 }
 
-bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGpu) {
+bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGpu, const std::string& httpHeaders) {
     close();
     quit_ = false;
     fmt_ = avformat_alloc_context();
@@ -124,6 +125,11 @@ bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGp
     // a local file only reads local files (a playlist inside it cannot reach out to the network)
     if (local) av_dict_set(&opts, "protocol_whitelist", "file", 0);
     else av_dict_set(&opts, "rw_timeout", "15000000", 0);   // network: 15 s without data is an error
+    if (!local && !httpHeaders.empty()) {
+        av_dict_set(&opts, "headers", httpHeaders.c_str(), 0);
+        av_dict_set(&opts, "reconnect", "1", 0);                       // a dropped connection resumes where it was
+        av_dict_set(&opts, "reconnect_on_network_error", "1", 0);
+    }
     int r = avformat_open_input(&fmt_, path.c_str(), nullptr, &opts);
     av_dict_free(&opts);
     if (r < 0) { error = "Could not open the file: " + avErr(r); fmt_ = nullptr; return false; }
@@ -282,7 +288,8 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     info_.height = cap_->height();
     info_.fps = cap_->fps();
     info_.videoCodec = CaptureSource::isScreenCast(devicePath) ? "PipeWire" : CaptureSource::isDemo(devicePath) ? "Demo"
-                    : CaptureSource::isRemotePlay(devicePath) ? "Remote Play" : fourccName(mode.fourcc);
+                    : CaptureSource::isRemotePlay(devicePath) ? "Remote Play" : CaptureSource::isRetro(devicePath) ? "Libretro"
+                    : fourccName(mode.fourcc);
     info_.audioCodec = audioSource.empty() ? "" : "live";
     capAudioSource_ = audioSource;
     capPath_ = devicePath;
@@ -357,7 +364,8 @@ void MediaEngine::captureLoop() {
     // A shared window/screen only sends a picture when something changes, and cannot be reopened once it is gone.
     // (the demo scene behaves the same way: no reopening, and nothing to wait for while its world is built)
     // (Remote Play too: its errors are the console's own reasons, and reconnecting is the user's choice)
-    const bool screenCast = CaptureSource::isScreenCast(capPath_) || CaptureSource::isDemo(capPath_) || CaptureSource::isRemotePlay(capPath_);
+    const bool screenCast = CaptureSource::isScreenCast(capPath_) || CaptureSource::isDemo(capPath_) || CaptureSource::isRemotePlay(capPath_)
+                            || CaptureSource::isRetro(capPath_);
     while (!quit_) {
         std::string err;
         const bool toGpu = rawLive_.load();
@@ -512,7 +520,8 @@ void MediaEngine::captureAudioLoop() {
     // "@demo": the demo scene's own sound, made here instead of recorded (paced by the playback stream)
     // ("@ps": PlayStation Remote Play's sound, received over the network)
     const bool psSound = capAudioSource_ == "@ps";
-    const bool demoSound = capAudioSource_ == "@demo" || psSound;
+    const bool retroSound = capAudioSource_ == "@retro";   // a game's sound (Libretro.h)
+    const bool demoSound = capAudioSource_ == "@demo" || psSound || retroSound;
     const char* dev = capAudioSource_ == "@default" ? nullptr : capAudioSource_.c_str();
     pa_simple* rec = demoSound ? nullptr : pa_simple_new(nullptr, "VeyAmux", PA_STREAM_RECORD, dev, "capture", &ss, nullptr, &rattr, &err);
     if (!rec && !demoSound) { if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Capture audio unavailable: ") + pa_strerror(err)); return; }
@@ -534,6 +543,7 @@ void MediaEngine::captureAudioLoop() {
     int tick = 0;
     while (!quit_) {
         if (psSound) remoteplay::audio(buf.data(), int(buf.size() / 2));
+        else if (retroSound) retro::audio(buf.data(), int(buf.size() / 2));
         else if (demoSound) demo::audio(buf.data(), int(buf.size() / 2));
         else if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
         if (!playing_.load()) { if (demoSound) std::this_thread::sleep_for(std::chrono::milliseconds(blockMs)); continue; }

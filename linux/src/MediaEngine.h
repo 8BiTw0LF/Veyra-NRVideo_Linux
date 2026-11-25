@@ -73,7 +73,8 @@ public:
     // rawToGpu: the pictures go to onLiveFrame as NV12 / P010 / RGBA, paced by the clock, and are processed in the
     // window's own Vulkan frame (no conversion to RGB on the CPU and no read-back), like a capture card. Only for
     // files it suits (square pixels, not HLG); isRawLive() tells whether it is used.
-    bool open(const std::string& path, std::string& error, bool rawToGpu = false);
+    // httpHeaders: sent with every request of a network stream ("Name: value\r\n" lines; a media server's token)
+    bool open(const std::string& path, std::string& error, bool rawToGpu = false, const std::string& httpHeaders = {});
     void close();
     bool isOpen() const { return fmt_ != nullptr || live_.load(); }
     bool isLive() const { return live_.load(); }

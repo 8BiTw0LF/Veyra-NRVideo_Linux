@@ -333,6 +333,3 @@ void PlayerBridge::psConnect(const QString& id) {
     });
 }
 
-void PlayerBridge::psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2) {
-    rp::setController(buttons, lx, ly, rx, ry, l2, r2);
-}

@@ -138,7 +138,18 @@
   "Restart VeyAmux to turn Lossless Scaling off": "Genstart VeyAmux for at slå Lossless Scaling fra",
   "120 Hz signal: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "120 Hz-signal: Lossless Scaling laver stadig billeder. Sæt frame generation til Fra for at stoppe den",
   "VRR (Adaptive Sync) is on: Lossless Scaling cannot pace its frames evenly. Set Adaptive sync to Never in the display settings": "VRR (adaptiv synkronisering) er slået til: Lossless Scaling kan ikke lægge sine billeder jævnt. Sæt Adaptiv synkronisering til Aldrig i skærmindstillingerne",
-  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)"
+  "\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)": "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)",
+  "State saved": "Tilstand gemt",
+  "State loaded": "Tilstand hentet",
+  "No saved state yet": "Ingen gemt tilstand endnu",
+  "Could not save the state": "Kunne ikke gemme tilstanden",
+  "Could not load the state": "Kunne ikke hente tilstanden",
+  "This emulator cannot save states": "Denne emulator kan ikke gemme tilstande",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "Emulatoren kunne ikke starte spillet (mangler en BIOS-fil? Se BIOS-mappen)",
+  "The zip file holds no game this emulator can run": "Zip-filen indeholder intet spil, som denne emulator kan køre",
+  "Could not load the emulator core: ": "Kunne ikke indlæse emulatoren: ",
+  "The game was closed": "Spillet blev lukket",
+  "Starting the game…": "Starter spillet…"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -373,7 +384,18 @@
   "Best for 120 fps games": "Am besten für 120-fps-Spiele",
   "Best for 240 fps games": "Am besten für 240-fps-Spiele",
   "The game is already as fast as the screen: frame generation paused": "Das Spiel ist schon so schnell wie der Bildschirm: Frame Generation pausiert",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Das Spiel ist schon so schnell wie der Bildschirm: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um es zu stoppen"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Das Spiel ist schon so schnell wie der Bildschirm: Lossless Scaling erzeugt weiter Bilder. Stelle Frame Generation auf Aus, um es zu stoppen",
+  "State saved": "Zustand gespeichert",
+  "State loaded": "Zustand geladen",
+  "No saved state yet": "Noch kein gespeicherter Zustand",
+  "Could not save the state": "Der Zustand konnte nicht gespeichert werden",
+  "Could not load the state": "Der Zustand konnte nicht geladen werden",
+  "This emulator cannot save states": "Dieser Emulator kann keine Zustände speichern",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "Der Emulator konnte das Spiel nicht starten (fehlt eine BIOS-Datei? Siehe BIOS-Ordner)",
+  "The zip file holds no game this emulator can run": "Die Zip-Datei enthält kein Spiel, das dieser Emulator ausführen kann",
+  "Could not load the emulator core: ": "Der Emulator konnte nicht geladen werden: ",
+  "The game was closed": "Das Spiel wurde beendet",
+  "Starting the game…": "Das Spiel wird gestartet…"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -608,7 +630,18 @@
   "Best for 120 fps games": "Mejor para juegos a 120 fps",
   "Best for 240 fps games": "Mejor para juegos a 240 fps",
   "The game is already as fast as the screen: frame generation paused": "El juego ya va tan rápido como la pantalla: generación de fotogramas en pausa",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "El juego ya va tan rápido como la pantalla: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerlo"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "El juego ya va tan rápido como la pantalla: Lossless Scaling sigue generando fotogramas. Pon la generación de fotogramas en Apagado para detenerlo",
+  "State saved": "Estado guardado",
+  "State loaded": "Estado cargado",
+  "No saved state yet": "Aún no hay ningún estado guardado",
+  "Could not save the state": "No se pudo guardar el estado",
+  "Could not load the state": "No se pudo cargar el estado",
+  "This emulator cannot save states": "Este emulador no puede guardar estados",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "El emulador no pudo iniciar el juego (¿falta un archivo BIOS? Mira la carpeta BIOS)",
+  "The zip file holds no game this emulator can run": "El archivo zip no contiene ningún juego que este emulador pueda ejecutar",
+  "Could not load the emulator core: ": "No se pudo cargar el emulador: ",
+  "The game was closed": "El juego se cerró",
+  "Starting the game…": "Iniciando el juego…"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -843,7 +876,18 @@
   "Best for 120 fps games": "Idéal pour les jeux à 120 ips",
   "Best for 240 fps games": "Idéal pour les jeux à 240 ips",
   "The game is already as fast as the screen: frame generation paused": "Le jeu est déjà aussi rapide que l'écran : génération d'images en pause",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Le jeu est déjà aussi rapide que l'écran : Lossless Scaling continue de générer des images. Mettez la génération d'images sur Désactivé pour l'arrêter"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Le jeu est déjà aussi rapide que l'écran : Lossless Scaling continue de générer des images. Mettez la génération d'images sur Désactivé pour l'arrêter",
+  "State saved": "État sauvegardé",
+  "State loaded": "État chargé",
+  "No saved state yet": "Aucun état sauvegardé pour l'instant",
+  "Could not save the state": "Impossible de sauvegarder l'état",
+  "Could not load the state": "Impossible de charger l'état",
+  "This emulator cannot save states": "Cet émulateur ne peut pas sauvegarder d'état",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "L'émulateur n'a pas pu lancer le jeu (un fichier BIOS manque ? Voir le dossier BIOS)",
+  "The zip file holds no game this emulator can run": "Le fichier zip ne contient aucun jeu que cet émulateur peut lancer",
+  "Could not load the emulator core: ": "Impossible de charger l'émulateur : ",
+  "The game was closed": "Le jeu a été fermé",
+  "Starting the game…": "Lancement du jeu…"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1078,7 +1122,18 @@
   "Best for 120 fps games": "Best for spill i 120 fps",
   "Best for 240 fps games": "Best for spill i 240 fps",
   "The game is already as fast as the screen: frame generation paused": "Spillet er allerede like raskt som skjermen: bildegenerering satt på pause",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spillet er allerede like raskt som skjermen: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe det"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spillet er allerede like raskt som skjermen: Lossless Scaling lager fortsatt bilder. Sett bildegenerering til Av for å stoppe det",
+  "State saved": "Tilstand lagret",
+  "State loaded": "Tilstand hentet",
+  "No saved state yet": "Ingen lagret tilstand ennå",
+  "Could not save the state": "Kunne ikke lagre tilstanden",
+  "Could not load the state": "Kunne ikke hente tilstanden",
+  "This emulator cannot save states": "Denne emulatoren kan ikke lagre tilstander",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "Emulatoren kunne ikke starte spillet (mangler en BIOS-fil? Se BIOS-mappen)",
+  "The zip file holds no game this emulator can run": "Zip-filen inneholder ikke noe spill denne emulatoren kan kjøre",
+  "Could not load the emulator core: ": "Kunne ikke laste inn emulatoren: ",
+  "The game was closed": "Spillet ble lukket",
+  "Starting the game…": "Starter spillet…"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1313,7 +1368,18 @@
   "Best for 120 fps games": "Лучше для игр 120 к/с",
   "Best for 240 fps games": "Лучше для игр 240 к/с",
   "The game is already as fast as the screen: frame generation paused": "Игра уже так же быстра, как экран: генерация кадров приостановлена",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Игра уже так же быстра, как экран: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить это"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Игра уже так же быстра, как экран: Lossless Scaling продолжает генерировать кадры. Выключите генерацию кадров, чтобы остановить это",
+  "State saved": "Состояние сохранено",
+  "State loaded": "Состояние загружено",
+  "No saved state yet": "Сохранённого состояния пока нет",
+  "Could not save the state": "Не удалось сохранить состояние",
+  "Could not load the state": "Не удалось загрузить состояние",
+  "This emulator cannot save states": "Этот эмулятор не умеет сохранять состояния",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "Эмулятор не смог запустить игру (нет файла BIOS? См. папку BIOS)",
+  "The zip file holds no game this emulator can run": "В zip-файле нет игры, которую может запустить этот эмулятор",
+  "Could not load the emulator core: ": "Не удалось загрузить эмулятор: ",
+  "The game was closed": "Игра закрыта",
+  "Starting the game…": "Запуск игры…"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1548,6 +1614,17 @@
   "Best for 120 fps games": "Bäst för spel i 120 fps",
   "Best for 240 fps games": "Bäst för spel i 240 fps",
   "The game is already as fast as the screen: frame generation paused": "Spelet är redan lika snabbt som skärmen: bildgenerering pausad",
-  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spelet är redan lika snabbt som skärmen: Lossless Scaling fortsätter att skapa bilder. Sätt bildgenerering till Av för att stoppa det"
+  "The game is already as fast as the screen: Lossless Scaling keeps generating frames. Set frame generation to Off to stop it": "Spelet är redan lika snabbt som skärmen: Lossless Scaling fortsätter att skapa bilder. Sätt bildgenerering till Av för att stoppa det",
+  "State saved": "Läget sparat",
+  "State loaded": "Läget laddat",
+  "No saved state yet": "Inget sparat läge ännu",
+  "Could not save the state": "Kunde inte spara läget",
+  "Could not load the state": "Kunde inte ladda läget",
+  "This emulator cannot save states": "Den här emulatorn kan inte spara lägen",
+  "The emulator could not start the game (a missing BIOS file? See the BIOS folder)": "Emulatorn kunde inte starta spelet (saknas en BIOS-fil? Se BIOS-mappen)",
+  "The zip file holds no game this emulator can run": "Zip-filen innehåller inget spel som emulatorn kan köra",
+  "Could not load the emulator core: ": "Kunde inte läsa in emulatorn: ",
+  "The game was closed": "Spelet stängdes",
+  "Starting the game…": "Startar spelet…"
  }
 }

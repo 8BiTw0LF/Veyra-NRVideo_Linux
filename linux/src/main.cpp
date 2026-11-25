@@ -5,6 +5,8 @@
 #include "PlayerBridge.h"
 #include "Diagnostics.h"
 #include "Gamepad.h"
+#include "GameLibrary.h"
+#include "MediaLibrary.h"
 #include "VideoItem.h"
 #include "VkContext.h"
 #include <algorithm>
@@ -27,6 +29,7 @@
 #include <QStandardPaths>
 #include <QFile>
 #include <QTimer>
+#include <QSettings>
 #include <QVulkanInstance>
 #include <QScreen>
 #include <memory>
@@ -129,7 +132,7 @@ int main(int argc, char** argv) {
     QCoreApplication::setOrganizationName("VeyAmux");
     // VeyAmux Debug runs next to VeyAmux with its own settings (~/.config/VeyAmux/VeyAmux-Debug.conf) and data folder
     QCoreApplication::setApplicationName(veyamux::diag::kDebugBuild ? "VeyAmux-Debug" : "VeyAmux");
-    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.0.1"));
+    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.1.0"));
     {
         // the UI probe and the card watcher are helper processes: no log file of their own
         bool helper = false;
@@ -374,6 +377,8 @@ int main(int argc, char** argv) {
     qmlRegisterType<VideoItem>("VeyAmux", 1, 0, "VideoItem");
     PlayerBridge player(findShaderDir());
     veyamux::GamepadInput gamepad;   // controllers for the menu (Select + Start); outlives the QML engine
+    veyamux::MediaLibrary media(&player);   // the Media and Games pages (outlive the QML engine too)
+    veyamux::GameLibrary games;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("gamepad", &gamepad);
     // the demo scene swims with the controller while the menu is closed; Y jumps to the next viewpoint
@@ -385,6 +390,12 @@ int main(int argc, char** argv) {
         if (b == "y" && player.demoActive()) player.demoPose(-1);
     });
     engine.rootContext()->setContextProperty("player", &player);
+    QObject::connect(&games, &veyamux::GameLibrary::launch, &player,
+                     [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys) {
+                         player.openGame(core, rom, title, sys, games.biosFolder());
+                     });
+    engine.rootContext()->setContextProperty("media", &media);
+    engine.rootContext()->setContextProperty("games", &games);
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);
     // a handheld PC (Steam Deck, ROG Ally, Legion Go, ...): the menu fills the whole window (Main.qml compactMenu)
@@ -400,6 +411,8 @@ int main(int argc, char** argv) {
     }();
     engine.rootContext()->setContextProperty("handheld", handheld);
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
+    // Test hook: open the Media or Games page at start (VEYAMUX_TEST_PAGE=media | games, for screenshots)
+    engine.rootContext()->setContextProperty("testPage", qEnvironmentVariable("VEYAMUX_TEST_PAGE"));
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
     // Test hook: the capture dialog's signal test with sample results (VEYAMUX_TEST_SIGNALTEST=1, for screenshots)
@@ -545,6 +558,41 @@ int main(int argc, char** argv) {
         QTimer::singleShot(1500, [&] { player.toggleRecording(); });
         QTimer::singleShot(4500, [&] { player.toggleRecording(); player.saveReplay(); player.screenshot(); });
     }
+    // Test hook: the media client against a server (VEYAMUX_TEST_MEDIA=jellyfin:<url> or plex:<url>, see tests/mock_media_server.py)
+    if (const QString tm = qEnvironmentVariable("VEYAMUX_TEST_MEDIA"); !tm.isEmpty()) {
+        auto dump = [&media](const char* what) {
+            qInfo("TEST %s: %lld items", what, qlonglong(media.items().size()));
+            for (const auto& v : media.items()) {
+                const auto m = v.toMap();
+                qInfo("TEST   %s | %s | %s | %s", qPrintable(m.value("kind").toString()), qPrintable(m.value("title").toString()),
+                      qPrintable(m.value("sub").toString()), qPrintable(media.images().value(m.value("key").toString()).toString().section('/', -1)));
+            }
+        };
+        const QString url = tm.section(':', 1);
+        if (tm.startsWith("plex:")) {
+            QSettings q;
+            q.setValue("media/servers/plex-test/kind", "plex");
+            q.setValue("media/servers/plex-test/name", "MockPlex");
+            q.setValue("media/servers/plex-test/token", "plex-secret-token");
+            q.setValue("media/servers/plex-test/uris", QStringList{"http://127.0.0.1:1", url});
+            QTimer::singleShot(300, [&media] { media.select("plex-test"); });
+        } else {
+            QTimer::singleShot(300, [&media, url] { media.addJellyfin(url, "u", "pw"); });
+        }
+        QTimer::singleShot(2500, [&media, dump] { dump("root"); media.openItem(1); });
+        QTimer::singleShot(4500, [&media, dump] { dump("library"); media.play(0, false); });
+        QTimer::singleShot(7000, [&media, &player] {
+            qInfo("TEST playing: hasMedia %d position %.2f fromLibrary %d title %s", player.hasMedia(), player.position(),
+                  media.playingFromLibrary(), qPrintable(player.title()));
+            media.stopPlayback();
+        });
+        QTimer::singleShot(8500, [dump] { dump("after"); QCoreApplication::quit(); });
+    }
+    // Test hook: start a game from the Games page (VEYAMUX_TEST_GAME=<the game's file>)
+    if (const QString tg = qEnvironmentVariable("VEYAMUX_TEST_GAME"); !tg.isEmpty())
+        QTimer::singleShot(1500, [&games, tg] { games.play(tg); });
+    // (VEYAMUX_TEST_COVERS=1: fetch the box art at start)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_COVERS")) QTimer::singleShot(2500, [&games] { games.downloadCovers(); });
     // --capture last: the card used last time (Steam / Game Mode shortcut)
     if (capturePath == "last") capturePath = player.lastCaptureDevice();
     if (!capturePath.isEmpty()) QTimer::singleShot(0, [&] { player.openCaptureAuto(capturePath); });

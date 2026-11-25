@@ -21,7 +21,8 @@ Window {
     readonly property real screenMm: Screen.pixelDensity > 0 ? Screen.width * Screen.devicePixelRatio / Screen.pixelDensity : 1000
     readonly property bool compactMenu: handheld || Qt.application.arguments.indexOf("--compact-menu") >= 0 || screenMm < 260 || width < 1000
     property bool panelOpen: startPanel
-    onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
+    // the demo stops swimming and a game stands still while the menu is open
+    onPanelOpenChanged: { if (panelOpen) player.demoRelease(); player.retroPause(panelOpen) }
     Binding { target: player; property: "meterWanted"; value: win.panelOpen }   // the spectrum is only updated while it shows
     property bool controlsShown: true
     property bool scrubbing: false
@@ -36,6 +37,8 @@ Window {
     }
     function wake() { controlsShown = true; hideTimer.restart() }
     // gamescope: VeyAmux hides the pointer itself there, all but invisibly (see PlayerBridge::setPointerHidden)
+    // the Media / Games page a video or game was started from (it comes back when that is closed)
+    property string returnTo: ""
     readonly property bool pointerHidden: !controlsShown && fs && player.hasMedia
     onPointerHiddenChanged: player.setPointerHidden(pointerHidden)
     readonly property var scales: [1.0, 1.5, 2.0, 3.0]
@@ -142,7 +145,8 @@ Window {
                     model: [
                         { icon: "icons/capture.svg", title: "startCapture", sub: "startCaptureSub", act: 0 },
                         { icon: "icons/gamepad.svg", title: "startPs", sub: "startPsSub", act: 1 },
-                        { icon: "icons/folder.svg", title: "startFile", sub: "startFileSub", act: 2 }
+                        { icon: "icons/tv.svg", title: "startMedia", sub: "startMediaSub", act: 2 },
+                        { icon: "icons/joystick.svg", title: "startGames", sub: "startGamesSub", act: 3 }
                     ]
                     delegate: Rectangle {
                         required property var modelData
@@ -163,7 +167,7 @@ Window {
                                 font.pixelSize: 13 * startCol.k; maximumLineCount: 2 }
                         }
                         MouseArea { id: srcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: modelData.act === 0 ? capDlg.openDialog() : modelData.act === 1 ? psDlg.openDialog() : player.openDialog() }
+                            onClicked: modelData.act === 0 ? capDlg.openDialog() : modelData.act === 1 ? psDlg.openDialog() : lib.openPage(modelData.act === 2 ? "media" : "games") }
                     }
                 }
             }
@@ -406,7 +410,7 @@ Window {
         }
 
         Rectangle {
-            visible: player.live
+            visible: player.live && !player.retroActive
             anchors { left: parent.left; bottom: controlsRow.top; leftMargin: 22; bottomMargin: 10 }
             width: 58; height: 22; radius: 11 * Theme.round; color: Theme.live
             Text { font.family: Theme.font; anchors.centerIn: parent; text: t("live"); color: Theme.heading; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
@@ -415,11 +419,16 @@ Window {
             id: controlsRow
             anchors { left: parent.left; bottom: parent.bottom; leftMargin: 14; bottomMargin: 10 }
             spacing: 2
-            IconButton { size: 40; source: "icons/folder.svg"; onClicked: player.openDialog() }
+            // back to the start screen, or to the Media / Games page the video or game came from
+            IconButton { size: 40; source: "icons/home.svg"; onClicked: { if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
             IconButton { size: 40; source: "icons/capture.svg"; active: player.live; onClicked: capDlg.openDialog() }
-            IconButton { size: 40; source: "icons/back10.svg"; onClicked: { player.seekRelative(-10); wake() } }
-            IconButton { size: 46; source: player.playing ? "icons/pause.svg" : "icons/play.svg"; onClicked: { player.togglePlay(); wake() } }
-            IconButton { size: 40; source: "icons/fwd10.svg"; onClicked: { player.seekRelative(10); wake() } }
+            // a game: save and load its state (one slot), start it over
+            IconButton { visible: player.retroActive; size: 40; source: "icons/save.svg"; onClicked: { player.retroSaveState(); wake() } }
+            IconButton { visible: player.retroActive; size: 40; source: "icons/restore.svg"; onClicked: { player.retroLoadState(); wake() } }
+            IconButton { visible: player.retroActive; size: 40; source: "icons/reset.svg"; onClicked: { player.retroReset(); wake() } }
+            IconButton { visible: !player.live; size: 40; source: "icons/back10.svg"; onClicked: { player.seekRelative(-10); wake() } }
+            IconButton { visible: !player.retroActive; size: 46; source: player.playing ? "icons/pause.svg" : "icons/play.svg"; onClicked: { player.togglePlay(); wake() } }
+            IconButton { visible: !player.live; size: 40; source: "icons/fwd10.svg"; onClicked: { player.seekRelative(10); wake() } }
             IconButton { size: 40; source: player.muted || player.volume < 0.01 ? "icons/mute.svg" : "icons/volume.svg"; onClicked: player.muted = !player.muted }
             VSlider {
                 width: 90; anchors.verticalCenter: parent.verticalCenter
@@ -437,11 +446,12 @@ Window {
     // The D-pad / left stick moves between the menu's controls (the nearest one in that direction), A presses,
     // left/right change a slider, LB/RB jump between the columns, B closes the menu.
     // The controller also steers the start screen and the capture dialog (no game is running there).
-    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen || capDlg.visible || psDlg.visible || !player.hasMedia }
+    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen || capDlg.visible || psDlg.visible || lib.visible || !player.hasMedia }
     Connections {
         target: gamepad
         function onMenuCombo() {
             if (capDlg.visible || psDlg.visible) return
+            if (lib.visible && !win.panelOpen) return
             win.panelOpen = !win.panelOpen
             padNav.active = true; padNav.current = null
             if (win.panelOpen) padOpenTimer.restart(); else Qt.callLater(padNav.reset)
@@ -451,6 +461,9 @@ Window {
     // a newly shown dialog starts on its first control
     Connections { target: capDlg; function onVisibleChanged() { if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
     Connections { target: psDlg; function onVisibleChanged() { if (!psDlg.visible) keyRoot.forceActiveFocus(); if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
+    Connections { target: lib; function onVisibleChanged() { if (!lib.visible) keyRoot.forceActiveFocus(); if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
+    Connections { target: lib; function onNavScopeChanged() { if (padNav.active) { padNav.current = null; Qt.callLater(padNav.reset) } } }
+    Connections { target: lib; function onItemsChanged() { if (padNav.active && lib.visible) Qt.callLater(function () { if (padNav.targets().indexOf(padNav.current) < 0) padNav.reset() }) } }
     // the panel fades in (160 ms) and is invisible until then, so the first control is picked once it shows
     Timer { id: padOpenTimer; interval: 200; onTriggered: if (win.panelOpen && !padNav.current) padNav.reset() }
     QtObject {
@@ -468,7 +481,7 @@ Window {
             for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
         }
         // what the controller steers: the capture dialog, else the menu, else the start screen
-        function scope() { return psDlg.visible ? psDlg : capDlg.visible ? capDlg : win.panelOpen ? panel : !player.hasMedia ? startCol : null }
+        function scope() { return psDlg.visible ? psDlg : capDlg.visible ? capDlg : win.panelOpen ? panel : lib.visible ? lib.navScope : !player.hasMedia ? startCol : null }
         function targets() { var o = []; collect(scope(), o); return o }
         function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
         function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
@@ -493,6 +506,7 @@ Window {
         }
         // LB / RB: the menu's tabs
         function column(step) {
+            if (lib.visible && !win.panelOpen) { lib.switchSource(step); current = null; Qt.callLater(reset); return }
             if (scope() !== panel) return
             panel.switchTab(step)
             current = null
@@ -506,7 +520,7 @@ Window {
             else if (name === "right") { if (isSlider(current)) current.moved(Math.min(current.to, current.value + (current.to - current.from) / 40)); else move(1, 0) }
             else if (name === "lb") column(-1)
             else if (name === "rb") column(1)
-            else if (name === "b") { if (psDlg.visible) psDlg.close(); else if (capDlg.visible) { capDlg.visible = false; capDlg.closed() } else win.panelOpen = false }
+            else if (name === "b") { if (psDlg.visible) psDlg.close(); else if (capDlg.visible) { capDlg.visible = false; capDlg.closed() } else if (win.panelOpen) win.panelOpen = false; else if (lib.visible) lib.back() }
             else if (name === "a" && current && !isSlider(current)) current.clicked(null)
             Qt.callLater(function () { padRing.place() })
         }
@@ -532,6 +546,7 @@ Window {
                 else if (p.y + h > f.contentY + f.height - 20)
                     f.contentY = Math.max(0, Math.min(f.contentHeight - f.height, p.y + h - f.height + 40))
             }
+            if (padNav.current && lib.visible && !panelOpen) lib.ensureVisible(padNav.current)
             padRing.place()
         } }
     }
@@ -546,6 +561,14 @@ Window {
         onAwake: { wake(); padNav.active = false }
     }
 
+    // the Media and Games pages (Library.qml); when what was started there is closed, the page comes back
+    Library { id: lib; anchors.fill: parent; z: 90; tr: win.t; onStarted: win.returnTo = lib.mode; onClosed: win.returnTo = "" }
+    Connections {
+        target: player
+        function onMediaChanged() { if (!player.hasMedia && win.returnTo !== "" && !lib.visible) { const m = win.returnTo; lib.openPage(m); win.returnTo = m } }
+        // a film or episode from the Media page that plays to the end: back to the page
+        function onEnded() { if (win.returnTo === "media" && media.playingFromLibrary) media.stopPlayback() }
+    }
     CaptureDialog { id: capDlg; anchors.fill: parent; z: 100; tr: win.t; onRemotePlay: psDlg.openDialog() }
     RemotePlayDialog { id: psDlg; anchors.fill: parent; z: 101; tr: win.t }
 
@@ -562,9 +585,34 @@ Window {
             }
             return ""
         }
-        Keys.onReleased: (e) => { const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true } }
+        Keys.onReleased: (e) => {
+            if (player.retroActive && !e.isAutoRepeat) { const rk = retroKeyName(e.key); if (rk !== "") { player.retroKey(rk, false); e.accepted = true; return } }
+            const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true }
+        }
+        // a game: the keyboard as a controller (arrows, Z/X = B/A, A/S = Y/X, Q/W = L/R, Enter = Start, Shift = Select)
+        function retroKeyName(k) {
+            switch (k) {
+            case Qt.Key_Up: return "up"; case Qt.Key_Down: return "down"; case Qt.Key_Left: return "left"; case Qt.Key_Right: return "right"
+            case Qt.Key_Z: return "b"; case Qt.Key_X: return "a"; case Qt.Key_A: return "y"; case Qt.Key_S: return "x"
+            case Qt.Key_Q: return "l"; case Qt.Key_W: return "r"; case Qt.Key_Return: case Qt.Key_Enter: return "start"
+            case Qt.Key_Shift: return "select"
+            }
+            return ""
+        }
         Keys.onPressed: (e) => {
             if (psDlg.visible) { if (e.key === Qt.Key_Escape) { psDlg.close(); e.accepted = true } return }
+            if (lib.visible && !win.panelOpen && !capDlg.visible) {
+                // the arrows and Enter steer the page like a controller
+                const nav = { [Qt.Key_Up]: "up", [Qt.Key_Down]: "down", [Qt.Key_Left]: "left", [Qt.Key_Right]: "right",
+                              [Qt.Key_Return]: "a", [Qt.Key_Enter]: "a", [Qt.Key_PageUp]: "lb", [Qt.Key_PageDown]: "rb" }
+                if (e.key === Qt.Key_Escape || e.key === Qt.Key_Backspace) { lib.back(); e.accepted = true }
+                else if (nav[e.key] !== undefined) { padNav.active = true; padNav.press(nav[e.key]); e.accepted = true }
+                return
+            }
+            if (player.retroActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
+                const rk = retroKeyName(e.key)
+                if (rk !== "") { if (!e.isAutoRepeat) player.retroKey(rk, true); e.accepted = true; return }
+            }
             if (player.demoActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                 const k = demoKeyName(e.key)
                 if (k !== "") { if (!e.isAutoRepeat) player.demoKey(k, true); e.accepted = true; return }
@@ -593,6 +641,9 @@ Window {
             case Qt.Key_F10: player.toggleRecording(); break
             case Qt.Key_F6: player.addMarker(); break
             case Qt.Key_F12: case Qt.Key_Print: player.screenshot(); break
+            case Qt.Key_F2: player.retroSaveState(); break
+            case Qt.Key_F4: player.retroLoadState(); break
+            case Qt.Key_Home: if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia(); break
             default: return
             }
             e.accepted = true
@@ -603,5 +654,6 @@ Window {
         hideTimer.start()
         if (startDialog) capDlg.openDialog()
         if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
+        if (testPage !== "") lib.openPage(testPage)                                               // VEYAMUX_TEST_PAGE
     }
 }

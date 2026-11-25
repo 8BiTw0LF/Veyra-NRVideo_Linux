@@ -1,5 +1,6 @@
 #include "CaptureSource.h"
 #include "DemoSource.h"
+#include "Libretro.h"
 #include "RemotePlay.h"
 #include "ScreenCast.h"
 #include <cstdio>
@@ -529,6 +530,15 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
         ps_ = std::move(s);
         return true;
     }
+    if (isRetro(path)) {
+        auto g = std::make_unique<retro::Stream>();
+        if (!g->open(error)) return false;
+        w_ = g->width(); h_ = g->height(); fps_ = g->fps();
+        card_ = g->name();
+        fourcc_ = 0;
+        retro_ = std::move(g);
+        return true;
+    }
     if (isDemo(path)) {
         auto d = std::make_unique<demo::Stream>();
         // "demo:<fps>[:<height>]"
@@ -626,6 +636,7 @@ void CaptureSource::close() {
     sc_.reset();
     demo_.reset();
     ps_.reset();
+    retro_.reset();
     if (fd_ < 0) return;
     if (map_) { std::lock_guard l(map_->m); map_->live = false; }   // buffers still held are not queued again
     if (streaming_) { int type = V4L2_BUF_TYPE_VIDEO_CAPTURE; xioctl(fd_, VIDIOC_STREAMOFF, &type); streaming_ = false; }
@@ -718,6 +729,16 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
         probeRgba(rgba);
         return Result::Frame;
     }
+    if (retro_) {
+        RawFrame f;
+        const auto r = retro_->readLatest(f, timeoutMs, error);
+        if (r != retro::Stream::Result::Frame) return r == retro::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+        w_ = f.w; h_ = f.h;
+        lastRepeat_ = false;
+        probe_.feed(f.data.data() + 1, f.w, f.h, f.stride, 4, f.captured);
+        rgba.swap(f.data);
+        return Result::Frame;
+    }
     if (demo_) {
         RawFrame f;
         const auto r = demo_->readLatest(f, timeoutMs, error);
@@ -773,6 +794,14 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
             else probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 2, out.captured);   // P010: high byte of luma
         }
         return r == remoteplay::Stream::Result::Frame ? Result::Frame : r == remoteplay::Stream::Result::Timeout ? Result::Timeout : Result::Error;
+    }
+    if (retro_) {
+        const auto r = retro_->readLatest(out, timeoutMs, error);
+        if (r == retro::Stream::Result::Frame) {
+            w_ = out.w; h_ = out.h;
+            probe_.feed(out.data.data() + 1, out.w, out.h, out.stride, 4, out.captured);
+        }
+        return r == retro::Stream::Result::Frame ? Result::Frame : r == retro::Stream::Result::Timeout ? Result::Timeout : Result::Error;
     }
     if (demo_) {
         const auto r = demo_->readLatest(out, timeoutMs, error);

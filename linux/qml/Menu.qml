@@ -123,10 +123,25 @@ Rectangle {
         IconButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; size: 40; source: "icons/close.svg"; onClicked: menu.closeRequested() }
     }
 
+    // ---------------------------------------------------------------- a game or a video from the Media / Games page:
+    // its own controls (also reachable with a controller, which has no bottom bar)
+    Flow {
+        id: nowBar
+        x: 20; anchors.top: header.bottom; anchors.topMargin: visible ? 8 : 0
+        width: parent.width - 40; spacing: 8
+        visible: player.retroActive || media.playingFromLibrary
+        height: visible ? implicitHeight : 0
+        Btn { visible: player.retroActive; text: tr("gameSave"); onClicked: player.retroSaveState() }
+        Btn { visible: player.retroActive; text: tr("gameLoad"); onClicked: player.retroLoadState() }
+        Btn { visible: player.retroActive; text: tr("gameReset"); onClicked: player.retroReset() }
+        Btn { primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
+            onClicked: { menu.closeRequested(); if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
+    }
+
     // ---------------------------------------------------------------- tabs
     Row {
         id: tabBar
-        x: 16; anchors.top: header.bottom; anchors.topMargin: 10
+        x: 16; anchors.top: nowBar.bottom; anchors.topMargin: 10
         width: parent.width - 32; spacing: 4
         Repeater {
             model: menu.tabs

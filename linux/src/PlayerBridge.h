@@ -56,6 +56,7 @@ class PlayerBridge : public QObject {
     // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
+    Q_PROPERTY(bool retroActive READ retroActive NOTIFY mediaChanged)   // a game from the Games page runs
     Q_PROPERTY(double demoProgress READ demoProgress NOTIFY demoChanged)
     Q_PROPERTY(bool live READ live NOTIFY mediaChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
@@ -223,6 +224,7 @@ public:
     bool hasMedia() const { return engine_.isOpen(); }
     bool demoAvailable() const;
     bool demoActive() const { return demoActive_ && engine_.isOpen(); }
+    bool retroActive() const { return retroActive_ && engine_.isOpen(); }
     double demoProgress() const { return demoProgress_; }
     bool live() const { return engine_.isLive(); }
     bool playing() const { return engine_.playing(); }
@@ -230,6 +232,8 @@ public:
     double duration() const { return engine_.info().duration; }
     QString title() const {
         const QString t = QString::fromStdString(engine_.info().title);
+        if (!streamTitle_.isEmpty()) return streamTitle_;
+        if (retroActive_) return QString::fromStdString(engine_.info().title).section(": ", 1);   // "Capture: <game>"
         return engine_.info().videoCodec == "PipeWire" ? L("Screen share: window / screen", "Skærmdeling: vindue / skærm") : t;
     }
     QString mediaInfo() const;
@@ -563,7 +567,17 @@ public slots:
     bool screenCastAvailable() const { return veyamux::ScreenCastStream::available(); }
     bool openUrl(const QUrl& url);
     bool openPath(const QString& path);
+    // a stream from a media server (MediaLibrary.h): the headers carry the token, the URL does not
+    bool openStream(const QString& url, const QString& headers, const QString& title);
     void openDialog();
+    void closeMedia();                             // back to the start screen (or the page it came from)
+    // a game in an emulator core (GameLibrary.h, Libretro.h)
+    void openGame(const QString& core, const QString& rom, const QString& title, const QString& systemId, const QString& biosDir);
+    void retroSaveState();
+    void retroLoadState();
+    void retroReset();
+    void retroPause(bool paused);                  // while the menu is open
+    void retroKey(const QString& key, bool down);  // the keyboard as a controller: "up" "down" "left" "right" "a" "b" "x" "y" "l" "r" "start" "select"
     void togglePlay();
     void play();
     void pause();
@@ -615,6 +629,7 @@ public slots:
     void psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
 
 signals:
+    void closing();                     // the video is about to be closed or replaced (its position is still there)
     void updateChanged();
     void psChanged();
     void psRumble(int low, int high);
@@ -666,6 +681,8 @@ private:
     QString gpuName_, status_, perf_;
     bool lastPlaying_ = false;
     bool demoActive_ = false;
+    bool retroActive_ = false;
+    quint32 retroKeys_ = 0;
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;
@@ -798,7 +815,10 @@ private:
     bool psStart(const QString& id, QString& error);
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
-    QString openFile_;              // the video file that is open (to reopen it after a restart)
+    QString openFile_;
+    QString streamTitle_;           // a media server's name for the video that is open
+    bool openMedia(const QString& path, const QString& headers);
+    void pollRetroMessage();              // the video file that is open (to reopen it after a restart)
     bool lsfgOffPending_ = false;   // a restart without lsfg-vk is on its way
     bool lsfgHighNoticed_ = false;  // the 120 Hz hint for Lossless Scaling was shown
     int overRefreshTicks_ = 0;      // 100 ms ticks the output was above the screen's refresh rate (or back below it)
