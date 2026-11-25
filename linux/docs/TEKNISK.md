@@ -405,6 +405,45 @@ bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, l
   - **Konsollens indkodning** kan ikke måles og vises som "+ konsol ~8 ms".
 - Fejlsøgning: `VEYAMUX_PS_LOG=1` viser hele chiakis log.
 
+## Medier (Jellyfin, Plex, egne mapper)
+`src/MediaLibrary.{h,cpp}` (kontekst-egenskaben `media`), siden er `qml/Library.qml` (fælles med Spil).
+- **Jellyfin:** `Authorization: MediaBrowser Client="VeyAmux", Device, DeviceId, Version, Token`. Login med
+  `/Users/AuthenticateByName` eller Quick Connect (`/QuickConnect/Initiate` POST, GET før 10.9; `/QuickConnect/Connect`;
+  `/Users/AuthenticateWithQuickConnect`). Biblioteker `/UserViews` (`/Users/{id}/Views` før 10.9), indhold `/Items`,
+  sæsoner `/Shows/{id}/Seasons`, genrer `/Genres`, fortsæt `/UserItems/Resume`. Afspilning `/Videos/{id}/stream?static=true`;
+  position til `/Sessions/Playing`, `/Playing/Progress`, `/Playing/Stopped` hvert 10. sekund.
+- **Plex:** PIN-login (`plex.tv/api/v2/pins`, browseren til `app.plex.tv/auth`), servere fra `/api/v2/resources`; den
+  første adresse, der svarer på `/identity` (lokale først, relay sidst). Afspilning `{uri}{Part.key}`, position
+  `/:/timeline`, set `/:/scrobble`, plakater `/photo/:/transcode`.
+- **Tokens** ligger i `media/servers/<id>/token` (rapporten skjuler nøgler med "token") og sendes kun som HTTP-headers,
+  også til FFmpeg (`headers`-optionen); en stream med headers genåbnes ikke efter genstart (`openFile_` tom).
+- **Undertekster** (`src/Subtitles.{h,cpp}`, `src/PlayerBridgeSubtitles.cpp`): sporet i filen afkodes i demux-tråden
+  (`avcodec_decode_subtitle2`, ASS-tekst uden formatkoder, PGS/DVD som RGBA); filer ved siden af og fra serveren
+  laves om til UTF-8 (ellers Latin-1) og afkodes helt. Billed-undertekster vises gennem billedudbyderen `image://subs`.
+- **Lydspor:** FFmpeg afkoder ét spor; et andet spor åbner filen igen samme sted (`setPreferredAudio`). Sproget gemmes
+  i `audio/lang`, undertekster i `subs/lang`.
+- **Test:** `tests/mock_media_server.py` (falsk Jellyfin + Plex) og `VEYAMUX_TEST_MEDIA=jellyfin:<url>` / `plex:<url>`.
+
+## Spil (libretro)
+`src/Libretro.{h,cpp}` er en lille libretro-frontend: kilde `retro:<system>` + lydkilde `@retro`, så billedet går
+gennem alt som et capture-kort. `src/GameLibrary.{h,cpp}` (kontekst-egenskaben `games`) scanner, sorterer, finder
+kerner og henter covers; `src/PlayerBridgeGames.cpp` starter spillet.
+- **Kerne-tråd:** `retro_set_environment`, `retro_init`, derefter de øvrige callbacks (RetroArchs rækkefølge; Mesen
+  crasher ellers). Kørt i kernens fps; kun software-kerner (`SET_HW_RENDER` afvises). Kommandoer uden data afvises,
+  undtagen dem der betyder noget uden (GPGX's "ingen diskkontrol").
+- **Billede:** konverteret til RGBA, roteret, forstørret med et helt tal (højde op til 1080) og strakt til kernens
+  aspect. **Lyd:** kø i kernens rate, resamplet til 48 kHz med en rate der følger køens fyld (±0,5 %).
+- **Kerner:** egen mappe (`~/.local/share/VeyAmux/VeyAmux/games/cores`), RetroArch (Flatpak, native, Steam), systemets;
+  ellers `buildbot.libretro.com/nightly/linux/x86_64/latest/<kerne>_libretro.so.zip`. Arkiver (zip, 7z, rar) med libarchive.
+- **Sortering:** mappenavn (RetroArch/ES-DE/EmuDeck/Batocera-navne), ellers filtype, ellers diskens header (cue/iso/m3u).
+  BIOS-filer springes over og kopieres til BIOS-mappen. Flere diske samles i en `.m3u` i `games/playlists`;
+  diskskift med libretros disk control (bakken åbnes, disken skiftes, bakken lukkes efter 60 billeder).
+- **Covers:** `thumbnails.libretro.com/<system>/Named_Boxarts/<navn>.png`, ellers GitHub (`libretro-thumbnails`;
+  symlinks følges); nærmeste navn fra serverens liste eller GitHubs git-træ (gemt en uge). Arkade: titler fra FBNeo's
+  DAT (`games/arcade-names.tsv`). Ikke fundne gemmes i `games/covers-missing.txt` til næste scanning.
+- **Test:** `veyamux-retro-test <kerne> <spil>` og `tests/run_retro_test.sh` (Gambatte + dmg-acid2, Genesis Plus GX),
+  `VEYAMUX_TEST_GAME=<fil>`, `VEYAMUX_TEST_COVERS=1`, `VEYAMUX_TEST_PAGE=media|games|audio`, `VEYAMUX_GRAB_SIZE=1920x1080`.
+
 ## Retter billedrytmen (frame pacing repair)
 Menu → *Frame generation* → *Ret billedrytmen* (`enh/pacingRepair`, slået fra). `src/FramePacingRepair.h` er taget fra
 Veyra-NRVideo 2.2.0, som har den fra PushFPS (GPL-3.0-or-later, DosukaSOL og PushFPS-bidragyderne), uændret bortset fra

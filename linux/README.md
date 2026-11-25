@@ -11,7 +11,8 @@
 
 <p align="center">
   Upscaling (NIS · SGSR · FSR&nbsp;3.1.6 · <b>FSR&nbsp;4</b> AI upscaling) · AMD Anti-Lag / NVIDIA Reflex · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
-  HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
+  HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · <b>Media</b>: your folders, Jellyfin and Plex, with subtitles ·
+  <b>Games</b>: retro consoles from your own folder, with box art · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
   live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · one-click Steam
   shortcut with artwork · 8 languages
   <br>
@@ -20,10 +21,56 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="720" alt="VeyAmux's start screen: What do you want to play? with three cards (Capture card, PlayStation, Video file), the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
+  <img src="docs/images/start.png" width="720" alt="VeyAmux's start screen: What do you want to play? with four cards (Capture card, PlayStation, Media, Games), the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
+
+## New in 2.1
+
+- **Media** (in place of *Video file*): your films and series from **your own folders**, a **Jellyfin** server and a
+  **Plex** server, as posters with *Continue watching*.
+  - **Jellyfin:** sign in with your user name and password, or with *Quick Connect* (a code you confirm in another
+    Jellyfin app).
+  - **Plex:** sign in on plex.tv in your browser; every server of the account is added. At home Plex is free; outside
+    your home network Plex wants Plex Pass or a Remote Watch Pass.
+  - **Libraries:** a film or series library opens on *All*, *Recently added*, *Not watched* and *Categories*
+    (genres). Series open on their seasons and episodes.
+  - **Played where you left off:** the position goes back to the server (or, for your own files, is remembered), so
+    *Continue watching* is the same in VeyAmux, the Jellyfin app and the Plex app.
+  - Films are played as they are stored (no transcoding on the server) with all of VeyAmux's processing: FSR 4
+    upscaling, noise reduction, HDR and frame generation work on films too.
+- **Subtitles** for every video: the tracks inside the file (SubRip, ASS, WebVTT, and the pictures of Blu-ray (PGS) and
+  DVD subtitles), files beside the video (`Film.da.srt`, also in Windows-1252) and the subtitle files Jellyfin and Plex
+  keep. The language you pick is remembered for the next films.
+- **Sound tracks:** choose language and format (e.g. *English · AC3 5.1*, *Danish · Commentary*); the language is
+  remembered too. Both have a button in the bottom bar and a row at the top of the menu.
+- **Games:** retro games from your own folder, played inside VeyAmux, with every picture feature (upscaling, Retro TV,
+  frame generation, recording).
+  - **Sorted by itself:** pick one folder; every game is sorted under its system by the folder it lies in (the names
+    RetroArch, ES-DE, EmuDeck, RetroDECK and Batocera use all work), else by its file type, else (CD images) by the
+    disc's own header. `.zip`, `.7z` and `.rar` are unpacked when the emulator cannot read them.
+  - **No emulator to choose:** VeyAmux uses one you already have (RetroArch's, also the Flatpak) or fetches libretro's
+    own build the first time a system is played. 26 systems from the 70s to the 90s: NES, Super Nintendo, Game Boy
+    (Color, Advance), Virtual Boy, Mega Drive, Master System, Game Gear, SG-1000, Mega-CD, 32X, Saturn, PC Engine (and
+    CD), PlayStation, Atari 2600, 7800 and Lynx, Neo Geo Pocket, WonderSwan and arcade (FinalBurn Neo).
+  - **Box art** from libretro's thumbnails with one button (*Get box art*), near names found too; arcade games get
+    their full titles and box art from FinalBurn Neo's game list. Your own picture works as well.
+  - **Games on several discs** (*Disc 1*, *Disc 2*) are one game; the menu changes the disc when the game asks.
+  - **BIOS files** among your games are kept out of the list and copied to the BIOS folder, where the emulators look
+    for them.
+  - Save states, battery saves, the controller (rumble too) and the keyboard; the game pauses while the menu is open.
+- **A home button** in the bottom bar brings you back to the start screen, or to the page the film or game came from.
+
+<p align="center">
+  <img src="docs/images/media.jpg" width="800" alt="The Media page: a Plex server's film library as posters, with how far a film was watched under its poster">
+  <br><sub>A Plex film library on the Media page.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/games.jpg" width="800" alt="The Games page: the systems on the left with how many games each has, and Mega Drive games with their box art">
+  <br><sub>The Games page: systems on the left, box art fetched by VeyAmux.</sub>
+</p>
 
 ## New in 2.0
 
@@ -103,7 +150,8 @@ scaling, HUD lock and the VRR warning. New in 1.4: SGSR upscaling and Abyssal Ga
 
 VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch or another PC), straight from a
 **PS5 or PS4 over your home network** (PlayStation Remote Play, no capture card needed), from a **window or a whole
-screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
+screen** on your desktop, from your **films and series** (folders, Jellyfin, Plex) or from **retro games** in your own
+folder, and makes it look better on your graphics card. It can:
 
 - **upscale and sharpen** the picture with NVIDIA Image Scaling (NIS), Snapdragon Game Super Resolution (SGSR), AMD FSR 3.1.6 or AMD FSR 4 (AI upscaling, a free add-on);
 - **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA, SMAA or FSR 3.1.6 TAA;
@@ -140,6 +188,8 @@ needed for its own frame generation**, and everything else works without it:
 | Feature | VeyAmux alone | + Lossless Scaling and lsfg-vk |
 |---|:---:|:---:|
 | Capture cards, video files, windows and screens | ✅ | ✅ |
+| Media: your folders, Jellyfin, Plex (Plex outside the home network: Plex Pass / Remote Watch Pass), subtitles, sound tracks | ✅ | ✅ |
+| Games: retro consoles and arcade (emulators fetched from libretro, BIOS files your own) | ✅ | ✅ |
 | PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
 | Upscaling: NIS, SGSR, FSR 3.1.6, FSR 4 | ✅ | ✅ |
 | Noise reduction, anti-flicker, sharpness, anti-aliasing (FXAA, FSR 3.1.6 TAA), colour | ✅ | ✅ |
@@ -210,6 +260,31 @@ needed for its own frame generation**, and everything else works without it:
 - **A window or a whole screen** (Wayland: KDE Plasma, GNOME, …): choose *Window or screen …* under **Capture**, and your
   desktop asks what to share, the same way OBS and Discord do. The picture gets all of VeyAmux's processing.
 - **Video files** through FFmpeg, with hardware decoding (VA-API) on AMD and Intel.
+- **Media** (start screen): your own folders, Jellyfin and Plex.
+  - **Add:** *+ Jellyfin* asks for the server's address, then your user name and password, or *Quick Connect*.
+    *+ Plex* opens plex.tv in your browser to sign in, and every server of the account appears on the left.
+    *My folders* takes any folder with videos; posters are read from `poster.jpg` / `<film>-poster.jpg` beside them.
+  - **Browse:** *Continue watching* first, then the libraries; a film or series library has *All*, *Recently added*,
+    *Not watched* and *Categories*. A film opens a card with *Continue from …* and *From the start*.
+  - **Watch:** the server is told how far you got every 10 seconds and when you stop, so *Continue watching* matches
+    its own apps. When the film ends, VeyAmux goes back to the page.
+  - **Subtitles and sound:** the buttons next to *Home* in the bottom bar (or the top of the menu) list the sound
+    tracks and the subtitles. **S** steps through the subtitles.
+  - Sign-ins are kept in VeyAmux's settings (hidden in debug reports) and only ever sent in HTTP headers.
+- **Games** (start screen): pick your games folder once.
+  - **Systems:** NES and Famicom Disk System, Super Nintendo, Game Boy, Game Boy Color, Game Boy Advance, Virtual
+    Boy, Mega Drive / Genesis, Master System, Game Gear, SG-1000, Mega-CD, 32X, Saturn, PC Engine / TurboGrafx-16, PC
+    Engine CD, PlayStation, Atari 2600, Atari 7800, Atari Lynx, Neo Geo Pocket (Color), WonderSwan (Color) and arcade.
+    Systems that need 3D on the graphics card (N64, Dreamcast, PSP, DS) are not there yet.
+  - **Emulators:** found or fetched by themselves (libretro cores; your own RetroArch's are used first). Some need
+    BIOS files (PlayStation's is optional, Mega-CD, Saturn and PC Engine CD need theirs): put them in the folder
+    *BIOS* opens, or anywhere in your games folder.
+  - **Playing:** the controller plays the game (all controllers as player 1, rumble included); **Select + Start** opens
+    the menu and pauses the game. The keyboard: arrows, **Z / X** (B / A), **A / S** (Y / X), **Q / W** (L / R),
+    **Enter** (Start), **Shift** (Select). Save and load a state with the buttons in the bottom bar, **F2 / F4** or
+    the menu; battery saves are kept by themselves.
+  - The picture comes with its own pixel aspect, enlarged by a whole number, so *Retro TV*, *pixel-perfect scaling*
+    and the upscalers all work on it.
 - **What the game really runs at**: the info line shows the measured frame rate and an estimate of the game's own
   rendering resolution, not just the signal. Example: `≈1920×1080 @ 30 fps → 60 fps (Lossless Scaling 2×) · signal 3840×2160 NV12 @ 60 fps`.
 
@@ -472,7 +547,11 @@ hardware. It runs next to VeyAmux and does not touch it:
 
 **Space** play/pause · **←/→** ±5 s (Shift ±30 s) · **↑/↓** volume · **F** fullscreen · **E** enhancement on/off ·
 **P** menu · **M** mute (your speakers only) · **O** open file · **C** capture · **F3** frame-time overlay ·
-**1–9** profiles · **F6** clip marker · **F9** save replay · **F10** record · **F12** screenshot
+**1–9** profiles · **F6** clip marker · **F9** save replay · **F10** record · **F12** screenshot · **S** subtitles ·
+**Home** back to the start screen or the page the film or game came from
+
+**Games:** arrows · **Z / X** B / A · **A / S** Y / X · **Q / W** L / R · **Enter** Start · **Shift** Select · **F2** save state
+· **F4** load state
 
 **Controller:** **Select + Start** (or hold **Guide**) menu · **D-pad / stick** move · **A** choose · **B** close ·
 **LB / RB** menu tabs
@@ -513,7 +592,7 @@ runs NVIDIA's DLSS network through Windows HIP).
 ```sh
 sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-tools qt6-base-dev qt6-declarative-dev \
   qt6-svg-dev qt6-wayland libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
-  libpulse-dev libva-dev libpipewire-0.3-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts \
+  libpulse-dev libva-dev libpipewire-0.3-dev libarchive-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts \
   qml6-module-qtqml-workerscript qt6-shader-baker zsync
 ./scripts/build-appimage.sh          # -> dist/VeyAmux-x86_64.AppImage
 ```
@@ -539,6 +618,9 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
   - [Abyssal Garden](https://github.com/Noniv/abyssal-garden) by Maksymilian Dendura (MIT): the demo scene, ported from
     JavaScript to C++
   - [wgpu-native](https://github.com/gfx-rs/wgpu-native) (MIT / Apache-2.0)
+  - The [libretro](https://www.libretro.com) API header (MIT) and libarchive (BSD). The emulators (libretro cores)
+    are **not** part of VeyAmux: they are your RetroArch's or fetched from libretro's build server, under their own
+    licences. Box art comes from [libretro-thumbnails](https://github.com/libretro-thumbnails).
 
   See [THIRD_PARTY_NOTICES_LINUX.md](THIRD_PARTY_NOTICES_LINUX.md).
 - [lsfg-vk](https://lsfg-vk.dev) and [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) are

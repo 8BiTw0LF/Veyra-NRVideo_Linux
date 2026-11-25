@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
     QCoreApplication::setOrganizationName("VeyAmux");
     // VeyAmux Debug runs next to VeyAmux with its own settings (~/.config/VeyAmux/VeyAmux-Debug.conf) and data folder
     QCoreApplication::setApplicationName(veyamux::diag::kDebugBuild ? "VeyAmux-Debug" : "VeyAmux");
-    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.1.0"));
+    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.1"));
     {
         // the UI probe and the card watcher are helper processes: no log file of their own
         bool helper = false;
@@ -611,6 +611,9 @@ int main(int argc, char** argv) {
     if (!capturePath.isEmpty()) QTimer::singleShot(0, [&] { player.openCaptureAuto(capturePath); });
     if (!openFile.isEmpty()) QTimer::singleShot(0, [&] { player.openPath(openFile); });
     if (!grabPath.isEmpty()) {
+        // (VEYAMUX_GRAB_SIZE=1920x1080: the window's size for the picture, for the README's screenshots)
+        if (const QString gs = qEnvironmentVariable("VEYAMUX_GRAB_SIZE"); gs.contains('x'))
+            win->resize(gs.section('x', 0, 0).toInt(), gs.section('x', 1).toInt());
         QTimer::singleShot(9000, [&] {
             win->grabWindow().save(grabPath);
             QCoreApplication::quit();
