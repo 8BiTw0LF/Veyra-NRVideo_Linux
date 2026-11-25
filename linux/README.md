@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  Upscaling (SGSR · FSR&nbsp;1 · NIS · FSR&nbsp;3.1.6) · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
+  Upscaling (NIS · SGSR · FSR&nbsp;3.1.6 · <b>FSR&nbsp;4</b> AI upscaling) · AMD Anti-Lag / NVIDIA Reflex · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
   HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
   live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · one-click Steam
   shortcut with artwork · 8 languages
@@ -24,6 +24,29 @@
 </p>
 
 ---
+
+## New in 2.0
+
+- **AMD FSR 4, AI upscaling, on Linux.** AMD's machine-learning upscaler (FSR 4.0.2, which AMD published under the
+  MIT licence) runs through standard Vulkan. Pick *FSR 4* under *Picture*; VeyAmux downloads it once as a free, checked
+  add-on (about 10 MB, built in the separate [VeyAmux-FSR4](https://github.com/8BiTw0LF/VeyAmux-FSR4) project). It
+  upscales 1.5×, 2× and 3×, and at *Native* it works as AI anti-aliasing.
+  - **RDNA 4 (RX 9000):** AMD's own **FP8 model on the matrix units** (VK_KHR_cooperative_matrix, VK_EXT_shader_float8,
+    Mesa 26.3 or newer). On an RX 9070 XT it costs about as much as FSR 3.1: **3.8 ms** for a 4K picture, 3.4 ms for
+    1080p → 4K.
+  - **Other GPUs** with Vulkan 1.3 and 8-bit dot products (AMD RDNA 2 and 3, NVIDIA Turing or newer, Intel Arc): AMD's
+    **INT8 model**, 1.4–1.6× heavier.
+- **AMD Anti-Lag and NVIDIA Reflex** under *Display*. Measured honestly: they only shorten the queue to the screen,
+  and that queue is only there when the graphics card is nearly full. On an RX 9070 XT with room to spare a picture
+  reached the screen about 2 ms after VeyAmux finished it, with or without Anti-Lag, so it is off by default.
+- **Upscalers in a clear order:** NIS, SGSR, FSR 3.1, FSR 4. FSR 1 is gone (it looked like SGSR and cost more); a
+  saved FSR 1 becomes SGSR.
+- **VSync with Lossless Scaling:** lsfg-vk's extra frames only come out evenly when every present waits for the screen,
+  so VSync is now on while Lossless Scaling runs (about 2 ms from finished picture to screen, measured).
+- **Fixes:** switching the capture card's mode no longer leaves it "in use by another program" (a held capture buffer
+  kept the old device open); FSR 4 also works with FSR 3.1 frame generation; the Anti-Lag switch no longer stays grey.
+- **[VeyAmux Debug](#veyamux-debug-test-build):** GPU hardware counters, a **capture-to-screen** measurement (when the
+  picture is really on the screen) and FSR 4 FP8/INT8 steps in the benchmark.
 
 ## New in 1.9
 
@@ -196,8 +219,10 @@ needed for its own frame generation**, and everything else works without it:
     temporal anti-aliasing (TAA, AMD's "Native AA"): it calms flickering and crawling edges without enlarging the
     picture. Games that already use TAA mostly get softer.
   - **AMD FSR 4**: AMD's AI upscaler (FSR 4.0.2, MIT), also temporal and also usable at **Native** as anti-aliasing.
-    The model is a separate add-on that VeyAmux downloads and checks the first time FSR 4 is picked. It needs a GPU
-    with Vulkan 1.3 and 8-bit dot products (AMD RDNA 2 or newer, NVIDIA Turing or newer, Intel Arc).
+    The model is a separate add-on that VeyAmux downloads and checks the first time FSR 4 is picked. On RDNA 4 it runs
+    AMD's FP8 model on the matrix units (about as fast as FSR 3.1); on other GPUs with Vulkan 1.3 and 8-bit dot
+    products (AMD RDNA 2 or newer, NVIDIA Turing or newer, Intel Arc) the heavier INT8 model. The hint in the menu
+    shows which one runs.
 - **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
 - **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by
@@ -273,6 +298,8 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
 - **Profiles**: save the picture settings under a name and switch with **1–9**. Bind a profile to a capture signal, and
   it is applied automatically.
 - **Frame-time overlay** (**F3**): a graph with fps, 1 % low, jitter and the delay inside VeyAmux.
+- **AMD Anti-Lag / NVIDIA Reflex** (*Display*): starts each frame as late as it can and still be on time. It only
+  helps when the graphics card is nearly full, so it is off by default (see [Latency](#latency)).
 - **Add to Steam**: VeyAmux becomes a non-Steam game that starts fullscreen on the last source, also from Big Picture
   and Bazzite's Game Mode. VeyAmux closes Steam by itself, adds the shortcut with cover art, a background and a logo
   for the library, and starts Steam again.
@@ -319,6 +346,12 @@ it is not processing:
   **4K MJPEG** arrives quickly but has to be decoded (about 8 ms on the graphics card), and it is a little softer.
   *Find the best signal* in the capture dialog measures all three on your machine.
 - **Even out frame pacing** adds only what the rhythm needs. F3 shows the hold in ms.
+
+**All the way to the screen** (VeyAmux Debug's *Measure to the screen*, VK_KHR_present_wait): on the RX 9070 XT with
+VSync and Lossless Scaling, a picture reached the screen **about 2 ms after VeyAmux finished it**: about 20 ms from
+the capture timestamp for a 4K NV12 signal, and **8 ms for 1080p NV12 upscaled 2× with SGSR** (11.7 ms with FSR 4).
+The quickest way to less delay is a 1080p signal upscaled by VeyAmux, not Anti-Lag: with the graphics card not full
+there is no queue for it to shorten.
 
 The capture card, Lossless Scaling and the display add their own latency on top, as with any capture setup.
 
@@ -420,7 +453,13 @@ hardware. It runs next to VeyAmux and does not touch it:
     reduction, motion, upscaling, frame generation and frame pacing. For each one it measures the GPU time of every
     stage, frame rate, jitter, delay, CPU per thread and memory. It prepares every pass first and measures a step
     again if it looks wrong. On a 4K card, the upscaling runs on the card's 1080p mode. The result is saved as a CSV
-    file and goes into the report.
+    file and goes into the report. FSR 4 is measured with both its FP8 and INT8 model where the GPU has both, and
+    AMD Anti-Lag / NVIDIA Reflex off and on.
+  - **GPU hardware counters** (VK_KHR_performance_query, e.g. RADV on RDNA 4): busy time, memory traffic, cache hits
+    and instructions per frame, in the report and as a column of the benchmark.
+  - **Measure to the screen:** waits for each picture's present to complete (VK_KHR_present_wait, through VeyAmux's
+    own small Vulkan layer), so the benchmark's *to screen* column includes the swapchain, VSync and what Anti-Lag or
+    Reflex change.
   - **Test switches:** turn parts of VeyAmux on or off (the old drawing path, copied capture, the older repeat
     detection, the gamescope keep-alive and others) to find out what causes a problem.
 - **A log file** (`~/.local/share/VeyAmux/VeyAmux-Debug/debug/`, the last ten runs, FFmpeg's warnings included) and
