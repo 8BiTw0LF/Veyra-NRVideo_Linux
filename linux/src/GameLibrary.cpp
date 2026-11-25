@@ -359,6 +359,7 @@ void GameLibrary::save() const {
 }
 
 void GameLibrary::rescan() {
+    QFile::remove(dataDir({}) + "/covers-missing.txt");   // a new look for box art that was not found
     if (folder_.isEmpty()) { chooseFolder(); return; }
     if (working_) return;
     const QString root = folder_;
@@ -470,7 +471,8 @@ void GameLibrary::groupDiscs(std::vector<Entry>& found) {
         Entry e = found[d.front().second];
         e.path = m3u;
         e.title = displayTitle(base);
-        if (e.thumb.isEmpty()) e.thumb = base;
+        // box art: libretro names it after the first disc ("Metal Gear Solid (USA) (Disc 1) (Rev 1)")
+        if (e.thumb.isEmpty()) e.thumb = QFileInfo(found[d.front().second].path).completeBaseName();
         for (const auto& [num, idx] : d) drop[idx] = true;
         found.push_back(e);
     }
@@ -723,11 +725,20 @@ void GameLibrary::downloadCovers() {
         std::lock_guard l(m_);
         for (const auto& e : entries_) if (!isPicture(coverPath(e.system, e.path))) todo.push_back(e);
     }
+    // games libretro has no box art for were looked up before: not again (until the folder is scanned again)
+    const QString missFile = dataDir({}) + "/covers-missing.txt";
+    QSet<QString> missing;
+    {
+        QFile f(missFile);
+        if (f.open(QIODevice::ReadOnly)) for (const auto& l : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts)) missing.insert(l);
+    }
+    todo.erase(std::remove_if(todo.begin(), todo.end(), [&](const Entry& e) { return missing.contains(e.path); }), todo.end());
     if (todo.empty()) { emit message("gamesCoversDone", "0", false); return; }
     if (working_) return;
     setBusy("gamesFetchingCovers", QStringLiteral("0 / %1").arg(todo.size()), 0);
-    work([this, todo] {
+    work([this, todo, missFile] {
         int got = 0, n = 0;
+        QStringList missed, unsure;
         QHash<QString, QStringList> indexes;   // per system: every box art name libretro has
         const QString cache = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/games/covers/";
         for (const auto& e : todo) {
@@ -798,6 +809,29 @@ void GameLibrary::downloadCovers() {
                         }
                     }
                     QFile::remove(tmp);
+                    // the thumbnail server's list is not there: the same list from GitHub (two calls of its API)
+                    if (names.isEmpty()) {
+                        QString repo = thumbs;
+                        repo.replace(' ', '_');
+                        const QString api = "https://api.github.com/repos/libretro-thumbnails/" + QString::fromUtf8(QUrl::toPercentEncoding(repo)) + "/git/trees/";
+                        QString sha;
+                        if (httpsDownload(api + "master", tmp, 4 << 20, {}, err)) {
+                            QFile f(tmp);
+                            if (f.open(QIODevice::ReadOnly))
+                                for (const auto& v : QJsonDocument::fromJson(f.readAll()).object().value("tree").toArray())
+                                    if (v.toObject().value("path").toString() == "Named_Boxarts") sha = v.toObject().value("sha").toString();
+                        }
+                        QFile::remove(tmp);
+                        if (!sha.isEmpty() && httpsDownload(api + sha, tmp, 64 << 20, {}, err)) {
+                            QFile f(tmp);
+                            if (f.open(QIODevice::ReadOnly))
+                                for (const auto& v : QJsonDocument::fromJson(f.readAll()).object().value("tree").toArray()) {
+                                    const QString p = v.toObject().value("path").toString();
+                                    if (p.endsWith(".png")) names << p.chopped(4);
+                                }
+                        }
+                        QFile::remove(tmp);
+                    }
                     if (!names.isEmpty()) {
                         QFile f(idx);
                         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(names.join('\n').toUtf8());
@@ -807,6 +841,13 @@ void GameLibrary::downloadCovers() {
             }
             const QString best = matchThumbnail(stem, indexes.value(e.system));
             if (!best.isEmpty() && fetch(best)) ++got;
+            else if (!indexes.value(e.system).isEmpty()) missed << e.path;   // (only when the list was there to look in)
+            else unsure << e.path;
+        }
+        if (got > 0) missed += unsure;   // the network worked: not found is not found
+        if (!missed.isEmpty()) {
+            QFile f(missFile);
+            if (f.open(QIODevice::Append)) f.write((missed.join('\n') + '\n').toUtf8());
         }
         QMetaObject::invokeMethod(this, [this, got] {
             ++coverVersion_;
