@@ -821,9 +821,16 @@ QString PlayerBridge::delayText(double ms, bool live, QSize size) {
         delaySum_ = 0; delayN_ = 0;
         delayClock_.start();
     }
+    // A picture that hardly moves (a console's dashboard): the few new pictures say little about the delay in a game
+    QString still;
+    if (live) {
+        const auto c = engine_.liveContent();
+        if (c.staticPicture || (c.contentFps > 0.5 && c.contentFps < 20.0))
+            still = L(" · still picture, the figure is from a few pictures", " · stillestående billede, tallet bygger på få billeder");
+    }
     return (live ? L("Delay in VeyAmux: %1 ms", "Forsinkelse i VeyAmux: %1 ms") : L("Processing: %1 ms per picture", "Behandling: %1 ms pr. billede"))
                .arg(delayShown_, 0, 'f', 1)
-           + QString("  (%1×%2)").arg(size.width()).arg(size.height());
+           + QString("  (%1×%2)").arg(size.width()).arg(size.height()) + still;
 }
 
 QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::GpuTimer::kStages>& st, double cpuMs, double pipeMs) const {

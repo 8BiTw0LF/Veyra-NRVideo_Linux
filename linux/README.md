@@ -27,6 +27,9 @@
 
 ## New in 2.0
 
+**2.0.1:** less delay on a console's dashboard and menus (*Even out frame pacing* no longer holds pictures that hardly
+move).
+
 - **AMD FSR 4, AI upscaling, on Linux.** AMD's machine-learning upscaler (FSR 4.0.2, which AMD published under the
   MIT licence) runs through standard Vulkan. Pick *FSR 4* under *Picture*; VeyAmux downloads it once as a free, checked
   add-on (about 10 MB, built in the separate [VeyAmux-FSR4](https://github.com/8BiTw0LF/VeyAmux-FSR4) project). It
