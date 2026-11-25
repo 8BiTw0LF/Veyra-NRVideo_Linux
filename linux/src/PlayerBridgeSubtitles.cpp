@@ -60,12 +60,15 @@ QQuickImageProvider* PlayerBridge::subtitleImageProvider() { return new Subtitle
 
 QVariantList PlayerBridge::subtitleTracks() const {
     QVariantList out;
+    if (!engine_.isOpen() || engine_.isLive()) return out;   // a capture card, Remote Play or a game: no subtitles
     for (const auto& t : const_cast<PlayerBridge*>(this)->engine_.subtitles().tracks())
         out << QVariantMap{{"id", t.id}, {"name", trackName(t)}, {"lang", QString::fromStdString(t.lang)}};
     return out;
 }
 
-int PlayerBridge::subtitleTrack() const { return const_cast<PlayerBridge*>(this)->engine_.subtitles().selected(); }
+int PlayerBridge::subtitleTrack() const {
+    if (!engine_.isOpen() || engine_.isLive()) return -1;
+    return const_cast<PlayerBridge*>(this)->engine_.subtitles().selected(); }
 
 void PlayerBridge::setSubtitleTrack(int id) {
     auto& subs = engine_.subtitles();

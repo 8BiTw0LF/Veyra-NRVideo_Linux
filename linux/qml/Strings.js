@@ -8,6 +8,11 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "clickTitle": "Click and touch",
+        "clickModes": ["Pause", "Show controls", "Nothing"],
+        "clickHint": "What a click or tap on the picture does. Pause: a mouse click pauses (a tap on a touchscreen only shows the controls). Show controls: never pauses. Nothing: clicks and taps on the picture are ignored.",
+        "touchOn": "Touchscreen",
+        "touchHint": "Off: VeyAmux ignores the touchscreen (stray touches on a handheld). The mouse, the touchpads and the controller still work.",
         "soundTrack": "Sound",
         "gameDisc": "Change to disc %1 of %2",
         "subtitles": "Subtitles",
@@ -369,6 +374,11 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "clickTitle": "Klik og touch",
+        "clickModes": ["Pause", "Vis knapper", "Intet"],
+        "clickHint": "Hvad et klik eller tryk på billedet gør. Pause: et museklik pauser (et tryk på en touchskærm viser kun knapperne). Vis knapper: pauser aldrig. Intet: klik og tryk på billedet ignoreres.",
+        "touchOn": "Touchskærm",
+        "touchHint": "Fra: VeyAmux ignorerer touchskærmen (utilsigtede tryk på en håndholdt). Mus, touchpads og controller virker stadig.",
         "soundTrack": "Lyd",
         "gameDisc": "Skift til disk %1 af %2",
         "subtitles": "Undertekster",
@@ -730,6 +740,11 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "clickTitle": "Klicken und Touch",
+        "clickModes": ["Pause", "Bedienelemente", "Nichts"],
+        "clickHint": "Was ein Klick oder Tippen auf das Bild tut. Pause: ein Mausklick pausiert (ein Tippen auf einen Touchscreen zeigt nur die Bedienelemente). Bedienelemente: pausiert nie. Nichts: Klicks und Tippen auf das Bild werden ignoriert.",
+        "touchOn": "Touchscreen",
+        "touchHint": "Aus: VeyAmux ignoriert den Touchscreen (versehentliche Berührungen auf einem Handheld). Maus, Touchpads und Controller funktionieren weiter.",
         "soundTrack": "Ton",
         "gameDisc": "Zu Disc %1 von %2 wechseln",
         "subtitles": "Untertitel",
@@ -1067,6 +1082,11 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "clickTitle": "Clic y táctil",
+        "clickModes": ["Pausa", "Mostrar controles", "Nada"],
+        "clickHint": "Qué hace un clic o un toque en la imagen. Pausa: un clic del ratón pausa (un toque en una pantalla táctil solo muestra los controles). Mostrar controles: nunca pausa. Nada: se ignoran los clics y toques en la imagen.",
+        "touchOn": "Pantalla táctil",
+        "touchHint": "Desactivada: VeyAmux ignora la pantalla táctil (toques accidentales en una portátil). El ratón, los touchpads y el mando siguen funcionando.",
         "soundTrack": "Audio",
         "gameDisc": "Cambiar al disco %1 de %2",
         "subtitles": "Subtítulos",
@@ -1404,6 +1424,11 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "clickTitle": "Clic et tactile",
+        "clickModes": ["Pause", "Afficher les commandes", "Rien"],
+        "clickHint": "Ce que fait un clic ou un appui sur l'image. Pause : un clic de souris met en pause (un appui sur un écran tactile affiche seulement les commandes). Afficher les commandes : jamais de pause. Rien : les clics et appuis sur l'image sont ignorés.",
+        "touchOn": "Écran tactile",
+        "touchHint": "Désactivé : VeyAmux ignore l'écran tactile (appuis involontaires sur une console portable). La souris, les pavés tactiles et la manette fonctionnent toujours.",
         "soundTrack": "Son",
         "gameDisc": "Passer au disque %1 sur %2",
         "subtitles": "Sous-titres",
@@ -1741,6 +1766,11 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "clickTitle": "Klick och touch",
+        "clickModes": ["Paus", "Visa knappar", "Inget"],
+        "clickHint": "Vad ett klick eller tryck på bilden gör. Paus: ett musklick pausar (ett tryck på en pekskärm visar bara knapparna). Visa knappar: pausar aldrig. Inget: klick och tryck på bilden ignoreras.",
+        "touchOn": "Pekskärm",
+        "touchHint": "Av: VeyAmux ignorerar pekskärmen (oavsiktliga tryck på en handhållen). Mus, styrplattor och handkontroll fungerar fortfarande.",
         "soundTrack": "Ljud",
         "gameDisc": "Byt till skiva %1 av %2",
         "subtitles": "Undertexter",
@@ -2078,6 +2108,11 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "clickTitle": "Klikk og berøring",
+        "clickModes": ["Pause", "Vis knapper", "Ingenting"],
+        "clickHint": "Hva et klikk eller trykk på bildet gjør. Pause: et museklikk pauser (et trykk på en berøringsskjerm viser bare knappene). Vis knapper: pauser aldri. Ingenting: klikk og trykk på bildet ignoreres.",
+        "touchOn": "Berøringsskjerm",
+        "touchHint": "Av: VeyAmux ignorerer berøringsskjermen (utilsiktede trykk på en håndholdt). Mus, styreplater og kontroller virker fortsatt.",
         "soundTrack": "Lyd",
         "gameDisc": "Bytt til plate %1 av %2",
         "subtitles": "Undertekster",
@@ -2415,6 +2450,11 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "clickTitle": "Щелчок и касание",
+        "clickModes": ["Пауза", "Показать кнопки", "Ничего"],
+        "clickHint": "Что делает щелчок или касание по изображению. Пауза: щелчок мыши ставит на паузу (касание сенсорного экрана только показывает кнопки). Показать кнопки: никогда не ставит на паузу. Ничего: щелчки и касания по изображению игнорируются.",
+        "touchOn": "Сенсорный экран",
+        "touchHint": "Выкл.: VeyAmux игнорирует сенсорный экран (случайные касания на портативном устройстве). Мышь, тачпады и контроллер продолжают работать.",
         "soundTrack": "Звук",
         "gameDisc": "Сменить на диск %1 из %2",
         "subtitles": "Субтитры",

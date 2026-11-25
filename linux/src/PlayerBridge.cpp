@@ -136,6 +136,8 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         compareSeconds_ = std::clamp(q.value("rec/compareSeconds", 15).toInt(), 5, 120);
         if (q.value("rec/replay", false).toBool()) setReplay(true);
     }
+    // the track lists follow the source (a game after a film has none)
+    connect(this, &PlayerBridge::mediaChanged, this, &PlayerBridge::subtitlesChanged);
     tick_.setInterval(100);
     connect(&tick_, &QTimer::timeout, this, [this] {
         if (rec_->recording() || rec_->streaming()) emit recTick();

@@ -562,6 +562,14 @@ public:
     }
     // Start VeyAmux when the capture card is plugged in (autostart watcher)
     Q_PROPERTY(bool autostart READ autostart WRITE setAutostart NOTIFY recChanged)
+    // a click / tap on the picture: 0 pause (a mouse click; a tap shows the controls), 1 only show the controls,
+    // 2 nothing. touchEnabled false: the touchscreen is ignored everywhere (issue #3: stray touches on a handheld)
+    Q_PROPERTY(int clickAction READ clickAction WRITE setClickAction NOTIFY inputPrefsChanged)
+    Q_PROPERTY(bool touchEnabled READ touchEnabled WRITE setTouchEnabled NOTIFY inputPrefsChanged)
+    int clickAction() const { return QSettings().value("ui/clickAction", 0).toInt(); }
+    void setClickAction(int a) { QSettings().setValue("ui/clickAction", a); emit inputPrefsChanged(); }
+    bool touchEnabled() const { return touchEnabled_; }
+    void setTouchEnabled(bool on) { touchEnabled_ = on; QSettings().setValue("ui/touch", on); emit inputPrefsChanged(); }
     bool autostart() const;
     void setAutostart(bool on);
 
@@ -663,6 +671,7 @@ public slots:
 signals:
     void closing();                     // the video is about to be closed or replaced (its position is still there)
     void subtitlesChanged();
+    void inputPrefsChanged();
     void retroDiscChanged();
     void subtitleChanged();
     void updateChanged();
@@ -718,6 +727,7 @@ private:
     bool demoActive_ = false;
     bool retroActive_ = false;
     quint32 retroKeys_ = 0;
+    bool touchEnabled_ = QSettings().value("ui/touch", true).toBool();
     int retroDiscs_ = 0, retroDisc_ = 0;
     double demoProgress_ = 0;
     int demoPose_ = 0;

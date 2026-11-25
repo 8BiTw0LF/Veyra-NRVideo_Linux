@@ -263,8 +263,17 @@ Window {
             if (pressed && player.demoActive) { player.demoLook(m.x - lx, m.y - ly); lx = m.x; ly = m.y }
         }
         // a tap on a touchscreen (Steam Deck) only shows the controls with the menu button; a mouse click pauses
-        onClicked: (m) => { if (!player.demoActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay(); wake() }
-        onDoubleClicked: (m) => { if (!player.demoActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+        // (System -> Click and touch: pause, only the controls, or nothing)
+        onClicked: (m) => {
+            if (player.clickAction === 2) return
+            if (player.clickAction === 0 && !player.demoActive && !player.retroActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay()
+            wake()
+        }
+        onDoubleClicked: (m) => {
+            if (player.clickAction === 2) return
+            if (player.clickAction === 0 && !player.demoActive && !player.retroActive && m.source === Qt.MouseEventNotSynthesized) player.togglePlay()
+            win.visibility = fs ? Window.Windowed : Window.FullScreen
+        }
     }
 
     // demo scene: how to swim (while the controls are shown)
@@ -380,6 +389,16 @@ Window {
         gradient: Gradient { GradientStop { position: 0; color: "#b0000000" } GradientStop { position: 1; color: "#00000000" } }
         Text { font.family: Theme.font; x: 22; y: 18; width: parent.width - 44; text: player.title; color: Theme.heading; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight }
         Text { font.family: Theme.font; x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
+    }
+
+    // ------------------------------------------------------------- paused: a clear sign in the middle (issue #3)
+    Rectangle {
+        visible: player.hasMedia && !player.playing && !player.retroActive && !player.demoActive && !win.panelOpen
+        anchors.centerIn: parent
+        width: 120; height: 120; radius: 60
+        color: "#99000000"; border.color: "#55ffffff"; border.width: 2
+        Image { anchors.centerIn: parent; source: "icons/pause.svg"; width: 56; height: 56; sourceSize: Qt.size(112, 112) }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { player.togglePlay(); wake() } }
     }
 
     // ------------------------------------------------------------- subtitles

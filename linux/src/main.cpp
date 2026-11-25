@@ -7,6 +7,8 @@
 #include "Gamepad.h"
 #include "GameLibrary.h"
 #include <QQuickImageProvider>
+#include <QMouseEvent>
+#include <QPointingDevice>
 #include "MediaLibrary.h"
 #include "VideoItem.h"
 #include "VkContext.h"
@@ -392,6 +394,26 @@ int main(int argc, char** argv) {
     });
     engine.rootContext()->setContextProperty("player", &player);
     engine.addImageProvider("subs", PlayerBridge::subtitleImageProvider());
+    // the touchscreen off (System -> Click and touch): its touches, and the mouse clicks Qt makes from them, go nowhere
+    struct TouchFilter : QObject {
+        PlayerBridge* p;
+        explicit TouchFilter(PlayerBridge* pl) : p(pl) {}
+        bool eventFilter(QObject* o, QEvent* e) override {
+            if (p->touchEnabled()) return QObject::eventFilter(o, e);
+            switch (e->type()) {
+            case QEvent::TouchBegin: case QEvent::TouchUpdate: case QEvent::TouchEnd: case QEvent::TouchCancel:
+                return true;
+            case QEvent::MouseButtonPress: case QEvent::MouseButtonRelease: case QEvent::MouseButtonDblClick: case QEvent::MouseMove: {
+                const auto* d = static_cast<QMouseEvent*>(e)->pointingDevice();
+                return d && d->type() == QInputDevice::DeviceType::TouchScreen;
+            }
+            default:
+                return QObject::eventFilter(o, e);
+            }
+        }
+    };
+    static TouchFilter touchFilter(&player);
+    app.installEventFilter(&touchFilter);
     QObject::connect(&games, &veyamux::GameLibrary::launch, &player,
                      [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys) {
                          player.openGame(core, rom, title, sys, games.biosFolder());

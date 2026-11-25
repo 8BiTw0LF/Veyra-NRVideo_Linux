@@ -583,6 +583,12 @@ Rectangle {
                                 text: gamepad.controllers.length > 0 ? "● " + tr("padOn").replace("%1", gamepad.controllers.join(", ")) : tr("padNone") }
                         }
                         Hint { text: tr("padHint") }
+                        // a click or tap on the picture, and the touchscreen
+                        Title { text: tr("clickTitle") }
+                        Segmented { width: parent.width; model: tr("clickModes"); current: player.clickAction; onPicked: (i) => player.clickAction = i }
+                        Hint { text: tr("clickHint") }
+                        SwitchRow { text: tr("touchOn"); checked: player.touchEnabled; onToggled: (v) => player.touchEnabled = v }
+                        Hint { text: tr("touchHint") }
                     }
                     Sep {}
                     // ---- look and language
