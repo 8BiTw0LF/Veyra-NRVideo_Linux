@@ -28,6 +28,9 @@
 
 ## New in 2.1
 
+**2.1.1:** a setting for what a click or tap on the picture does and to turn the touchscreen off (*System → Click and
+touch*), a clear pause sign, and games no longer show a film's sound and subtitle tracks.
+
 - **Media** (in place of *Video file*): your films and series from **your own folders**, a **Jellyfin** server and a
   **Plex** server, as posters with *Continue watching*.
   - **Jellyfin:** sign in with your user name and password, or with *Quick Connect* (a code you confirm in another
