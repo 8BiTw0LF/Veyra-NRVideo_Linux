@@ -215,6 +215,15 @@ void MediaEngine::joinAll() {
 void MediaEngine::close() {
     if (!fmt_ && !live_) return;
     joinAll();
+    // The pacer can stop before the capture thread hands it its last picture: that picture (and its driver buffer)
+    // would stay in paced_, and the buffer's mapping keeps the device file open, so the next open of the card fails
+    // as "in use" (seen when the benchmark switches modes). Everything the pacer had is let go here.
+    {
+        std::lock_guard l(pace_m_);
+        for (auto& p : paced_) { p.frame.hold.reset(); p.frame.ext = nullptr; }
+        paced_.clear();
+        for (auto& f : paceSpare_) { f.hold.reset(); f.ext = nullptr; }
+    }
     { std::lock_guard l(capM_); cap_.reset(); }
     live_ = false;
     rawLive_ = false;
