@@ -132,7 +132,8 @@ QString PlayerBridge::gpuCounterText() const {
     QStringList r;
     r << QStringLiteral("%1 frames:").arg(v.front().frames);
     for (const auto& c : v)
-        r << QStringLiteral("%1: %2 %3").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5).arg(QString::fromStdString(c.unit));
+        r << QStringLiteral("%1: %2 %3%4").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5).arg(QString::fromStdString(c.unit))
+                 .arg(c.avg == 0 && c.frames >= 100 ? QStringLiteral(" (always 0: the driver does not count this one here)") : QString());
     return r.join('\n');
 }
 

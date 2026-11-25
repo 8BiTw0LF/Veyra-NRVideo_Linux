@@ -160,6 +160,9 @@ std::vector<GpuCounters::Value> GpuCounters::values() const {
         x.name = d.name;
         x.category = d.category;
         x.unit = unitName(counters_[chosen_[i]].unit);
+        // RADV (Mesa 26.3) labels its cache hit ratios as bytes; the values are percentages (48..98)
+        const std::string lname = [&] { std::string s = d.name; for (char& c : s) c = char(std::tolower(uint8_t(c))); return s; }();
+        if (lname.find("ratio") != std::string::npos && x.unit == std::string("bytes")) x.unit = "%";
         x.frames = frames_;
         x.avg = frames_ ? sums_[i] / frames_ : 0;
         v.push_back(std::move(x));
