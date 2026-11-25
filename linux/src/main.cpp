@@ -167,8 +167,8 @@ int main(int argc, char** argv) {
             QCoreApplication wapp(argc, argv);
             return veyamux::watch::run(relaunchTarget());
         }
-    // The UI itself is cheap; what matters is latency. VSync is off by default (like Windows' tearing mode);
-    // VEYAMUX_VSYNC=1 turns it back on. VRR mode (frame generation off) presents with vsync, so a VRR display shows
+    // The UI itself is cheap; what matters is latency. VSync is off by default (like Windows' tearing mode), except
+    // with Lossless Scaling (below); VEYAMUX_VSYNC=1 turns it on, =0 keeps it off. VRR mode (frame generation off) presents with vsync, so a VRR display shows
     // each evenly paced picture whole, at the moment it is presented, without tearing.
     bool vrrAtStart = false;
     {
@@ -294,6 +294,13 @@ int main(int argc, char** argv) {
             }
         }
         lsfg::configureEnvironment(lsfgEnabled);
+        // Lossless Scaling: VSync on (the window is not shown yet, so Qt's swapchain picks this up). lsfg-vk's extra
+        // frames come out evenly only when every present waits for the refresh; without it they arrive unevenly.
+        // VEYAMUX_VSYNC=0 keeps it off anyway.
+        if (lsfgEnabled && qEnvironmentVariable("VEYAMUX_VSYNC") != "0") {
+            qunsetenv("QSG_NO_VSYNC");
+            qInfo("VSync on for Lossless Scaling");
+        }
     }
     const bool hdrOutSetting = !probing && QSettings().value("enh/hdrOut", false).toBool() && qEnvironmentVariable("VEYAMUX_HDR_OUT") != "0";
     bool hdrOutRequested = hdrOutSetting;

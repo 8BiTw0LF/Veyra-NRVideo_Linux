@@ -343,6 +343,14 @@ bool LiveVulkan::countersAvailable() const { return chain_->countersAvailable();
 bool LiveVulkan::setCountersEnabled(bool on) { return chain_->setCountersEnabled(on); }
 std::vector<veyamux::GpuCounters::Value> LiveVulkan::counterValues() const { return chain_->counterValues(); }
 void LiveVulkan::setFsr4Dir(const QString& dir) { chain_->setFsr4Dir(dir.toStdString()); }
+bool LiveVulkan::fsr4Fp8Supported(QString* why) const {
+    std::string w;
+    const bool ok = chain_->fsr4Fp8Supported(&w);
+    if (why) *why = QString::fromStdString(w);
+    return ok;
+}
+QString LiveVulkan::fsr4Path() const { return QString::fromStdString(chain_->fsr4Path()); }
+QString LiveVulkan::fsr4Fp8Why() const { return QString::fromStdString(chain_->fsr4Fp8Why()); }
 bool LiveVulkan::fsr4Supported(QString* why) const {
     std::string w;
     const bool ok = chain_->fsr4Supported(&w);

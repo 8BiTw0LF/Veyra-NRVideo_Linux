@@ -11,7 +11,7 @@
 
 namespace fsr4addon {
 
-constexpr const char* kVersion = "1";
+constexpr const char* kVersion = "2";   // 2: with AMD's FP8 network for the matrix units
 
 // The installed add-on's folder, or empty when it is not there (or does not match its manifest)
 QString installedDir();

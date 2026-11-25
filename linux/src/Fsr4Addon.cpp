@@ -13,9 +13,9 @@
 namespace fsr4addon {
 namespace {
 
-constexpr const char* kUrl = "https://github.com/8BiTw0LF/VeyAmux-FSR4/releases/download/v1/veyamux-fsr4-1.tar.gz";
-// the add-on's release v1 (VeyAmux-FSR4, built reproducibly by its CI; the same as a local build.sh 1)
-constexpr const char* kSha256 = "f4b957e0f5cd83f399ab50795e6188c1763a56e6036de77e3a9f7be85b1002ed";
+constexpr const char* kUrl = "https://github.com/8BiTw0LF/VeyAmux-FSR4/releases/download/v2/veyamux-fsr4-2.tar.gz";
+// the add-on's release v2 (VeyAmux-FSR4, built reproducibly by its CI; the same as a local build.sh 2)
+constexpr const char* kSha256 = "ca930ac7b08abb71ef21046e4a0839541cd867f2eb77e68f05fe78186e320223";
 constexpr qint64 kMaxBytes = 64ll * 1024 * 1024;
 
 QString baseDir() { return QDir::homePath() + "/.local/share/VeyAmux/fsr4"; }

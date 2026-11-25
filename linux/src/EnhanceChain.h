@@ -1,5 +1,5 @@
 // VeyAmux for Linux - GPU enhancement chain built from the original Veyra (Windows) HLSL shaders (compiled to SPIR-V).
-//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [SGSR, AMD FSR 1, NIS or AMD FSR 3.1 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
+//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [SGSR, NIS, AMD FSR 3.1 or AMD FSR 4 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
 #pragma once
 #include <chrono>
 #include <atomic>
@@ -26,13 +26,20 @@ enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to SGSR if FidelityFX cannot run.
-enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3, AmdFsr4 = 4 };   // FSR 4 = AMD's ML upscaler (add-on)   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
+// The numbers are saved in settings and profiles. 2 was AMD FSR 1 (removed in 1.9.x debug); it now means SGSR.
+// NIS = NVIDIA Image Scaling (spatial, any GPU); FSR 4 = AMD's ML upscaler (add-on)
+enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, Nis = 3, AmdFsr4 = 4 };
+inline Upscaler upscalerFromSetting(int v) { return v == 1 || v == 3 || v == 4 ? Upscaler(v) : Upscaler::Sgsr; }
+inline const char* upscalerName(Upscaler u) {
+    switch (u) { case Upscaler::AmdFsr3: return "FSR 3.1"; case Upscaler::Nis: return "NIS"; case Upscaler::AmdFsr4: return "FSR 4"; default: return "SGSR"; }
+}
 
 struct EnhanceSettings {
     bool enabled = true;
     float scale = 1.0f;       // output scale factor (>=1)
     Upscaler upscaler = Upscaler::Sgsr;
     bool fxaa = false;
+    bool fsr4Int8 = false;    // FSR 4 on the INT8 network even where the FP8 one (matrix units) can run (benchmark)
     bool deflicker = false;   // anti-flicker: calms pixels that flicker between frames (LxDeflicker)
     // FSR 3.1 at the native size (scale 1): AMD's "native AA", i.e. temporal anti-aliasing
     bool fsrNativeAa() const { return enabled && (upscaler == Upscaler::AmdFsr3 || upscaler == Upscaler::AmdFsr4) && scale <= 1.001f && !retroTv && !pixelPerfect; }
@@ -127,6 +134,10 @@ public:
     // AMD FSR 4: the add-on's folder (empty = not installed); whether this GPU can run it
     void setFsr4Dir(const std::string& dir) { std::lock_guard l(fsr4M_); fsr4Dir_ = dir; }
     bool fsr4Supported(std::string* why = nullptr) const { return Fsr4Upscaler::supported(ctx_, why); }
+    bool fsr4Fp8Supported(std::string* why = nullptr) const { return Fsr4Upscaler::fp8Supported(ctx_, why); }
+    // "FP8" / "INT8" while FSR 4 runs (else empty), and why it is not FP8
+    std::string fsr4Path() const { std::lock_guard l(fsr4M_); return fsr4Path_; }
+    std::string fsr4Fp8Why() const { std::lock_guard l(fsr4M_); return fsr4Fp8Why_; }
     uint64_t liveGeneration() const { return liveGen_; }
     // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
     void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; mvPrev_ = false; fgReset_ = true; hudReset_ = true; }
@@ -216,7 +227,8 @@ private:
     std::unique_ptr<FsrUpscaler> fsrUp_;
     std::unique_ptr<Fsr4Upscaler> fsr4Up_;
     std::string fsr4Dir_;
-    std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread
+    std::string fsr4Path_, fsr4Fp8Why_;
+    mutable std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread, fsr4Path_ read from it
     std::unique_ptr<FsrFrameGen> fg_;
     uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)

@@ -67,8 +67,6 @@ endforeach()
 foreach(s LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut LxStatic LxDetail LxCrtGeom LxPixelGrid LxDeflicker LxFit LxHudUpdate LxHudCompose LxCompare)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
-# AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
-veyamux_spv(LxFsr1 "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxFsr1.hlsl" -I "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fidelityfx/include/FidelityFX/gpu")
 # Snapdragon Game Super Resolution 1 (BSD-3-Clause)
 veyamux_spv(LxSgsr "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxSgsr.hlsl" -I "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgsr")
 # NVIDIA Image Scaling (MIT)

@@ -37,6 +37,9 @@ public:
     bool countersAvailable() const;
     void setFsr4Dir(const QString& dir);
     bool fsr4Supported(QString* why) const;
+    bool fsr4Fp8Supported(QString* why) const;
+    QString fsr4Path() const;      // "FP8" / "INT8" while FSR 4 runs
+    QString fsr4Fp8Why() const;    // why it is not FP8
     bool setCountersEnabled(bool on);
     std::vector<veyamux::GpuCounters::Value> counterValues() const;
     ~LiveVulkan() override;

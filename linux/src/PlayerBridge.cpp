@@ -169,12 +169,12 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
             if (qEnvironmentVariableIsSet("VEYAMUX_DEBUG_FG"))
                 qInfo("timing:%s", qPrintable(timingText(liveVk_->gpuMs(), liveVk_->gpuStageMs(), liveVk_->lastMs(), pipe)));
             gpuName_ = L("Vulkan (shared with the UI)", "Vulkan (delt med brugerfladen)");
-            upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(liveVk_->lastUpError()) : QString();
+            upError_ = (s_.upscaler == veyamux::Upscaler::AmdFsr3 || s_.upscaler == veyamux::Upscaler::AmdFsr4) ? translateMessage(liveVk_->lastUpError()) : QString();
             updateLsfgMultiplier();
             emit statsChanged();
             return;
         }
-        upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(QString::fromStdString(st.upError)) : QString();
+        upError_ = (s_.upscaler == veyamux::Upscaler::AmdFsr3 || s_.upscaler == veyamux::Upscaler::AmdFsr4) ? translateMessage(QString::fromStdString(st.upError)) : QString();
         updateLsfgMultiplier();
         perf_ = delayText(st.gpuActive ? std::max(0.0, double(st.gpuMs)) + st.processMs : st.processMs, false, QSize(st.outW, st.outH))
                 + (st.dropped ? QString(" · %1 %2").arg(st.dropped).arg(L("dropped", "tabt")) : QString());
@@ -395,8 +395,7 @@ void PlayerBridge::toggleCompare() {
     const int fps = int(std::lround(c.contentFps > 1 ? c.contentFps : engine_.info().fps));
     QString what;
     if (s_.enabled && s_.scale > 1.001f) {
-        static const char* names[] = {"SGSR", "FSR 3.1", "FSR 1", "NIS"};
-        what = QString(" · %1 %2×").arg(names[std::clamp(int(s_.upscaler), 0, 3)]).arg(double(s_.scale));
+        what = QString(" · %1 %2×").arg(veyamux::upscalerName(s_.upscaler)).arg(double(s_.scale));
     }
     const QString a = L("Original", "Original") + (fps > 0 ? QString(" · %1 fps").arg(fps) : QString());
     const QString b = "VeyAmux" + what;
@@ -736,7 +735,7 @@ void PlayerBridge::loadSettings() {
     obsFile_ = q.value("obs/file").toString();
     s_.enabled = q.value("enh/enabled", true).toBool();
     s_.scale = float(q.value("enh/scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 4));
+    s_.upscaler = veyamux::upscalerFromSetting(q.value("enh/upscaler", 0).toInt());
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.deflicker = q.value("enh/deflicker", false).toBool();
     s_.retroTv = q.value("enh/retroTv", false).toBool();
@@ -1040,9 +1039,9 @@ void PlayerBridge::applyEnhance() { engine_.setEnhance(s_); if (liveVk_) liveVk_
 void PlayerBridge::setEnhance(bool v) { s_.enabled = v; applyEnhance(); }
 void PlayerBridge::setScale(double v) { s_.scale = float(qBound(1.0, v, 4.0)); applyEnhance(); }
 void PlayerBridge::setUpscaler(int v) {
-    v = std::clamp(v, 0, 4);
-    if (int(s_.upscaler) == v) return;
-    s_.upscaler = veyamux::Upscaler(v);
+    const auto u = veyamux::upscalerFromSetting(v);
+    if (s_.upscaler == u) return;
+    s_.upscaler = u;
     applyEnhance();
 }
 void PlayerBridge::setFxaa(bool v) { s_.fxaa = v; applyEnhance(); }
@@ -1149,7 +1148,7 @@ bool PlayerBridge::loadProfile(const QString& name) {
     if (!q.contains(g + "scale")) return false;
     s_.enabled = q.value(g + "enabled", true).toBool();
     s_.scale = float(q.value(g + "scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 4));
+    s_.upscaler = veyamux::upscalerFromSetting(q.value(g + "upscaler", 0).toInt());
     s_.fxaa = q.value(g + "fxaa", false).toBool();
     s_.deflicker = q.value(g + "deflicker", false).toBool();
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
@@ -1591,7 +1590,7 @@ int PlayerBridge::fsr4State() const {
 void PlayerBridge::installFsr4() {
     if (fsr4Busy_) return;
     fsr4Busy_ = true;
-    fsr4Text_ = L("Downloading FSR 4 (about 9 MB)…", "Henter FSR 4 (ca. 9 MB)…");
+    fsr4Text_ = L("Downloading FSR 4 (about 10 MB)…", "Henter FSR 4 (ca. 10 MB)…");
     emit fsr4Changed();
     std::thread([this, quit = psQuit_] {
         auto last = std::make_shared<std::atomic<int>>(-1);
@@ -1599,7 +1598,7 @@ void PlayerBridge::installFsr4() {
             if (quit->load() || pc / 5 == last->load() / 5) return;
             last->store(pc);
             quit->post(this, [this, pc] {
-                fsr4Text_ = L("Downloading FSR 4 (about 9 MB)… %1 %", "Henter FSR 4 (ca. 9 MB)… %1 %").arg(pc);
+                fsr4Text_ = L("Downloading FSR 4 (about 10 MB)… %1 %", "Henter FSR 4 (ca. 10 MB)… %1 %").arg(pc);
                 emit fsr4Changed();
             });
         });

@@ -106,7 +106,7 @@ const Switch kSwitches[] = {
     {"VEYAMUX_FILE_GPU", "0", "Video files on the CPU path", "instead of the GPU (live) path"},
     {"VEYAMUX_PS_SWDECODE", "1", "Remote Play: decode on the CPU", "instead of VA-API"},
     {"VEYAMUX_GAMESCOPE_KEEPALIVE", "0", "gamescope: no pointer keep-alive", "to test whether frame generation stops without it"},
-    {"VEYAMUX_VSYNC", "1", "VSync on", "the UI waits for the display (VeyAmux runs without it by default)"},
+    {"VEYAMUX_VSYNC", "1", "VSync on", "the UI waits for the display (off by default, on with Lossless Scaling; VEYAMUX_VSYNC=0 keeps it off)"},
 };
 
 } // namespace
@@ -407,18 +407,24 @@ void PlayerBridge::startBenchmark() {
     add(M, "Anti-flicker", [](EnhanceSettings& e) { e.deflicker = true; });
     add(M, "Anti-flicker + temporal medium", [](EnhanceSettings& e) { e.deflicker = true; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     add(M, "FSR 3.1 native (TAA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; });
-    if (fsr4State() == 3) add(M, "FSR 4 native (AA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr4; });
+    // FSR 4: AMD's FP8 network on the matrix units where the GPU has them (named "FP8"), and the INT8 one for comparison
+    const bool fsr4 = fsr4State() == 3, fsr4Fp8 = fsr4 && liveVk_ && liveVk_->fsr4Fp8Supported(nullptr);
+    const char* f4 = fsr4Fp8 ? "FSR 4 FP8" : "FSR 4";
+    if (fsr4) add(M, QString("%1 native (AA)").arg(f4), [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr4; });
+    if (fsr4Fp8) add(M, "FSR 4 INT8 native (AA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr4; e.fsr4Int8 = true; });
     add(M, "FSR 3.1 native + temporal medium", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     if (upNative || lowRes) {
         const bool low = !upNative;
         if (low) add(U, "1080p: enhance on, nothing else", nullptr, true);
-        const std::pair<Upscaler, const char*> ups[] = {{Upscaler::Sgsr, "SGSR"}, {Upscaler::AmdFsr1, "FSR 1"}, {Upscaler::Nis, "NIS"}, {Upscaler::AmdFsr3, "FSR 3.1"}};
+        const std::pair<Upscaler, const char*> ups[] = {{Upscaler::Nis, "NIS"}, {Upscaler::Sgsr, "SGSR"}, {Upscaler::AmdFsr3, "FSR 3.1"}};
         for (const auto& [up, label] : ups)
             add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", label), [up = up](EnhanceSettings& e) { e.scale = 2; e.upscaler = up; }, low);
         add(U, QString("%1Upscale 1.5× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr3; }, low);
-        if (fsr4State() == 3) {
-            add(U, QString("%1Upscale 2× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 2; e.upscaler = Upscaler::AmdFsr4; }, low);
-            add(U, QString("%1Upscale 1.5× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr4; }, low);
+        if (fsr4) {
+            add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", f4), [](EnhanceSettings& e) { e.scale = 2; e.upscaler = Upscaler::AmdFsr4; }, low);
+            add(U, QString("%1Upscale 1.5× %2").arg(low ? "1080p: " : "", f4), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr4; }, low);
+            if (fsr4Fp8)
+                add(U, QString("%1Upscale 2× FSR 4 INT8").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 2; e.upscaler = Upscaler::AmdFsr4; e.fsr4Int8 = true; }, low);
         }
         add(U, QString("%1Heavy: both medium + anti-flicker + SMAA + 2× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) {
             e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true;

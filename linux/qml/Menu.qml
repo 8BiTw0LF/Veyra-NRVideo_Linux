@@ -187,8 +187,8 @@ Rectangle {
                         Label_ { text: tr("method") }
                         Segmented {
                             width: parent.width; enabled: player.enhance
-                            readonly property var values: [0, 2, 1, 4, 3]   // SGSR | FSR 1 | FSR 3.1 | FSR 4 | NIS
-                            model: ["SGSR", "FSR 1", "FSR 3.1", "FSR 4", "NIS"]
+                            readonly property var values: [3, 0, 1, 4]   // NIS | SGSR | FSR 3.1 | FSR 4 (the numbers are the saved settings)
+                            model: ["NIS", "SGSR", "FSR 3.1", "FSR 4"]
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
@@ -198,9 +198,8 @@ Rectangle {
                             color: player.upscalerError !== "" && !fsr4Waiting ? Theme.warn : Theme.muted
                             text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback") + player.upscalerError
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? tr("fsrNativeAaHint") : tr("fsr31Hint"))
-                                     : player.upscaler === 2 ? tr("fsr1Hint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
                                      : player.upscaler === 3 ? tr("nisHint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
-                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") : player.fsr4State === 0 ? tr("fsr4NoGpu")
+                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") + (player.fsr4Path !== "" ? " (" + player.fsr4Path + ")" : "") : player.fsr4State === 0 ? tr("fsr4NoGpu")
                                                                 : player.fsr4State === 2 ? player.fsr4Text : player.fsr4State === 4 ? tr("fsr4NotYet")
                                                                 : tr("fsr4Download") + (player.fsr4Text !== "" ? "\n" + player.fsr4Text : ""))
                                                              : tr("sgsrHint"))

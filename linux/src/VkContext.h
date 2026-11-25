@@ -54,6 +54,7 @@ public:
         bool lowLatency2 = false;        // VK_NV_low_latency2 + VK_KHR_present_id (NVIDIA Reflex)
         bool coopMatrix = false;         // VK_KHR_cooperative_matrix (matrix units: RDNA 3/4, NVIDIA tensor cores, Intel XMX)
         bool coopMatrixM1 = false;       // VK_EXT_cooperative_matrix_maintenance1 (per-element ops, conversions)
+        bool coopConversions = false;    //   ... with cooperativeMatrixConversions (accumulator -> A/B: FSR 4 FP8)
         bool float8 = false;             // VK_EXT_shader_float8 (FP8 in shaders and cooperative matrices: RDNA 4)
         bool intDot = false;             // shaderIntegerDotProduct (packed int8 dot products)
         bool perfQuery = false;          // VK_KHR_performance_query (hardware counters, VeyAmux Debug)

@@ -32,7 +32,7 @@ VeyAmux udgives kun som AppImage (Flatpak-udgaven er fjernet efter 1.1).
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → **SGSR, AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
+| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → **NVIDIA NIS, SGSR, AMD FSR 3.1 eller AMD FSR 4** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX FSR 3.1.6 upscaler (SDK 2.4.0-effektkode i SDK 1.1.4-rammen) på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -135,10 +135,8 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   så HDR over 1 overlever. Målt 2× (800×450 → 1600×900 af et skærmbillede, PSNR mod originalen): SGSR 26,65 dB, den
   tidligere Lanczos-3 26,53 dB, FSR 1 26,76 dB, NIS 25,46 dB – mindre ringning end Lanczos. Bruges også, når FSR 3.1
   ikke kan starte. Afløste den tidligere Lanczos-3.
-- **AMD FSR 1** – EASU (kantadaptiv opskalering) + RCAS (skarphed, 0,5 stop; `VEYAMUX_FSR1_RCAS=<stop>`) fra FidelityFX
-  SDK'ens `ffx_fsr1.h`, billede for billede (`shaders/LxFsr1.hlsl`), i gamma-2-domænet. Målt 2×: fine detaljer 32,2 dB /
-  detaljegrad 0,93 (Lanczos 32,0 dB / 0,61), naturligt motiv 49,0 / 49,5 dB, vektorgrafik 35,6 / 37,3 dB – synligt
-  skarpere uden ringning, men lidt lavere PSNR på skarpe kanter.
+- **AMD FSR 1** blev fjernet efter 1.9.1: den gav stort set det samme som SGSR og kostede mere. Gemte indstillinger
+  med FSR 1 (værdien 2) bliver til SGSR. Rækkefølgen i menuen er NIS, SGSR, FSR 3.1, FSR 4.
 - **NVIDIA Image Scaling (NIS)** – NVScaler fra NVIDIAs NIS SDK (MIT, `third_party/nis`), `shaders/LxNis.hlsl`:
   6-taps retningsbestemt skalering med adaptiv skarphed, blok 32×24, 256 tråde, `NIS_HDR_MODE` lineær (kæden kører i
   lineært lys, så også HDR-signaler skaleres korrekt). Koefficient-teksturerne (2×64 RGBA32F) uploades én gang.
@@ -522,7 +520,7 @@ Hvor teksterne ligger:
 ## Lav latens (capture)
 Samme princip som Windows-versionen: billedet forlader aldrig GPU'en. Rå YUYV/UYVY/NV12-frames uploades, farvekonverteres og
 forbedres i Vulkan *direkte i Qt's egen frame* (samme Vulkan-enhed, ingen readback, ingen CPU-konvertering), og V4L2-køen
-tømmes så kun det nyeste billede bruges ("mailbox"). Vsync er slået fra som standard (`VEYAMUX_VSYNC=1` slår det til).
+tømmes så kun det nyeste billede bruges ("mailbox"). Vsync er slået fra som standard, undtagen med Lossless Scaling, hvor lsfg-vk's ekstra billeder kun kommer jævnt, når hvert billede venter på skærmen (`VEYAMUX_VSYNC=1` slår det til, `=0` holder det fra).
 MJPEG dekodes til NV12 (se *MJPEG-afkodning* nedenfor) og går samme vej.
 - **Én kopi:** et råt V4L2-billede kopieres ikke ud af driverens buffer i capture-tråden. `RawFrame::ext` peger ind i
   den mmap'ede buffer, og `RawFrame::hold` (shared_ptr med en deleter, der laver `VIDIOC_QBUF`) holder den fra driveren,
@@ -641,13 +639,13 @@ VK_EXT_shader_float8) og i VeyAmux Debug VK_KHR_performance_query. Afviser drive
   med. Forsinkelseskolonnen slutter ved det færdige billede; tiden i køen til skærmen er ikke med.
 
 ## FSR 4 (AI-opskalering, tilføjelse)
-AMD's FSR 4.0.2 (FidelityFX SDK 2.0.0, MIT) er ikke en del af VeyAmux. INT8-modellen, dens vægte og pre-/post-passene
-bygges til SPIR-V i repoet **VeyAmux-FSR4** (`build.sh`, DXC 1.9.2609, reproducerbart arkiv); ændringerne for Vulkan står i
+AMD's FSR 4.0.2 (FidelityFX SDK 2.0.0, MIT) er ikke en del af VeyAmux. AMD's to modeller (INT8 og FP8), deres vægte og
+pre-/post-passene bygges til SPIR-V i repoet **VeyAmux-FSR4** (`build.sh`, DXC 1.9.2609, reproducerbart arkiv); ændringerne for Vulkan står i
 dets NOTICE.md (eksplicit register for pre-passets vægte, `QuadReadAcross*` som subgroup-shuffle, `_Static_assert` fjernet,
 32-bit teksturtyper, RGB-storage-skrivninger som float4, indgangspunkt `main`).
-- **Hentning** (`src/Fsr4Addon.cpp`): kun når brugeren trykker *Hent FSR 4*. Arkivet fra GitHub-udgivelsen `v1` tjekkes
+- **Hentning** (`src/Fsr4Addon.cpp`): kun når brugeren trykker *Hent FSR 4*. Arkivet fra GitHub-udgivelsen `v2` tjekkes
   mod en fast SHA-256 i koden, kun filer under `fsr4/` accepteres, og hver fil tjekkes mod manifestet, før det lægges i
-  `~/.local/share/VeyAmux/fsr4/1`. `VEYAMUX_FSR4_DIR=<mappe>` bruger en anden mappe (test, egne byg).
+  `~/.local/share/VeyAmux/fsr4/2` (v1 havde kun INT8; den hentes igen). `VEYAMUX_FSR4_DIR=<mappe>` bruger en anden mappe (test, egne byg).
 - **Kørsel** (`src/Fsr4Upscaler.cpp`): den del af AMD's provider VeyAmux behøver, skrevet til Vulkan. Pr. billede:
   pre-pass (genprojicerer historikken, laver netværkets input i scratch-bufferen), 12 netværkspasses (pakkede 8-bit
   prikprodukter, `shaderIntegerDotProduct`) og post-pass (billede, historik og de "rekurrente" træk til næste billede).
@@ -657,10 +655,22 @@ dets NOTICE.md (eksplicit register for pre-passets vægte, `QuadReadAcross*` som
   være et multiplum af 8 og højst 3840×2160 (ellers SGSR med en besked). SPIR-V'ens bindinger tjekkes mod layoutet før brug.
 - **Test:** `veyamux-upscale-test <shaders> in.rgba W H N out.rgba fsr4 2` med `VEYAMUX_FSR4_DIR`. På lavapipe: korrekt
   billede; med bevægelse vinder den over billederne (31,2 dB mod SGSR's 30,4 på en testsekvens).
-- **Cooperative matrix:** enheden slår VK_KHR_cooperative_matrix, VK_EXT_cooperative_matrix_maintenance1 og
-  VK_EXT_shader_float8 til, hvor de findes, men FSR 4 bruger dem ikke endnu. AMD's hurtige FP8-model er skrevet med
-  AMD-specifikke DirectX-matrixinstruktioner (`AmdWaveMatrix*`), og DXC kan ikke udtrykke FP8- eller int8-matricer i
-  HLSL til Vulkan. Den skal omskrives (GLSL med GL_KHR_cooperative_matrix + float-e4m3), før RDNA 4 kan køre FP8-vejen.
+- **FP8 på matrixenhederne** (AMD's egen vej på RDNA 4, `fsr4_model_v07_fp8_no_scale`): AMD's kode bruger
+  `AmdWaveMatrix*` fra AMD's D3D12-driverudvidelse. VeyAmux-FSR4 har sin egen implementering af det API
+  (`vulkan/AmdExtD3D/AmdExtD3DShaderIntrinsicsMatrixOps.hlsl`) på VK_KHR_cooperative_matrix + VK_EXT_shader_float8 (E4M3)
+  + VK_EXT_cooperative_matrix_maintenance1 (akkumulator → A/B). DXC's optimering kender ikke FP8 endnu, så shaderne
+  bygges med stedfortrædere (int8-komponent, OpConvertFToS, OpFConvert mellem brug), som `tools/spv_float8.py` udskifter;
+  en nyere spirv-val validerer resultatet. Vulkan har ingen FP8-akkumulator: AMD's FP8-akkumulatorer holdes som FP8
+  B-matricer og bliver til F32 ved en eksakt gange med identitetsmatricen. F32 → FP8 (CopySat) går F32 → F16 → B → E4M3
+  efter klemning til ±448. Matrix-load/store går gennem StructuredBuffer-aliaser af vægt- og scratch-bufferne.
+  Afvikling som AMD's WMMA-sti: pre-pass i grupper på 64×2 pixels, 12 netværkspasses med AMD's størrelser og efter
+  pre-passet og hvert pass undtagen 6 et lille pass, der nulstiller udgangstensorens kant; alt i 32-brede bølger
+  (`requiredSubgroupSize` 32). Valgt, når GPU'en har det hele (inkl. 16×16×16 FP8×FP8→F32 og F16-formerne) og tilføjelsen
+  har FP8-shaderne; ellers, eller hvis FP8 ikke kan indlæses, INT8. Rapporten og benchmarken siger, hvilken der kører
+  (benchmarken har også et INT8-trin til sammenligning). `VEYAMUX_FSR4_FP8=0` slår FP8 fra.
+- **Test af FP8 uden RDNA 4:** `EMULATE=1 ./build.sh` i VeyAmux-FSR4 bygger FP8-shaderne på en emulering af
+  matrixenhederne i almindelig HLSL; med `VEYAMUX_FSR4_FP8=emulate` (og `VEYAMUX_FENCE_TIMEOUT_S=3000`, for den er langsom)
+  kører de på lavapipe og sammenlignes med INT8.
 
 ## Grafikkortets hardwaretællere (VeyAmux Debug)
 `src/GpuCounters.cpp`. VK_KHR_performance_query (RADV på RDNA 4 og andre nyere kort). Kun tællere med scope COMMAND,
@@ -670,8 +680,8 @@ holdes til VeyAmux lukker. Gennemsnit kommer i rapporten og som `counters`-kolon
 
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
-`--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
-`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt) · `VEYAMUX_VK_OPTIONAL=0` (ingen ekstra Vulkan-udvidelser) · `VEYAMUX_LOW_LATENCY_LAYER=0|1` · `VEYAMUX_FSR4_DIR=<mappe>`
+`--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) ·
+`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1|0` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt) · `VEYAMUX_VK_OPTIONAL=0` (ingen ekstra Vulkan-udvidelser) · `VEYAMUX_LOW_LATENCY_LAYER=0|1` · `VEYAMUX_FSR4_DIR=<mappe>` · `VEYAMUX_FSR4_FP8=0|emulate` · `VEYAMUX_FENCE_TIMEOUT_S=<s>`
 
 **VeyAmux Debug** bygges med `VEYAMUX_FLAVOR=debug scripts/build-appimage.sh` (CMake: `-DVEYAMUX_DEBUG_BUILD=ON`, RelWithDebInfo, `VEYAMUX_BUILD_NUMBER`). Den hedder `VeyAmux-Debug` over for Qt (egne indstillinger og datamappe), opdaterer sig fra pre-releasen `debug-build`, som CI flytter ved hvert push til main, og har Debug-fanen (src/PlayerBridgeDebug.cpp, src/Diagnostics.cpp). CI-jobbet `sanitizers` bygger testene med ASan + UBSan. · `--tab=N` (åbn menuen på fane N, med `--panel`) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 

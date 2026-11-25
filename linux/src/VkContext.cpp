@@ -209,7 +209,7 @@ bool VkContext::finishInit(std::string& error, bool shared) {
             if (hCoop && fCoop.cooperativeMatrix) {
                 fCoop.cooperativeMatrixRobustBufferAccess = VK_FALSE;
                 enable(&fCoop); devExts.push_back(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME); caps_.coopMatrix = true;
-                if (hCoopM1) { enable(&fCoopM1); devExts.push_back(VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME); caps_.coopMatrixM1 = true; }
+                if (hCoopM1) { enable(&fCoopM1); devExts.push_back(VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME); caps_.coopMatrixM1 = true; caps_.coopConversions = fCoopM1.cooperativeMatrixConversions; }
             }
             if (hF8 && fF8.shaderFloat8) {
                 if (!caps_.coopMatrix) fF8.shaderFloat8CooperativeMatrix = VK_FALSE;
@@ -253,8 +253,8 @@ bool VkContext::finishInit(std::string& error, bool shared) {
         device_ = VK_NULL_HANDLE;
     }
     if (device_ == VK_NULL_HANDLE) VK_TRY(vkCreateDevice(phys_, &dci, nullptr, &device_), "vkCreateDevice");
-    std::fprintf(stderr, "Vulkan extras: anti-lag %d, low-latency2 %d, cooperative matrix %d (maintenance1 %d, fp8 %d), int8 dot %d, performance query %d\n",
-          caps_.antiLag, caps_.lowLatency2, caps_.coopMatrix, caps_.coopMatrixM1, caps_.float8, caps_.intDot, caps_.perfQuery);
+    std::fprintf(stderr, "Vulkan extras: anti-lag %d, low-latency2 %d, cooperative matrix %d (maintenance1 %d, conversions %d, fp8 %d), int8 dot %d, performance query %d\n",
+          caps_.antiLag, caps_.lowLatency2, caps_.coopMatrix, caps_.coopMatrixM1, caps_.coopConversions, caps_.float8, caps_.intDot, caps_.perfQuery);
     vkGetDeviceQueue(device_, family_, 0, &queue_);
 
     // Luma plane: R16F when it is filterable + storage-capable, otherwise R32F.
@@ -662,7 +662,10 @@ bool VkContext::submitAndWait(std::string& error) {
     si.pCommandBuffers = &cmd_;
     vkResetFences(device_, 1, &fence_);
     VK_TRY(vkQueueSubmit(queue_, 1, &si, fence_), "vkQueueSubmit");
-    VK_TRY(vkWaitForFences(device_, 1, &fence_, VK_TRUE, 10'000'000'000ull), "vkWaitForFences");
+    // 10 s; VEYAMUX_FENCE_TIMEOUT_S for slow test runs (emulated FSR 4 FP8 on lavapipe)
+    static const uint64_t timeoutNs = std::getenv("VEYAMUX_FENCE_TIMEOUT_S") ? uint64_t(std::atoll(std::getenv("VEYAMUX_FENCE_TIMEOUT_S"))) * 1'000'000'000ull
+                                                                              : 10'000'000'000ull;
+    VK_TRY(vkWaitForFences(device_, 1, &fence_, VK_TRUE, timeoutNs), "vkWaitForFences");
     return true;
 }
 

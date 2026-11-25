@@ -179,14 +179,22 @@ QString PlayerBridge::perfReport() {
     } else {
         r << "Source: none";
     }
-    static const char* ups[] = {"SGSR", "FSR 3.1", "FSR 1", "NIS"};
     static const char* nr[] = {"off", "spatial", "temporal", "both"};
     r << QString("Picture: enhance %1, %2 %3x, noise reduction %4/%5, AA %6, anti-flicker %7, sharpen %8, texture %9 clarity %10 dehaze %11")
-             .arg(s_.enabled ? "on" : "off").arg(ups[std::clamp(int(s_.upscaler), 0, 3)]).arg(double(s_.scale))
+             .arg(s_.enabled ? "on" : "off").arg(veyamux::upscalerName(s_.upscaler)).arg(double(s_.scale))
              .arg(nr[std::clamp(int(s_.denoise), 0, 3)]).arg(s_.denoiseStrength)
              .arg(s_.fxaa ? (s_.smaa ? "SMAA" : "FXAA") + QString(" q%1").arg(s_.fxaaQuality) : QString("off"))
              .arg(s_.deflicker ? "on" : "off").arg(double(s_.sharpen), 0, 'f', 2)
              .arg(double(s_.texture), 0, 'f', 2).arg(double(s_.clarity), 0, 'f', 2).arg(double(s_.dehaze), 0, 'f', 2);
+    if (liveVk_) {
+        QString why;
+        const bool fp8 = liveVk_->fsr4Fp8Supported(&why);
+        r << QString("FSR 4: add-on %1; FP8 on the matrix units %2; running now: %3")
+                 .arg(fsr4Dir_.isEmpty() ? QString("not installed") : fsr4Dir_)
+                 .arg(fp8 ? QString("possible") : "not possible (" + why + ")")
+                 .arg(liveVk_->fsr4Path().isEmpty() ? QString("-") : liveVk_->fsr4Path() +
+                      (liveVk_->fsr4Fp8Why().isEmpty() ? QString() : " (" + liveVk_->fsr4Fp8Why() + ")"));
+    }
     QString fg = "off";
     if (s_.lsfgFg()) fg = QString("Lossless Scaling %1x (lsfg-vk %2, %3)").arg(s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : 2)
                               .arg(lsfg_.layerV2 ? "2" : lsfg_.layerManifest.isEmpty() ? "missing" : "1").arg(lsfgState());

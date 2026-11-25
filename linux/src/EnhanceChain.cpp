@@ -78,7 +78,7 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker", "LxFit", "LxHudUpdate", "LxHudCompose", "AaSmaaEdges", "AaSmaaWeightsMEDIUM", "AaSmaaWeightsHIGH", "AaSmaaWeightsULTRA", "AaSmaaBlend", "ColorDetailReduce", "ColorDetailBlur", "ColorDetailApply", "LxCompare"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxSgsr", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxHdrRgb", "LxNv12", "LxPqOut", "LxNis", "LxCrtGeom", "LxPixelGrid", "LxDeflicker", "LxFit", "LxHudUpdate", "LxHudCompose", "AaSmaaEdges", "AaSmaaWeightsMEDIUM", "AaSmaaWeightsHIGH", "AaSmaaWeightsULTRA", "AaSmaaBlend", "ColorDetailReduce", "ColorDetailBlur", "ColorDetailApply", "LxCompare"})
         if (!loadKernel(n, error)) return false;
     timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     if (ctx_.caps().perfQuery) counters_.init(ctx_.instance(), ctx_.physical(), ctx_.device(), ctx_.queueFamily());
@@ -253,7 +253,7 @@ void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in,
     ctx_.computeBarrier();
 }
 
-// [FXAA] -> [upscale: SGSR / FSR 1 / NIS / FSR 3.1] -> [sharpen/grade] -> sRGB encode into out8_.
+// [FXAA] -> [upscale: SGSR / NIS / FSR 3.1 / FSR 4] -> [sharpen/grade] -> sRGB encode into out8_.
 void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const int w = w_, h = h_, ow = ow_, oh = oh_;
     const bool fitting = pre8_.image && (dw_ != ow || dh_ != oh);
@@ -333,7 +333,9 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             std::string e;
             if (!fsr4Up_) fsr4Up_ = std::make_unique<Fsr4Upscaler>(ctx_);
             { std::lock_guard l(fsr4M_); fsr4Up_->setDir(fsr4Dir_); }
+            fsr4Up_->setFp8Allowed(!s.fsr4Int8);
             done = fsr4Up_->record(ctx_.active(), *cur, *mv, up_, !upHistory_, e);
+            { std::lock_guard l(fsr4M_); fsr4Path_ = done ? fsr4Up_->pathName() : ""; fsr4Fp8Why_ = fsr4Up_->fp8Why(); }
             upHistory_ = done;
             if (!done) { upError_ = e; upFailedKey_ = key; }
             else upError_.clear();
@@ -341,23 +343,13 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upHistory_ = false;
             upError_.clear();
             upFailedKey_ = 0;
+            std::lock_guard l(fsr4M_);
+            fsr4Path_.clear();
         }
         // FSR 3.1 native AA that could not start: the picture stays as it is
         const bool skip = !done && ow == w && oh == h;
         if (skip) done = true;
         if (!done && s.upscaler == Upscaler::Nis) done = recordNis(*cur, w, h, ow, oh);
-        if (!done && s.upscaler == Upscaler::AmdFsr1) {
-            // AMD FSR 1: EASU into fin_ (free until the finishing pass), RCAS back into up_
-            struct { uint32_t iw, ih, ow, oh, mode; float sharp; uint32_t p0, p1; } fp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh), 0, 0, 0, 0};
-            static const bool noRcas = std::getenv("VEYAMUX_FSR1_NORCAS") != nullptr;   // test hook
-            run("LxFsr1", {cur}, {noRcas ? &up_ : &fin_}, &fp, sizeof fp, ow, oh, 16);
-            if (noRcas) { cur = &up_; }
-            // RCAS strength in stops below its maximum (AMD suggests 0.2 - 0.5); VEYAMUX_FSR1_RCAS overrides (tests)
-            static const float rcasStops = std::getenv("VEYAMUX_FSR1_RCAS") ? float(std::atof(std::getenv("VEYAMUX_FSR1_RCAS"))) : 0.5f;
-            fp.mode = 1; fp.sharp = rcasStops;
-            if (!noRcas) run("LxFsr1", {&fin_}, {&up_}, &fp, sizeof fp, ow, oh, 16);
-            done = true;
-        }
         if (!done) {   // SGSR (also when the chosen upscaler could not run)
             SgsrParams sp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
             run("LxSgsr", {cur}, {&up_}, &sp, sizeof sp, ow, oh, 16);

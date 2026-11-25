@@ -8,7 +8,7 @@
   <description>
     <p>VeyAmux shows the picture from a capture card or plays a video file and enhances it on the GPU with very low latency: the capture frame is converted, enhanced and displayed entirely in Vulkan.</p>
     <ul>
-      <li>Upscaling with Snapdragon GSR, AMD FSR 1, NVIDIA NIS or AMD FSR 3.1</li>
+      <li>Upscaling with NVIDIA NIS, Snapdragon GSR, AMD FSR 3.1 or AMD FSR 4</li>
       <li>Retro TV (CRT-Geom) and pixel-perfect scaling for retro consoles</li>
       <li>Noise reduction, sharpening, FXAA and colour controls</li>
       <li>HDR capture, tone-mapped to SDR or shown on an HDR display (experimental), and VRR pacing</li>

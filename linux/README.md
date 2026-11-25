@@ -79,7 +79,7 @@ VeyAmux shows the picture from a **capture card** (a PlayStation, Xbox, Switch o
 **PS5 or PS4 over your home network** (PlayStation Remote Play, no capture card needed), from a **window or a whole
 screen** on your desktop, or from a **video file**, and makes it look better on your graphics card. It can:
 
-- **upscale and sharpen** the picture with AMD FSR 1, NVIDIA Image Scaling (NIS), AMD FSR 3.1.6 or Snapdragon Game Super Resolution (SGSR);
+- **upscale and sharpen** the picture with NVIDIA Image Scaling (NIS), Snapdragon Game Super Resolution (SGSR), AMD FSR 3.1.6 or AMD FSR 4 (AI upscaling, a free add-on);
 - **remove noise**, grain and compression blocks, **calm flickering** detail, and smooth edges with FXAA, SMAA or FSR 3.1.6 TAA;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1.6 frame generation (switch between them in the menu);
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
@@ -115,7 +115,7 @@ needed for its own frame generation**, and everything else works without it:
 |---|:---:|:---:|
 | Capture cards, video files, windows and screens | ✅ | ✅ |
 | PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
-| Upscaling: SGSR, FSR 1, NIS, FSR 3.1.6 | ✅ | ✅ |
+| Upscaling: NIS, SGSR, FSR 3.1.6, FSR 4 | ✅ | ✅ |
 | Noise reduction, anti-flicker, sharpness, anti-aliasing (FXAA, FSR 3.1.6 TAA), colour | ✅ | ✅ |
 | HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
 | Retro TV (CRT-Geom), pixel-perfect scaling | ✅ | ✅ |
@@ -189,13 +189,15 @@ needed for its own frame generation**, and everything else works without it:
 
 ### Picture
 - **Upscaling** 1.5× / 2× / 3×:
+  - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
   - **SGSR** (default): Qualcomm's Snapdragon Game Super Resolution, edge-adaptive upscaling frame by frame, no
     added latency.
-  - **AMD FSR 1**: edge-aware upscaling with sharpening, frame by frame, no added latency.
-  - **NVIDIA Image Scaling (NIS)**: directional scaling with adaptive sharpening, on any GPU.
   - **AMD FSR 3.1.6**: temporal upscaling, fed by VeyAmux's own motion estimation. At **Native** it works as
     temporal anti-aliasing (TAA, AMD's "Native AA"): it calms flickering and crawling edges without enlarging the
     picture. Games that already use TAA mostly get softer.
+  - **AMD FSR 4**: AMD's AI upscaler (FSR 4.0.2, MIT), also temporal and also usable at **Native** as anti-aliasing.
+    The model is a separate add-on that VeyAmux downloads and checks the first time FSR 4 is picked. It needs a GPU
+    with Vulkan 1.3 and 8-bit dot products (AMD RDNA 2 or newer, NVIDIA Turing or newer, Intel Arc).
 - **Noise reduction**: *Spatial*, *Temporal* (motion-compensated) or *Both*, in three strengths. It removes grain,
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
 - **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by
@@ -306,7 +308,7 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
 
 ## Latency
 
-Measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (*Both*) and FSR 1, VeyAmux needs:
+Measured on an AMD RX 9070 XT with a 3840×2160 NV12 capture, noise reduction (*Both*) and 2× upscaling, VeyAmux needs:
 - **under 1 ms of CPU work** per frame,
 - **about 7 ms of GPU work** per frame.
 
@@ -457,11 +459,11 @@ Veyra's original HLSL shaders are reused, compiled to SPIR-V. Built for Linux:
 - **Capture:** the low-latency capture path (V4L2 straight into the UI's Vulkan frame, with format conversion on the
   GPU), the content measurement (real frame rate and rendering resolution), and the window and screen source (portal
   and PipeWire).
-- **Processing:** FSR 1, NIS and FSR 3.1.6 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1.6 frame
+- **Processing:** NIS, FSR 3.1.6 and FSR 4 upscaling with VeyAmux's own motion estimation, noise reduction, FSR 3.1.6 frame
   generation, HDR output and Retro TV.
 - **Output:** recording, replay and streaming, and the Lossless Scaling integration.
 
-Not possible on Linux: FSR 4 (closed Windows DLLs only), DLSS and other NVIDIA-only features, and Veyra's "AMD NR" (it
+Not possible on Linux: DLSS and other NVIDIA-only features, and Veyra's "AMD NR" (it
 runs NVIDIA's DLSS network through Windows HIP).
 
 ## Building from source
