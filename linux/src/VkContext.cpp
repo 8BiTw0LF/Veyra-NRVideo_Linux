@@ -2,6 +2,15 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
+
+namespace {
+#ifdef VEYAMUX_DEBUG_BUILD
+constexpr bool kDebugBuildCtx = true;
+#else
+constexpr bool kDebugBuildCtx = false;
+#endif
+}
 
 namespace veyamux {
 namespace {
@@ -152,12 +161,65 @@ bool VkContext::finishInit(std::string& error, bool shared) {
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &qci;
     std::vector<const char*> devExts;
+    // Optional extensions with a feature struct each: queried, and chained (with what the GPU supports) only when
+    // the extension is there. VEYAMUX_VK_OPTIONAL=0 leaves them all out (to rule them out when something breaks).
+    VkPhysicalDeviceAntiLagFeaturesAMD fAntiLag{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD};
+    VkPhysicalDevicePresentIdFeaturesKHR fPresentId{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR};
+    VkPhysicalDeviceCooperativeMatrixFeaturesKHR fCoop{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR};
+    VkPhysicalDeviceCooperativeMatrixMaintenance1FeaturesEXT fCoopM1{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_MAINTENANCE_1_FEATURES_EXT};
+    VkPhysicalDeviceShaderFloat8FeaturesEXT fF8{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT8_FEATURES_EXT};
+    VkPhysicalDevicePerformanceQueryFeaturesKHR fPerf{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR};
+    caps_ = Caps{};
+    caps_.vendor = dp.vendorID;
+    caps_.intDot = v13 && f13.shaderIntegerDotProduct;
     {
         uint32_t ne = 0;
         vkEnumerateDeviceExtensionProperties(phys_, nullptr, &ne, nullptr);
         std::vector<VkExtensionProperties> av(ne);
         vkEnumerateDeviceExtensionProperties(phys_, nullptr, &ne, av.data());
         auto has = [&](const char* n) { for (auto& e : av) if (std::strcmp(e.extensionName, n) == 0) return true; return false; };
+        if (shared && !(std::getenv("VEYAMUX_VK_OPTIONAL") && std::strcmp(std::getenv("VEYAMUX_VK_OPTIONAL"), "0") == 0)) {
+            // query the features of the optional extensions in one go
+            VkPhysicalDeviceFeatures2 q{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+            void** tail = &q.pNext;
+            auto link = [&](void* s) { *tail = s; tail = reinterpret_cast<void**>(&static_cast<VkBaseOutStructure*>(s)->pNext); };
+            const bool hAnti = has(VK_AMD_ANTI_LAG_EXTENSION_NAME);
+            const bool hLL = has(VK_NV_LOW_LATENCY_2_EXTENSION_NAME) && has(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+            const bool hCoop = has(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME);
+            const bool hCoopM1 = hCoop && has(VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME);
+            const bool hF8 = has(VK_EXT_SHADER_FLOAT8_EXTENSION_NAME);
+            const bool hPerf = kDebugBuildCtx && has(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME);
+            if (hAnti) link(&fAntiLag);
+            if (hLL) link(&fPresentId);
+            if (hCoop) link(&fCoop);
+            if (hCoopM1) link(&fCoopM1);
+            if (hF8) link(&fF8);
+            if (hPerf) link(&fPerf);
+            if (q.pNext) vkGetPhysicalDeviceFeatures2(phys_, &q);
+            // chain the supported ones onto the device's feature chain (behind Vulkan 1.1-1.3)
+            void** dtail = v13 ? &f13.pNext : v12 ? &f12.pNext : &f11.pNext;
+            auto enable = [&](void* s) { static_cast<VkBaseOutStructure*>(s)->pNext = nullptr; *dtail = s; dtail = reinterpret_cast<void**>(&static_cast<VkBaseOutStructure*>(s)->pNext); };
+            if (hAnti && fAntiLag.antiLag) { enable(&fAntiLag); devExts.push_back(VK_AMD_ANTI_LAG_EXTENSION_NAME); caps_.antiLag = true; }
+            if (hLL && fPresentId.presentId && v12 && f12.timelineSemaphore) {
+                enable(&fPresentId);
+                devExts.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+                devExts.push_back(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);
+                caps_.lowLatency2 = true;
+            }
+            if (hCoop && fCoop.cooperativeMatrix) {
+                fCoop.cooperativeMatrixRobustBufferAccess = VK_FALSE;
+                enable(&fCoop); devExts.push_back(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME); caps_.coopMatrix = true;
+                if (hCoopM1) { enable(&fCoopM1); devExts.push_back(VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME); caps_.coopMatrixM1 = true; }
+            }
+            if (hF8 && fF8.shaderFloat8) {
+                if (!caps_.coopMatrix) fF8.shaderFloat8CooperativeMatrix = VK_FALSE;
+                enable(&fF8); devExts.push_back(VK_EXT_SHADER_FLOAT8_EXTENSION_NAME); caps_.float8 = fF8.shaderFloat8CooperativeMatrix;
+            }
+            if (hPerf && fPerf.performanceCounterQueryPools) {
+                fPerf.performanceCounterMultipleQueryPools = VK_FALSE;
+                enable(&fPerf); devExts.push_back(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME); caps_.perfQuery = true;
+            }
+        }
         if (shared) {
             if (!(qf[family_].queueFlags & VK_QUEUE_GRAPHICS_BIT)) { error = "No graphics+compute queue family"; return false; }
             devExts.push_back("VK_KHR_swapchain");
@@ -170,7 +232,29 @@ bool VkContext::finishInit(std::string& error, bool shared) {
     dci.enabledExtensionCount = uint32_t(devExts.size());
     dci.ppEnabledExtensionNames = devExts.data();
     apiVersion_ = dp.apiVersion;
-    VK_TRY(vkCreateDevice(phys_, &dci, nullptr, &device_), "vkCreateDevice");
+    if (vkCreateDevice(phys_, &dci, nullptr, &device_) != VK_SUCCESS && caps_.vendor && devExts.size() > 1) {
+        // an optional extension the driver lists but refuses: once more with the basics only
+        std::fprintf(stderr, "vkCreateDevice failed with the optional extensions; retrying without them\n");
+        devExts.erase(std::remove_if(devExts.begin(), devExts.end(), [](const char* e) {
+            for (const char* o : {VK_AMD_ANTI_LAG_EXTENSION_NAME, VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_NV_LOW_LATENCY_2_EXTENSION_NAME,
+                                  VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME,
+                                  VK_EXT_SHADER_FLOAT8_EXTENSION_NAME, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME})
+                if (std::strcmp(e, o) == 0) return true;
+            return false;
+        }), devExts.end());
+        (v13 ? f13.pNext : v12 ? f12.pNext : f11.pNext) = nullptr;
+        dci.enabledExtensionCount = uint32_t(devExts.size());
+        dci.ppEnabledExtensionNames = devExts.data();
+        const uint32_t vendor = caps_.vendor;
+        const bool intDot = caps_.intDot;
+        caps_ = Caps{};
+        caps_.vendor = vendor;
+        caps_.intDot = intDot;
+        device_ = VK_NULL_HANDLE;
+    }
+    if (device_ == VK_NULL_HANDLE) VK_TRY(vkCreateDevice(phys_, &dci, nullptr, &device_), "vkCreateDevice");
+    std::fprintf(stderr, "Vulkan extras: anti-lag %d, low-latency2 %d, cooperative matrix %d (maintenance1 %d, fp8 %d), int8 dot %d, performance query %d\n",
+          caps_.antiLag, caps_.lowLatency2, caps_.coopMatrix, caps_.coopMatrixM1, caps_.float8, caps_.intDot, caps_.perfQuery);
     vkGetDeviceQueue(device_, family_, 0, &queue_);
 
     // Luma plane: R16F when it is filterable + storage-capable, otherwise R32F.
@@ -275,6 +359,30 @@ BufferRes VkContext::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, b
     vkBindBufferMemory(device_, r.buffer, r.memory, 0);
     vkMapMemory(device_, r.memory, 0, VK_WHOLE_SIZE, 0, &r.mapped);
     return r;
+}
+
+bool VkContext::createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem) {
+    buf = VK_NULL_HANDLE;
+    mem = VK_NULL_HANDLE;
+    VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bi.size = size;
+    bi.usage = usage;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(device_, &bi, nullptr, &buf) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr;
+    vkGetBufferMemoryRequirements(device_, buf, &mr);
+    uint32_t mt = findMemoryType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mt == UINT32_MAX) mt = findMemoryType(mr.memoryTypeBits, 0);
+    VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    ai.allocationSize = mr.size;
+    ai.memoryTypeIndex = mt;
+    if (mt == UINT32_MAX || vkAllocateMemory(device_, &ai, nullptr, &mem) != VK_SUCCESS) {
+        vkDestroyBuffer(device_, buf, nullptr);
+        buf = VK_NULL_HANDLE;
+        return false;
+    }
+    vkBindBufferMemory(device_, buf, mem, 0);
+    return true;
 }
 
 void VkContext::destroy(BufferRes& b) {

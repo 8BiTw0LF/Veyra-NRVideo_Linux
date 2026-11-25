@@ -1,0 +1,11 @@
+{
+    "file_format_version": "1.2.0",
+    "layer": {
+        "name": "VK_LAYER_VEYAMUX_low_latency",
+        "type": "GLOBAL",
+        "library_path": "./libVkLayer_veyamux_low_latency.so",
+        "api_version": "1.3.0",
+        "implementation_version": "1",
+        "description": "VeyAmux: swapchain latency mode and present IDs for NVIDIA Reflex (VeyAmux only)"
+    }
+}

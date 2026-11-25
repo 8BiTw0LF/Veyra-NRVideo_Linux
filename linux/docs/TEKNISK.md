@@ -622,10 +622,56 @@ til `$APPIMAGE.download`, tjekker GitHubs SHA-256 for filen (ellers SHA-1 fra `.
 den over `$APPIMAGE`. Den kørende kopi fortsætter til genstart. Automatisk søgning højst hver 12. time
 (`update/lastCheck`); `veyamux-update-test [install]` tester det.
 
+## Lav forsinkelse: AMD Anti-Lag og NVIDIA Reflex
+`src/LowLatency.cpp`. VeyAmux opretter selv Vulkan-enheden (Qt får den via `QQuickGraphicsDevice::fromDeviceObjects`) og
+slår ekstra udvidelser til, når grafikkortet har dem (`VkContext::Caps`, i loggen som "Vulkan extras"): VK_AMD_anti_lag,
+VK_NV_low_latency2 + VK_KHR_present_id, VK_KHR_cooperative_matrix (+ VK_EXT_cooperative_matrix_maintenance1,
+VK_EXT_shader_float8) og i VeyAmux Debug VK_KHR_performance_query. Afviser driveren enheden, prøves igen uden dem.
+`VEYAMUX_VK_OPTIONAL=0` udelader dem.
+- **AMD:** `vkAntiLagUpdateAMD` med stage INPUT ved `beforeFrameBegin` (før Qt henter swapchain-billedet; det er her det
+  nyeste capture-billede tages) og PRESENT ved `afterRendering` (lige før Qt præsenterer); samme frameIndex.
+- **NVIDIA:** Qt opretter swapchainen, så et lille Vulkan-lag, der kun indlæses i VeyAmux
+  (`src/vklayer`, `VK_LAYER_VEYAMUX_low_latency`, i AppImage'en under `share/veyamux/vklayer`), tilføjer
+  `VkSwapchainLatencyCreateInfoNV` ved `vkCreateSwapchainKHR` og en `VkPresentIdKHR` ved hver present. VeyAmux henter
+  swapchainen og næste present-ID fra laget (`dlopen(RTLD_NOLOAD)` + `veyamux_ll_swapchain` / `veyamux_ll_next_present_id`),
+  sætter low-latency-tilstand, `vkLatencySleepNV` (venter på en timeline-semafor, højst 100 ms) og markørerne
+  SIMULATION/INPUT/RENDERSUBMIT/PRESENT. Laget indlæses kun med et NVIDIA-kort (sysfs vendor 0x10de) og ikke med Lossless
+  Scaling. `VEYAMUX_LOW_LATENCY_LAYER=0` udelader det, `=1` indlæser det på alle grafikkort (test af gennemstilling).
+- Indstillingen `disp/lowLatency` (Skærm-fanen), fra som standard indtil den er afprøvet. Benchmarken har et trin uden og
+  med. Forsinkelseskolonnen slutter ved det færdige billede; tiden i køen til skærmen er ikke med.
+
+## FSR 4 (AI-opskalering, tilføjelse)
+AMD's FSR 4.0.2 (FidelityFX SDK 2.0.0, MIT) er ikke en del af VeyAmux. INT8-modellen, dens vægte og pre-/post-passene
+bygges til SPIR-V i repoet **VeyAmux-FSR4** (`build.sh`, DXC 1.9.2609, reproducerbart arkiv); ændringerne for Vulkan står i
+dets NOTICE.md (eksplicit register for pre-passets vægte, `QuadReadAcross*` som subgroup-shuffle, `_Static_assert` fjernet,
+32-bit teksturtyper, RGB-storage-skrivninger som float4, indgangspunkt `main`).
+- **Hentning** (`src/Fsr4Addon.cpp`): kun når brugeren trykker *Hent FSR 4*. Arkivet fra GitHub-udgivelsen `v1` tjekkes
+  mod en fast SHA-256 i koden, kun filer under `fsr4/` accepteres, og hver fil tjekkes mod manifestet, før det lægges i
+  `~/.local/share/VeyAmux/fsr4/1`. `VEYAMUX_FSR4_DIR=<mappe>` bruger en anden mappe (test, egne byg).
+- **Kørsel** (`src/Fsr4Upscaler.cpp`): den del af AMD's provider VeyAmux behøver, skrevet til Vulkan. Pr. billede:
+  pre-pass (genprojicerer historikken, laver netværkets input i scratch-bufferen), 12 netværkspasses (pakkede 8-bit
+  prikprodukter, `shaderIntegerDotProduct`) og post-pass (billede, historik og de "rekurrente" træk til næste billede).
+  Lineær farve, bevægelse fra kædens fælles bevægelsesfelt i inputpixels (`mv_scale` = 1/inputstørrelse), ingen jitter,
+  ingen dybde (en nul-tekstur), eksponering 1. AMD's preset efter skalafaktor (native, quality ≥ 1,5, balanced ≥ 1,69,
+  performance ≥ 1,99, ultra performance ≥ 2,99); netværket for 1080p eller 2160p efter udgangsstørrelsen; udgangen skal
+  være et multiplum af 8 og højst 3840×2160 (ellers SGSR med en besked). SPIR-V'ens bindinger tjekkes mod layoutet før brug.
+- **Test:** `veyamux-upscale-test <shaders> in.rgba W H N out.rgba fsr4 2` med `VEYAMUX_FSR4_DIR`. På lavapipe: korrekt
+  billede; med bevægelse vinder den over billederne (31,2 dB mod SGSR's 30,4 på en testsekvens).
+- **Cooperative matrix:** enheden slår VK_KHR_cooperative_matrix, VK_EXT_cooperative_matrix_maintenance1 og
+  VK_EXT_shader_float8 til, hvor de findes, men FSR 4 bruger dem ikke endnu. AMD's hurtige FP8-model er skrevet med
+  AMD-specifikke DirectX-matrixinstruktioner (`AmdWaveMatrix*`), og DXC kan ikke udtrykke FP8- eller int8-matricer i
+  HLSL til Vulkan. Den skal omskrives (GLSL med GL_KHR_cooperative_matrix + float-e4m3), før RDNA 4 kan køre FP8-vejen.
+
+## Grafikkortets hardwaretællere (VeyAmux Debug)
+`src/GpuCounters.cpp`. VK_KHR_performance_query (RADV på RDNA 4 og andre nyere kort). Kun tællere med scope COMMAND,
+der kan måles i ét pass (Qt sender kommandobufferen, så multi-pass-submit-info kan ikke tilføjes), de mest sigende
+først efter navn (busy, hukommelse, cache …), højst 12. Profiling-låsen tages, når tællerne slås til i Debug-fanen, og
+holdes til VeyAmux lukker. Gennemsnit kommer i rapporten og som `counters`-kolonne i benchmark-CSV'en.
+
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
 `--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
-`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt)
+`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt) · `VEYAMUX_VK_OPTIONAL=0` (ingen ekstra Vulkan-udvidelser) · `VEYAMUX_LOW_LATENCY_LAYER=0|1` · `VEYAMUX_FSR4_DIR=<mappe>`
 
 **VeyAmux Debug** bygges med `VEYAMUX_FLAVOR=debug scripts/build-appimage.sh` (CMake: `-DVEYAMUX_DEBUG_BUILD=ON`, RelWithDebInfo, `VEYAMUX_BUILD_NUMBER`). Den hedder `VeyAmux-Debug` over for Qt (egne indstillinger og datamappe), opdaterer sig fra pre-releasen `debug-build`, som CI flytter ved hvert push til main, og har Debug-fanen (src/PlayerBridgeDebug.cpp, src/Diagnostics.cpp). CI-jobbet `sanitizers` bygger testene med ASan + UBSan. · `--tab=N` (åbn menuen på fane N, med `--panel`) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 

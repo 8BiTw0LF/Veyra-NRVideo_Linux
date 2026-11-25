@@ -1,4 +1,5 @@
 #include "LiveVulkan.h"
+#include "LowLatency.h"
 #include "LosslessScaling.h"
 #include "PlayerBridge.h"
 #include "Diagnostics.h"
@@ -43,6 +44,25 @@ static QString findShaderDir() {
 }
 
 // Danish when the language OR the region is Danish (e.g. LANG=en_DK or a Danish LC_TIME also count); English otherwise.
+
+// The low-latency layer next to VeyAmux (AppImage: share/veyamux/vklayer; build tree: vklayer)
+static QString findLayerDir() {
+    const QString app = QCoreApplication::applicationDirPath();
+    for (const QString& c : {app + "/../share/veyamux/vklayer", app + "/vklayer"})
+        if (QFileInfo::exists(c + "/VkLayer_veyamux_low_latency.json")) return QDir::cleanPath(c);
+    return {};
+}
+
+// Any NVIDIA GPU (PCI vendor 0x10de) in the PC, from sysfs: decided before the Vulkan instance exists
+static bool hasNvidiaGpu() {
+    const QDir d("/sys/class/drm");
+    for (const QString& e : d.entryList({"card*"}, QDir::Dirs | QDir::System)) {
+        if (e.contains('-')) continue;   // card0-DP-1 and the like are connectors
+        QFile f(d.filePath(e + "/device/vendor"));
+        if (f.open(QIODevice::ReadOnly) && f.readAll().trimmed() == "0x10de") return true;
+    }
+    return false;
+}
 
 static QString relaunchTarget() {
     // Inside an AppImage the binary lives in a temporary mount that vanishes on exit; relaunch the AppImage itself.
@@ -234,6 +254,7 @@ int main(int argc, char** argv) {
 
     // ---- graphics backend ----
     std::unique_ptr<QVulkanInstance> vkInst;
+    QString lowLatencyLayer;   // the low-latency layer's library when it is enabled (NVIDIA Reflex)
     std::unique_ptr<veyamux::VkContext> vkCtx;
     const UiChoice choice = chooseUi(args, probing);
     if (choice == UiChoice::RelaunchXcb) {
@@ -282,7 +303,26 @@ int main(int argc, char** argv) {
     if (qEnvironmentVariable("VEYAMUX_HDR_MODE") == "hdr10") hdrMode = 0;
     if (vulkanUi) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+        // NVIDIA Reflex: VeyAmux's own small layer adds the swapchain latency mode and present IDs (Qt creates the
+        // swapchain). Only on a PC with an NVIDIA GPU, not with Lossless Scaling (lsfg-vk presents its own frames).
+        // VEYAMUX_LOW_LATENCY_LAYER=0 leaves it out, =1 loads it on any GPU (a test of the pass-through).
+        const QString llEnv = qEnvironmentVariable("VEYAMUX_LOW_LATENCY_LAYER");
+        if (!lsfgEnabled && llEnv != "0" && (hasNvidiaGpu() || llEnv == "1")) {
+            const QString dir = findLayerDir();
+            if (!dir.isEmpty()) {
+                const QByteArray old = qgetenv("VK_ADD_LAYER_PATH");
+                qputenv("VK_ADD_LAYER_PATH", old.isEmpty() ? dir.toLocal8Bit() : dir.toLocal8Bit() + ':' + old);
+                lowLatencyLayer = dir + "/libVkLayer_veyamux_low_latency.so";
+            }
+        }
         vkInst = std::make_unique<QVulkanInstance>();
+        // (the layer path must be set before Qt first asks the loader, which it caches)
+        if (!lowLatencyLayer.isEmpty()) {
+            if (vkInst->supportedLayers().contains(QByteArrayLiteral("VK_LAYER_VEYAMUX_low_latency")))
+                vkInst->setLayers({QByteArrayLiteral("VK_LAYER_VEYAMUX_low_latency")});
+            else
+                lowLatencyLayer.clear();
+        }
         vkInst->setApiVersion(QVersionNumber(1, 3));
         QByteArrayList exts;
         if (vkInst->supportedExtensions().contains(QByteArrayLiteral("VK_EXT_debug_utils")))
@@ -362,6 +402,7 @@ int main(int argc, char** argv) {
         std::string err;
         if (live->init(err)) { player.setLiveVulkan(live.get()); player.setGpuDevice(QString::fromStdString(vkCtx->deviceName())); }
         else { qWarning("Zero-copy live path disabled: %s", err.c_str()); live.reset(); }
+        player.setLowLatency(new LowLatency(win, vkCtx.get(), lowLatencyLayer, &player));
     }
     player.setWindow(win);
     player.setHdrOutputState(hdrOutSetting, false);   // until the swapchain test below says otherwise

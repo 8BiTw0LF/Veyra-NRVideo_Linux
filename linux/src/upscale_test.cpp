@@ -19,7 +19,8 @@ int main(int argc, char** argv) {
     if (!chain.init(err)) { std::fprintf(stderr, "init: %s\n", err.c_str()); return 1; }
     EnhanceSettings s;
     s.scale = argc > 8 ? float(atof(argv[8])) : 2.0f;
-    s.upscaler = fsr ? Upscaler::AmdFsr3 : (std::strcmp(argv[7], "fsr1") == 0 ? Upscaler::AmdFsr1 : std::strcmp(argv[7], "nis") == 0 ? Upscaler::Nis : Upscaler::Sgsr);
+    if (std::strcmp(argv[7], "fsr4") == 0) { s.upscaler = Upscaler::AmdFsr4; chain.setFsr4Dir(std::getenv("VEYAMUX_FSR4_DIR") ? std::getenv("VEYAMUX_FSR4_DIR") : ""); }
+    else s.upscaler = fsr ? Upscaler::AmdFsr3 : (std::strcmp(argv[7], "fsr1") == 0 ? Upscaler::AmdFsr1 : std::strcmp(argv[7], "nis") == 0 ? Upscaler::Nis : Upscaler::Sgsr);
     // "crt" / "crt480" / "crt0": Retro TV (CRT-Geom) with 240 / 480 / source lines
     if (std::strncmp(argv[7], "crt", 3) == 0) { s.retroTv = true; s.retroLines = argv[7][3] ? std::atoi(argv[7] + 3) : 240; }
     // "pp" = pixel-perfect at the signal's pixels, "pp320x240" = back to that measured grid

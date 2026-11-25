@@ -117,6 +117,25 @@ QString PlayerBridge::buildInfo() const {
     return QStringLiteral("VeyAmux%1 %2 · %3").arg(diag::kDebugBuild ? " Debug" : "", appVersion(), diag::gitSha());
 }
 
+void PlayerBridge::setGpuCounters(bool on) {
+    if (!liveVk_) return;
+    gpuCounters_ = on && liveVk_->setCountersEnabled(on);
+    if (!on) liveVk_->setCountersEnabled(false);
+    liveVk_->resetGpuSums();
+    emit benchChanged();
+}
+
+QString PlayerBridge::gpuCounterText() const {
+    if (!liveVk_ || !gpuCounters_) return {};
+    const auto v = liveVk_->counterValues();
+    if (v.empty() || v.front().frames == 0) return L("No frames counted yet.", "Ingen billeder talt endnu.");
+    QStringList r;
+    r << QStringLiteral("%1 frames:").arg(v.front().frames);
+    for (const auto& c : v)
+        r << QStringLiteral("%1: %2 %3").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5).arg(QString::fromStdString(c.unit));
+    return r.join('\n');
+}
+
 QVariantList PlayerBridge::debugSwitches() const {
     QVariantList out;
     QSettings q;
@@ -218,6 +237,7 @@ QString PlayerBridge::saveReport(const QString& note) {
     }
 
     o << "\n## Frame timing\n\n" << paceSummary() << "\n";
+    if (gpuCounters_) o << "\n## GPU hardware counters\n\n```\n" << gpuCounterText() << "\n```\n";
 
     if (!bench_.rows.empty()) o << "\n## Benchmark\n\n" << benchTable() << "\n";
 
@@ -386,6 +406,7 @@ void PlayerBridge::startBenchmark() {
     add(M, "Anti-flicker", [](EnhanceSettings& e) { e.deflicker = true; });
     add(M, "Anti-flicker + temporal medium", [](EnhanceSettings& e) { e.deflicker = true; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     add(M, "FSR 3.1 native (TAA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; });
+    if (fsr4State() == 3) add(M, "FSR 4 native (AA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr4; });
     add(M, "FSR 3.1 native + temporal medium", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     if (upNative || lowRes) {
         const bool low = !upNative;
@@ -394,6 +415,10 @@ void PlayerBridge::startBenchmark() {
         for (const auto& [up, label] : ups)
             add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", label), [up = up](EnhanceSettings& e) { e.scale = 2; e.upscaler = up; }, low);
         add(U, QString("%1Upscale 1.5× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr3; }, low);
+        if (fsr4State() == 3) {
+            add(U, QString("%1Upscale 2× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 2; e.upscaler = Upscaler::AmdFsr4; }, low);
+            add(U, QString("%1Upscale 1.5× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr4; }, low);
+        }
         add(U, QString("%1Heavy: both medium + anti-flicker + SMAA + 2× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) {
             e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true;
             e.upscaler = Upscaler::AmdFsr3; e.scale = 2;
@@ -414,6 +439,18 @@ void PlayerBridge::startBenchmark() {
     } else {
         bench_.notes << L("Frame pacing left out: it only works with frame generation on.",
                           "Billedrytme udeladt: den virker kun med frame generation slået til.");
+    }
+    if (lowLatency_ && lowLatency_->available()) {
+        const QString m = lowLatency_->method();
+        add(T, m + " off", nullptr);
+        bench_.steps.back().lowLatency = 0;
+        add(T, m + " on", nullptr);
+        bench_.steps.back().lowLatency = 1;
+        bench_.notes << L("The delay column ends when VeyAmux's picture is finished; the time it then waits for the screen (what Anti-Lag and Reflex shorten) is not in it.",
+                          "Forsinkelseskolonnen slutter, når VeyAmux' billede er færdigt; tiden det derefter venter på skærmen (det Anti-Lag og Reflex forkorter) er ikke med.");
+    } else {
+        bench_.notes << L("Low latency left out: this GPU/driver has neither AMD Anti-Lag nor NVIDIA Reflex.",
+                          "Lav forsinkelse udeladt: grafikkortet/driveren har hverken AMD Anti-Lag eller NVIDIA Reflex.");
     }
     add(H, "Heavy: both medium + anti-flicker + SMAA + FSR 3.1 native", [](EnhanceSettings& e) {
         e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true; e.upscaler = Upscaler::AmdFsr3;
@@ -438,6 +475,7 @@ void PlayerBridge::benchApplyStep() {
     st.set(e);
     s_ = e;
     applyEnhance();
+    if (lowLatency_) lowLatency_->setEnabled(st.lowLatency >= 0 ? st.lowLatency == 1 : QSettings().value("disp/lowLatency", false).toBool());
     bench_.phase = 1;
     bench_.t0 = nowMs();
     bench_.cur = BenchRow{};
@@ -521,6 +559,13 @@ void PlayerBridge::benchTick() {
     if (r.samples) r.delay /= r.samples;
     const auto g = liveVk_->gpuSums();
     r.gpuFrames = g.frames;
+    if (gpuCounters_) {
+        QStringList cs;
+        for (const auto& c : liveVk_->counterValues())
+            cs << QStringLiteral("%1=%2%3").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5)
+                      .arg(c.unit.empty() ? QString() : " " + QString::fromStdString(c.unit));
+        r.counters = cs.join("; ");
+    }
     r.gpu = g.frames ? g.total / g.frames : -1;
     for (size_t k = 0; k < r.stages.size() && k < g.stage.size(); ++k) r.stages[k] = g.ran[k] ? g.stage[k] / g.ran[k] : -1;
     std::vector<double> shown = liveVk_->shownTimes(), iv;
@@ -594,13 +639,13 @@ void PlayerBridge::finishBenchmark() {
           << (liveVk_ && liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
         for (const QString& n : bench_.notes) o << "# " << n << "\n";
         o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,gpu_framegen,"
-             "gpu_frames,cpu_pct,rss_mb,threads,flag\n";
+             "gpu_frames,cpu_pct,rss_mb,threads,flag,counters\n";
         for (const auto& b : bench_.rows) {
             o << '"' << b.section << "\",\"" << b.name << "\",\"" << b.source << '"';
             for (double v : {b.fps, b.frameMs, b.jitter, b.p99, b.delay, b.gpu}) o << ',' << QString::number(v, 'f', 3);
             for (double v : b.stages) o << ',' << (v < 0 ? QString() : QString::number(v, 'f', 3));
             o << ',' << b.gpuFrames << ',' << QString::number(b.cpu, 'f', 1) << ',' << QString::number(b.rssMb, 'f', 0)
-              << ",\"" << b.threads << "\"," << b.flag << '\n';
+              << ",\"" << b.threads << "\"," << b.flag << ",\"" << b.counters << "\"\n";
         }
         bench_.csv = path;
     }
@@ -618,6 +663,7 @@ void PlayerBridge::stopBenchmark() { stopBenchmark(true); }
 
 void PlayerBridge::stopBenchmark(bool save) {
     if (bench_.timer) { bench_.timer->stop(); bench_.timer->deleteLater(); bench_.timer = nullptr; }
+    if (lowLatency_) lowLatency_->setEnabled(QSettings().value("disp/lowLatency", false).toBool());   // as the user set it
     if (save && bench_.running) {   // the stop button: keep what was measured
         bench_.notes << L("Stopped by hand.", "Stoppet i hånden.");
         finishBenchmark();

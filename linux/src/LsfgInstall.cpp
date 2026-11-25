@@ -1,6 +1,7 @@
 // VeyAmux for Linux: lsfg-vk 2 install (see LsfgInstall.h).
 #include "LsfgInstall.h"
 #include "LosslessScaling.h"
+#include "Download.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -15,7 +16,6 @@
 #include <QSet>
 #include <QTemporaryDir>
 
-#include <curl/curl.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -28,68 +28,8 @@ constexpr const char* kUrl = "https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz";
 constexpr const char* kSha256 = "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74";
 constexpr qint64 kMaxBytes = 64ll * 1024 * 1024;
 
-struct Download {
-    QFile* file = nullptr;
-    qint64 bytes = 0;
-    const std::function<void(int)>* progress = nullptr;
-    int lastPercent = -1;
-};
-
-size_t onData(char* ptr, size_t size, size_t n, void* user) {
-    auto* d = static_cast<Download*>(user);
-    const qint64 len = qint64(size * n);
-    d->bytes += len;
-    if (d->bytes > kMaxBytes) return 0;
-    return d->file->write(ptr, len) == len ? size_t(len) : 0;
-}
-
-int onProgress(void* user, curl_off_t total, curl_off_t now, curl_off_t, curl_off_t) {
-    auto* d = static_cast<Download*>(user);
-    if (total > 0 && d->progress && *d->progress) {
-        const int pc = int(now * 100 / total);
-        if (pc != d->lastPercent) { d->lastPercent = pc; (*d->progress)(pc); }
-    }
-    return 0;
-}
-
 bool download(const QString& path, const std::function<void(int)>& progress, QString& error) {
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { error = "Cannot write " + path; return false; }
-    CURL* c = curl_easy_init();
-    if (!c) { error = "curl could not start"; return false; }
-    Download d{&f, 0, &progress, -1};
-    char err[CURL_ERROR_SIZE] = {};
-    curl_easy_setopt(c, CURLOPT_URL, kUrl);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(c, CURLOPT_MAXREDIRS, 5L);
-#if LIBCURL_VERSION_NUM >= 0x075500
-    curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, "https");
-    curl_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-#endif
-    curl_easy_setopt(c, CURLOPT_USERAGENT, "VeyAmux");
-    curl_easy_setopt(c, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 20L);
-    curl_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-    curl_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, 30L);
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, onData);
-    curl_easy_setopt(c, CURLOPT_WRITEDATA, &d);
-    curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, onProgress);
-    curl_easy_setopt(c, CURLOPT_XFERINFODATA, &d);
-    curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(c, CURLOPT_ERRORBUFFER, err);
-    // the AppImage's libcurl looks for the CA file where the build system keeps it; use the system's
-    for (const char* ca : {"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
-                           "/etc/ssl/ca-bundle.pem", "/etc/ssl/cert.pem"})
-        if (access(ca, R_OK) == 0) { curl_easy_setopt(c, CURLOPT_CAINFO, ca); break; }
-    const CURLcode rc = curl_easy_perform(c);
-    curl_easy_cleanup(c);
-    f.close();
-    if (rc != CURLE_OK) {
-        error = d.bytes > kMaxBytes ? QString("the download is larger than expected")
-                                    : QString::fromUtf8(err[0] ? err : curl_easy_strerror(rc));
-        return false;
-    }
-    return true;
+    return veyamux::httpsDownload(QString::fromLatin1(kUrl), path, kMaxBytes, progress, error);
 }
 
 QString sha256(const QString& path) {

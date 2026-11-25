@@ -187,19 +187,26 @@ Rectangle {
                         Label_ { text: tr("method") }
                         Segmented {
                             width: parent.width; enabled: player.enhance
-                            readonly property var values: [0, 2, 1, 3]   // SGSR | FSR 1 | FSR 3.1 | NIS
-                            model: ["SGSR", "FSR 1", "FSR 3.1", "NIS"]
+                            readonly property var values: [0, 2, 1, 4, 3]   // SGSR | FSR 1 | FSR 3.1 | FSR 4 | NIS
+                            model: ["SGSR", "FSR 1", "FSR 3.1", "FSR 4", "NIS"]
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
                         Hint {
-                            color: player.upscalerError !== "" ? Theme.warn : Theme.muted
-                            text: player.upscalerError !== "" ? tr("fsrFallback") + player.upscalerError
+                            // FSR 4 not installed (or not possible here) explains itself instead of a fallback warning
+                            readonly property bool fsr4Waiting: player.upscaler === 4 && player.fsr4State !== 3
+                            color: player.upscalerError !== "" && !fsr4Waiting ? Theme.warn : Theme.muted
+                            text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback") + player.upscalerError
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? tr("fsrNativeAaHint") : tr("fsr31Hint"))
                                      : player.upscaler === 2 ? tr("fsr1Hint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
                                      : player.upscaler === 3 ? tr("nisHint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
+                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") : player.fsr4State === 0 ? tr("fsr4NoGpu")
+                                                                : player.fsr4State === 2 ? player.fsr4Text : player.fsr4State === 4 ? tr("fsr4NotYet")
+                                                                : tr("fsr4Download") + (player.fsr4Text !== "" ? "\n" + player.fsr4Text : ""))
                                                              : tr("sgsrHint"))
                         }
+                        // FSR 4 is an add-on (AMD's MIT code, built separately): fetched on request
+                        Btn { visible: player.upscaler === 4 && player.fsr4State === 1; text: tr("fsr4Get"); primary: true; onClicked: player.installFsr4() }
                     }
                     Sep {}
                     Column {
@@ -313,6 +320,17 @@ Rectangle {
                 Column {
                     visible: menu.tab === 2
                     width: parent.width; spacing: 16
+                    // AMD Anti-Lag / NVIDIA Reflex: a new capture picture waits less on its way to the screen
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("lowLatency") }
+                        SwitchRow {
+                            text: player.lowLatencyMethod !== "" ? player.lowLatencyMethod : tr("lowLatencyNone")
+                            active: player.lowLatencyMethod !== ""
+                            checked: player.lowLatency; onToggled: (v) => player.lowLatency = v
+                        }
+                        Hint { text: player.lowLatencyMethod !== "" ? tr("lowLatencyHint") : tr("lowLatencyNoneHint") }
+                    }
                     Column {
                         width: parent.width; spacing: 10
                         Title { text: "HDR" }
@@ -632,6 +650,18 @@ Rectangle {
                             Rectangle { width: parent.width * player.benchProgress; height: parent.height; radius: 4; gradient: Theme.sunset }
                         }
                         Hint { visible: player.benchText !== ""; text: player.benchText; color: Theme.label }
+                    }
+                    Sep {}
+                    // ---- hardware counters (VK_KHR_performance_query)
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("dbgCounters") }
+                        SwitchRow { text: tr("dbgCountersOn"); active: player.gpuCountersAvailable; checked: player.gpuCounters
+                            onToggled: (v) => { player.gpuCounters = v; cntText.text = player.gpuCounterText() } }
+                        Hint { text: player.gpuCountersAvailable ? tr("dbgCountersHint") : tr("dbgCountersNone") }
+                        Text { id: cntText; visible: player.gpuCounters && text !== ""; width: parent.width; wrapMode: Text.Wrap
+                            font.family: "monospace"; font.pixelSize: 12; color: Theme.label }
+                        Btn { visible: player.gpuCounters; text: tr("dbgCountersRead"); onClicked: cntText.text = player.gpuCounterText() }
                     }
                     Sep {}
                     // ---- switches (environment variables at the next start)

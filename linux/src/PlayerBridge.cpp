@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include "DisplayVrr.h"
 #include "LsfgInstall.h"
+#include "Fsr4Addon.h"
 #include "SteamShortcut.h"
 #include "Watcher.h"
 #include <QDateTime>
@@ -735,7 +736,7 @@ void PlayerBridge::loadSettings() {
     obsFile_ = q.value("obs/file").toString();
     s_.enabled = q.value("enh/enabled", true).toBool();
     s_.scale = float(q.value("enh/scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 3));
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 4));
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.deflicker = q.value("enh/deflicker", false).toBool();
     s_.retroTv = q.value("enh/retroTv", false).toBool();
@@ -1039,7 +1040,7 @@ void PlayerBridge::applyEnhance() { engine_.setEnhance(s_); if (liveVk_) liveVk_
 void PlayerBridge::setEnhance(bool v) { s_.enabled = v; applyEnhance(); }
 void PlayerBridge::setScale(double v) { s_.scale = float(qBound(1.0, v, 4.0)); applyEnhance(); }
 void PlayerBridge::setUpscaler(int v) {
-    v = std::clamp(v, 0, 3);
+    v = std::clamp(v, 0, 4);
     if (int(s_.upscaler) == v) return;
     s_.upscaler = veyamux::Upscaler(v);
     applyEnhance();
@@ -1148,7 +1149,7 @@ bool PlayerBridge::loadProfile(const QString& name) {
     if (!q.contains(g + "scale")) return false;
     s_.enabled = q.value(g + "enabled", true).toBool();
     s_.scale = float(q.value(g + "scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 3));
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 4));
     s_.fxaa = q.value(g + "fxaa", false).toBool();
     s_.deflicker = q.value(g + "deflicker", false).toBool();
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
@@ -1576,6 +1577,48 @@ void PlayerBridge::refreshLsfg() {
         lsfgAutoTried_ = true;
         QTimer::singleShot(3000, this, &PlayerBridge::installLsfg);   // after a possible relaunch at start
     }
+}
+
+QString PlayerBridge::fsr4InstalledDir() { return fsr4addon::installedDir(); }
+
+int PlayerBridge::fsr4State() const {
+    if (!liveVk_ || !liveVk_->fsr4Supported(nullptr)) return 0;
+    if (fsr4Busy_) return 2;
+    if (!fsr4Dir_.isEmpty()) return 3;
+    return fsr4addon::available() ? 1 : 4;
+}
+
+void PlayerBridge::installFsr4() {
+    if (fsr4Busy_) return;
+    fsr4Busy_ = true;
+    fsr4Text_ = L("Downloading FSR 4 (about 9 MB)…", "Henter FSR 4 (ca. 9 MB)…");
+    emit fsr4Changed();
+    std::thread([this, quit = psQuit_] {
+        auto last = std::make_shared<std::atomic<int>>(-1);
+        const auto r = fsr4addon::install([this, quit, last](int pc) {
+            if (quit->load() || pc / 5 == last->load() / 5) return;
+            last->store(pc);
+            quit->post(this, [this, pc] {
+                fsr4Text_ = L("Downloading FSR 4 (about 9 MB)… %1 %", "Henter FSR 4 (ca. 9 MB)… %1 %").arg(pc);
+                emit fsr4Changed();
+            });
+        });
+        if (quit->load()) return;
+        quit->post(this, [this, r] {
+            qInfo("FSR 4: %s", qPrintable(r.message));
+            fsr4Busy_ = false;
+            if (r.ok) {
+                fsr4Dir_ = fsr4addon::installedDir();
+                if (liveVk_) liveVk_->setFsr4Dir(fsr4Dir_);
+                fsr4Text_.clear();
+                showNotice(L("FSR 4 installed", "FSR 4 installeret"));
+                applyEnhance();   // a failed attempt before the download is tried again
+            } else {
+                fsr4Text_ = L("Could not install FSR 4: ", "Kunne ikke installere FSR 4: ") + r.message;
+            }
+            emit fsr4Changed();
+        });
+    }).detach();
 }
 
 void PlayerBridge::installLsfg() {

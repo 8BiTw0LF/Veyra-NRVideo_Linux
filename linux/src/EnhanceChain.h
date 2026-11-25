@@ -5,9 +5,11 @@
 #include <atomic>
 #include <mutex>
 #include "FsrUpscaler.h"
+#include "Fsr4Upscaler.h"
 #include "FsrFrameGen.h"
 #include "MotionEstimator.h"
 #include "GpuTimer.h"
+#include "GpuCounters.h"
 #include <array>
 #include "VkContext.h"
 #include <map>
@@ -24,7 +26,7 @@ enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to SGSR if FidelityFX cannot run.
-enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3 };   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
+enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3, AmdFsr4 = 4 };   // FSR 4 = AMD's ML upscaler (add-on)   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
 
 struct EnhanceSettings {
     bool enabled = true;
@@ -33,7 +35,7 @@ struct EnhanceSettings {
     bool fxaa = false;
     bool deflicker = false;   // anti-flicker: calms pixels that flicker between frames (LxDeflicker)
     // FSR 3.1 at the native size (scale 1): AMD's "native AA", i.e. temporal anti-aliasing
-    bool fsrNativeAa() const { return enabled && upscaler == Upscaler::AmdFsr3 && scale <= 1.001f && !retroTv && !pixelPerfect; }
+    bool fsrNativeAa() const { return enabled && (upscaler == Upscaler::AmdFsr3 || upscaler == Upscaler::AmdFsr4) && scale <= 1.001f && !retroTv && !pixelPerfect; }
     Denoise denoise = Denoise::Off;
     int denoiseStrength = 1;  // 0 light, 1 medium, 2 strong
     float hdrPeak = 1000.0f;  // HDR capture (P010): brightest level of the source in nits, tone-mapped to SDR white
@@ -115,9 +117,16 @@ public:
     float gpuMs() const { return timer_.totalMs(); }
     std::array<float, GpuTimer::kStages> gpuStageMs() const { return timer_.stageMs(); }
     GpuTimer::Sums gpuSums() const { return timer_.sums(); }
-    void resetGpuSums() { timer_.resetSums(); }
+    void resetGpuSums() { timer_.resetSums(); counters_.reset(); }
+    // VeyAmux Debug: hardware counters (VK_KHR_performance_query)
+    bool countersAvailable() const { return counters_.available(); }
+    bool setCountersEnabled(bool on) { return counters_.setEnabled(on); }
+    std::vector<GpuCounters::Value> counterValues() const { return counters_.values(); }
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
+    // AMD FSR 4: the add-on's folder (empty = not installed); whether this GPU can run it
+    void setFsr4Dir(const std::string& dir) { std::lock_guard l(fsr4M_); fsr4Dir_ = dir; }
+    bool fsr4Supported(std::string* why = nullptr) const { return Fsr4Upscaler::supported(ctx_, why); }
     uint64_t liveGeneration() const { return liveGen_; }
     // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
     void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; mvPrev_ = false; fgReset_ = true; hudReset_ = true; }
@@ -205,6 +214,9 @@ private:
     int w_ = 0, h_ = 0, ow_ = 0, oh_ = 0;
     ImageRes src_, lin_, linB_, luma_, up_, fin_, out8_;
     std::unique_ptr<FsrUpscaler> fsrUp_;
+    std::unique_ptr<Fsr4Upscaler> fsr4Up_;
+    std::string fsr4Dir_;
+    std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread
     std::unique_ptr<FsrFrameGen> fg_;
     uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)
@@ -228,6 +240,7 @@ private:
     // denoisers
     std::unique_ptr<MotionEstimator> nrMotion_;
     GpuTimer timer_;
+    GpuCounters counters_;   // VeyAmux Debug: hardware counters around the live work (when switched on)
     ImageRes nrOut_, nrHist_[2];
     int nrCur_ = 0;
     bool nrHistory_ = false;          // the temporal denoiser has a previous result of this sequence

@@ -14,6 +14,7 @@
 #include <atomic>
 #include <QStandardPaths>
 #include "LiveVulkan.h"
+#include "LowLatency.h"
 #include "LosslessScaling.h"
 #include "MediaEngine.h"
 #include "ObsStream.h"
@@ -31,6 +32,7 @@
 #include <QWindow>
 #include <memory>
 
+class LowLatency;
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
@@ -42,6 +44,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double benchProgress READ benchProgress NOTIFY benchChanged)
     Q_PROPERTY(QString lastReport READ lastReport NOTIFY benchChanged)
     Q_PROPERTY(bool debugRestartNeeded READ debugRestartNeeded NOTIFY benchChanged)
+    // VeyAmux Debug: the graphics card's hardware counters (VK_KHR_performance_query, RDNA 4 and other recent GPUs)
+    Q_PROPERTY(bool gpuCountersAvailable READ gpuCountersAvailable NOTIFY benchChanged)
+    Q_PROPERTY(bool gpuCounters READ gpuCounters WRITE setGpuCounters NOTIFY benchChanged)
     // "Find the best signal" in the capture dialog (PlayerBridgeSignalTest.cpp)
     Q_PROPERTY(bool signalTestRunning READ signalTestRunning NOTIFY signalTestChanged)
     Q_PROPERTY(QString signalTestText READ signalTestText NOTIFY signalTestChanged)
@@ -77,6 +82,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool enhance READ enhance WRITE setEnhance NOTIFY enhanceChanged)
     Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY enhanceChanged)
     Q_PROPERTY(int upscaler READ upscaler WRITE setUpscaler NOTIFY enhanceChanged)
+    // AMD FSR 4 add-on: 0 the GPU cannot run it, 1 not installed, 2 downloading, 3 ready, 4 not offered yet
+    Q_PROPERTY(int fsr4State READ fsr4State NOTIFY fsr4Changed)
+    Q_PROPERTY(QString fsr4Text READ fsr4Text NOTIFY fsr4Changed)
     Q_PROPERTY(QString upscalerError READ upscalerError NOTIFY statsChanged)
     // Frame generation: 0 off, 2 Lossless Scaling fixed 2x (default), 3 Lossless Scaling fixed 3x
     Q_PROPERTY(int frameGenMode READ frameGenMode WRITE setFrameGenMode NOTIFY enhanceChanged)
@@ -139,6 +147,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool vrr READ vrr WRITE setVrr NOTIFY enhanceChanged)
     // frame pacing repair for frame generation (MediaEngine / FramePacingRepair.h)
     Q_PROPERTY(bool pacingRepair READ pacingRepair WRITE setPacingRepair NOTIFY enhanceChanged)
+    // AMD Anti-Lag / NVIDIA Reflex for the window (LowLatency); method is empty when the GPU/driver has neither
+    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatencyOn NOTIFY enhanceChanged)
+    Q_PROPERTY(QString lowLatencyMethod READ lowLatencyMethod CONSTANT)
     Q_PROPERTY(bool hudLock READ hudLock WRITE setHudLock NOTIFY enhanceChanged)
     // the desktop has VRR on for a screen while Lossless Scaling is chosen: lsfg-vk 2 cannot pace its frames then
     Q_PROPERTY(bool lsfgVrrWarning READ lsfgVrrWarning NOTIFY lsfgChanged)
@@ -372,8 +383,20 @@ public:
 
     QImage currentImage();
     void setGpuDevice(const QString& n) { gpuDevice_ = n; }
+    void setLowLatency(LowLatency* l) {
+        lowLatency_ = l;
+        if (l) l->setEnabled(QSettings().value("disp/lowLatency", false).toBool());
+    }
+    bool lowLatency() const { return lowLatency_ && lowLatency_->enabled(); }
+    void setLowLatencyOn(bool v) {
+        QSettings().setValue("disp/lowLatency", v);
+        if (lowLatency_) lowLatency_->setEnabled(v);
+        emit enhanceChanged();
+    }
+    QString lowLatencyMethod() const { return lowLatency_ ? lowLatency_->method() : QString(); }
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
+        if (l) { fsr4Dir_ = fsr4InstalledDir(); l->setFsr4Dir(fsr4Dir_); }
         if (l) {
             connect(l, &LiveVulkan::outputChanged, this, &PlayerBridge::frameReady);   // VideoItem re-syncs
             l->setSettings(s_);
@@ -447,6 +470,14 @@ public:
     double signalTestProgress() const { return sig_.cands.empty() ? 0.0 : double(sig_.i) / double(sig_.cands.size()); }
     QVariantList signalTestResults() const;
     void sampleSignalTest();   // test hook: made-up results, to show the dialog without a card
+    bool gpuCountersAvailable() const { return liveVk_ && liveVk_->countersAvailable(); }
+    bool gpuCounters() const { return gpuCounters_; }
+    void setGpuCounters(bool on);
+    Q_INVOKABLE QString gpuCounterText() const;   // averages since switched on (or the last benchmark step)
+    int fsr4State() const;
+    QString fsr4Text() const { return fsr4Text_; }
+    Q_INVOKABLE void installFsr4();
+    static QString fsr4InstalledDir();
     Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
     Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
     bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
@@ -599,6 +630,7 @@ signals:
     void overlayChanged();
     void overlayTick();
     void benchChanged();
+    void fsr4Changed();
     void signalTestChanged();
     void recTick();
 
@@ -667,12 +699,14 @@ private:
         std::function<void(veyamux::EnhanceSettings&)> set;
         bool lowRes = false;        // runs on the card's 1080p mode (upscaling a 4K card's picture would make 8K)
         bool moreFrames = false;    // frame generation: the frame rate is meant to rise
+        int lowLatency = -1;        // AMD Anti-Lag / NVIDIA Reflex: -1 as set, 0 off, 1 on
     };
     struct BenchRow {
         QString section, name, source, threads, flag;
         double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
         std::array<double, veyamux::GpuTimer::kStages> stages{};
         int samples = 0, gpuFrames = 0;
+        QString counters;           // hardware counters (when switched on): "name=value unit; .."
     };
     struct Bench {
         bool running = false;
@@ -698,6 +732,11 @@ private:
         QString csv;
     } bench_;
     QString lastReport_;
+    LowLatency* lowLatency_ = nullptr;
+    bool gpuCounters_ = false;
+    bool fsr4Busy_ = false;
+    QString fsr4Text_;
+    QString fsr4Dir_;   // the installed add-on (empty: none)
     struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
     struct SigRow {
         veyamux::CaptureMode mode;

@@ -19,6 +19,9 @@ if(NOT VEYAMUX_GIT_SHA)
 endif()
 
 find_package(Vulkan REQUIRED)
+# Newer Vulkan headers than the build systems ship (Ubuntu 24.04: 1.3.275), for VK_AMD_anti_lag, the cooperative
+# matrix extensions and VK_EXT_shader_float8. Headers only; the loader and drivers are the user's.
+include_directories(BEFORE SYSTEM "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan-headers/include")
 find_package(PkgConfig REQUIRED)
 
 # ---- Shaders: Veyra's original HLSL (shaders/veyra) + Linux-only passes (shaders), compiled to SPIR-V with DXC ----
@@ -112,7 +115,7 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
-add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
+add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/GpuCounters.cpp src/Fsr4Upscaler.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
 target_compile_definitions(veyamux_core PUBLIC VEYAMUX_GIT_SHA="${VEYAMUX_GIT_SHA}" VEYAMUX_BUILD_NUMBER=${VEYAMUX_BUILD_NUMBER})
 if(VEYAMUX_DEBUG_BUILD)
   target_compile_definitions(veyamux_core PUBLIC VEYAMUX_DEBUG_BUILD=1)
@@ -176,7 +179,7 @@ endif()
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/Download.cpp src/Download.h src/Fsr4Addon.cpp src/Fsr4Addon.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp src/LowLatency.cpp src/LowLatency.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -198,11 +201,21 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)
+# NVIDIA Reflex needs the swapchain, which Qt creates: a small Vulkan layer loaded only into VeyAmux adds the latency
+# mode and present IDs there (src/vklayer). Built next to its manifest, installed to share/veyamux/vklayer.
+set(VKLAYER_DIR "${CMAKE_BINARY_DIR}/vklayer")
+add_library(VkLayer_veyamux_low_latency SHARED src/vklayer/veyamux_low_latency_layer.cpp)
+set_target_properties(VkLayer_veyamux_low_latency PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${VKLAYER_DIR}"
+  CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+configure_file(src/vklayer/VkLayer_veyamux_low_latency.json.in "${VKLAYER_DIR}/VkLayer_veyamux_low_latency.json" COPYONLY)
+add_dependencies(veyamux VkLayer_veyamux_low_latency)
 target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network Qt6::DBus)
 add_dependencies(veyamux veyamux_shaders)
 
 include(GNUInstallDirs)
 install(TARGETS veyamux RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS VkLayer_veyamux_low_latency LIBRARY DESTINATION ${CMAKE_INSTALL_DATADIR}/veyamux/vklayer)
+install(FILES "${VKLAYER_DIR}/VkLayer_veyamux_low_latency.json" DESTINATION ${CMAKE_INSTALL_DATADIR}/veyamux/vklayer)
 install(DIRECTORY "${SPV_DIR}/" DESTINATION ${CMAKE_INSTALL_DATADIR}/veyamux/shaders FILES_MATCHING PATTERN "*.spv")
 install(FILES packaging/veyamux.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/veyamux.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
