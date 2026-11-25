@@ -344,8 +344,9 @@ bool Fsr4Upscaler::ensureResources(uint32_t w, uint32_t h, uint32_t ow, uint32_t
 bool Fsr4Upscaler::record(VkCommandBuffer cb, const ImageRes& in, const ImageRes& motion, const ImageRes& out, bool reset, std::string& error) {
     if (dir_.empty()) { error = "FSR 4 is not installed"; return false; }
     const uint32_t w = in.width, h = in.height, ow = out.width, oh = out.height;
-    // AMD's network works on sizes that are multiples of 8 (its provider aligns them up)
-    if (ow % 8 || oh % 8) { error = "FSR 4 needs an output size that is a multiple of 8"; return false; }
+    // AMD's provider takes any output size: the encoder levels are the size / 2, 4, 8 (rounded down) and the network's
+    // tensors are fixed per resolution class. Odd sizes are left out (a half pixel at level 1).
+    if (ow % 2 || oh % 2) { error = "FSR 4 needs an even output size"; return false; }
     if (ow > 3840 || oh > 2160) { error = "FSR 4 goes up to 3840x2160"; return false; }
     const int res = (ow > 1920 || oh > 1080) ? 1 : 0;
     const float ratio = float(ow) / float(w);

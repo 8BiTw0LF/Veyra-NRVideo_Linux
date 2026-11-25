@@ -652,7 +652,7 @@ dets NOTICE.md (eksplicit register for pre-passets vægte, `QuadReadAcross*` som
   Lineær farve, bevægelse fra kædens fælles bevægelsesfelt i inputpixels (`mv_scale` = 1/inputstørrelse), ingen jitter,
   ingen dybde (en nul-tekstur), eksponering 1. AMD's preset efter skalafaktor (native, quality ≥ 1,5, balanced ≥ 1,69,
   performance ≥ 1,99, ultra performance ≥ 2,99); netværket for 1080p eller 2160p efter udgangsstørrelsen; udgangen skal
-  være et multiplum af 8 og højst 3840×2160 (ellers SGSR med en besked). SPIR-V'ens bindinger tjekkes mod layoutet før brug.
+  have lige mål og højst være 3840×2160 (ellers SGSR med en besked). SPIR-V'ens bindinger tjekkes mod layoutet før brug.
 - **Test:** `veyamux-upscale-test <shaders> in.rgba W H N out.rgba fsr4 2` med `VEYAMUX_FSR4_DIR`. På lavapipe: korrekt
   billede; med bevægelse vinder den over billederne (31,2 dB mod SGSR's 30,4 på en testsekvens).
 - **FP8 på matrixenhederne** (AMD's egen vej på RDNA 4, `fsr4_model_v07_fp8_no_scale`): AMD's kode bruger
