@@ -131,6 +131,8 @@ void PlayerBridge::subtitlesOpened(const QString& path) {
                 addSubtitleData(file.readAll(), extra.join(' '), lang, f.suffix().toLower(), false);
         }
     }
+    // a reopen (another sound track): the server's subtitle files again
+    if (reopening_) for (const auto& d : subData_) addSubtitleData(d.data, d.title, d.lang, d.ext, false);
     pickSubtitles();
     updateSubtitle();
     emit subtitlesChanged();
@@ -139,6 +141,7 @@ void PlayerBridge::subtitlesOpened(const QString& path) {
 // a subtitle file's contents (a file beside the video, or from Jellyfin / Plex): made UTF-8 (many .srt files are
 // Windows-1252) and decoded
 void PlayerBridge::addSubtitleData(const QByteArray& data, const QString& title, const QString& lang, const QString& ext, bool announce) {
+    if (announce) subData_.append({data, title, lang, ext});   // a server's: kept for a reopen
     QStringDecoder utf8(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless);
     QString text = utf8.decode(data);
     if (utf8.hasError()) text = QStringDecoder(QStringDecoder::Latin1).decode(data);
@@ -178,4 +181,45 @@ void PlayerBridge::updateSubtitle() {
         subImageUrl_ = QStringLiteral("image://subs/%1").arg(id);
     }
     emit subtitleChanged();
+}
+
+// ------------------------------------------------------------------ sound tracks
+
+QVariantList PlayerBridge::audioTracks() const {
+    QVariantList out;
+    if (!engine_.isOpen() || engine_.isLive()) return out;
+    for (const auto& t : engine_.audioTracks()) {
+        veyamux::SubtitleTrack asSub;
+        asSub.lang = t.lang;
+        asSub.id = t.index;
+        QString name = trackName(asSub);
+        QStringList extra;
+        if (!t.title.empty() && QString::fromStdString(t.title).compare(name, Qt::CaseInsensitive) != 0) extra << QString::fromStdString(t.title);
+        QString fmt = QString::fromStdString(t.codec).toUpper().replace("DOLBY TRUEHD", "TrueHD").replace("DTS-HD MA", "DTS-HD MA");
+        if (t.channels > 0) fmt += t.channels == 2 ? " 2.0" : t.channels == 1 ? " mono" : t.channels == 6 ? " 5.1" : t.channels == 8 ? " 7.1"
+                                                                                                     : QStringLiteral(" %1 ch").arg(t.channels);
+        extra << fmt.trimmed();
+        out << QVariantMap{{"id", t.index}, {"name", (t.lang.empty() ? QString() : name + " · ") + extra.join(" · ")},
+                           {"lang", QString::fromStdString(t.lang)}};
+    }
+    return out;
+}
+
+// another sound track: the file or stream is opened again at the same place (FFmpeg decodes one track at a time);
+// the language is remembered for the next films
+void PlayerBridge::setAudioTrack(int id) {
+    if (!engine_.isOpen() || engine_.isLive() || id == engine_.audioTrack() || lastPath_.isEmpty()) return;
+    QString lang;
+    for (const auto& t : engine_.audioTracks()) if (t.index == id) lang = QString::fromStdString(t.lang);
+    QSettings().setValue("audio/lang", lang);
+    const double pos = engine_.position();
+    const bool wasPlaying = engine_.playing();
+    reopening_ = true;
+    engine_.setPreferredAudio(id);
+    const bool ok = openMedia(lastPath_, lastHeaders_);
+    reopening_ = false;
+    if (!ok) return;
+    if (pos > 1) engine_.seek(pos);
+    if (!wasPlaying) togglePlay();
+    emit mediaChanged();
 }

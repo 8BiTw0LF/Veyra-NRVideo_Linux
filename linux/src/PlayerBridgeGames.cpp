@@ -58,7 +58,11 @@ void PlayerBridge::psPad(quint32 buttons, double lx, double ly, double rx, doubl
 }
 
 // done / failed messages of the emulator (state saved, ...), shown as a notice
+void PlayerBridge::retroNextDisc() { if (retroActive()) veyamux::retro::nextDisc(); }
+
 void PlayerBridge::pollRetroMessage() {
+    const int n = retroActive_ ? veyamux::retro::discCount() : 0, i = retroActive_ ? veyamux::retro::discIndex() + 1 : 0;
+    if (n != retroDiscs_ || i != retroDisc_) { retroDiscs_ = n; retroDisc_ = i; emit retroDiscChanged(); }
     if (!retroActive_) return;
     const std::string m = veyamux::retro::takeMessage();
     if (!m.empty()) showNotice(translateMessage(QString::fromStdString(m)));

@@ -38,6 +38,8 @@ struct MediaInfo {
     bool hwDecode = false;
 };
 
+struct AudioTrack { int index = -1; std::string lang, title, codec, layout; int channels = 0; bool isDefault = false; };
+
 struct EngineStats {
     double processMs = 0;      // GPU chain time (upload + passes + readback) of the last frame
     uint64_t rendered = 0;
@@ -219,6 +221,11 @@ public:
     void setFsr4Dir(const std::string& dir);
     // a file's subtitles (Subtitles.h): its tracks, added files, the one shown
     Subtitles& subtitles() { return subs_; }
+    // a file's sound tracks; the one to play: set before open() (a stream index, -1: FFmpeg's best one)
+    std::vector<AudioTrack> audioTracks() const { std::lock_guard l(tracksM_); return audioTracks_; }
+    int audioTrack() const { return aIndex_; }
+    void setPreferredAudio(int index) { preferredAudio_ = index; }
+    void setPreferredAudioLanguage(const std::string& lang) { preferredAudioLang_ = lang; }   // "dan", "eng": when no index
     // live: share of new pictures the pacing repair moved (last few seconds), -1 when it is off
     double pacingRepairShare();
     double pacingHoldMs() const { return pacingHold_.load(); }   // the delay the even rhythm costs now
@@ -226,6 +233,10 @@ private:
     std::mutex fsr4M_;
     std::string fsr4Dir_;
     Subtitles subs_;
+    mutable std::mutex tracksM_;
+    std::vector<AudioTrack> audioTracks_;
+    int preferredAudio_ = -1;
+    std::string preferredAudioLang_;
     std::atomic<int> mjpegDecode_{0};
     mutable std::mutex capM_;      // cap_ against captureStats()/takeCaptureArrivals() from the UI thread
     std::string capAudioSource_;

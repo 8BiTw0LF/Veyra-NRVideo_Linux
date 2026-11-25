@@ -58,9 +58,14 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
     Q_PROPERTY(bool retroActive READ retroActive NOTIFY mediaChanged)   // a game from the Games page runs
+    Q_PROPERTY(int retroDiscs READ retroDiscs NOTIFY retroDiscChanged)  // discs of the game (0/1: one)
+    Q_PROPERTY(int retroDisc READ retroDisc NOTIFY retroDiscChanged)    // the one in the tray (1 = the first)
     // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
     // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY subtitlesChanged)
+    // sound tracks of a file [{id, name}] ("Dansk · AC-3 5.1"), and the one playing
+    Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY mediaChanged)
+    Q_PROPERTY(int audioTrack READ audioTrack WRITE setAudioTrack NOTIFY mediaChanged)
     Q_PROPERTY(int subtitleTrack READ subtitleTrack WRITE setSubtitleTrack NOTIFY subtitlesChanged)
     Q_PROPERTY(QString subtitleText READ subtitleText NOTIFY subtitleChanged)
     Q_PROPERTY(QString subtitleImage READ subtitleImage NOTIFY subtitleChanged)
@@ -234,7 +239,11 @@ public:
     bool demoAvailable() const;
     bool demoActive() const { return demoActive_ && engine_.isOpen(); }
     bool retroActive() const { return retroActive_ && engine_.isOpen(); }
+    int retroDiscs() const { return retroDiscs_; }
+    int retroDisc() const { return retroDisc_; }
     QVariantList subtitleTracks() const;
+    QVariantList audioTracks() const;
+    int audioTrack() const { return engine_.isOpen() && !engine_.isLive() ? engine_.audioTrack() : -1; }
     int subtitleTrack() const;
     QString subtitleText() const { return subText_; }
     QString subtitleImage() const { return subImageUrl_; }
@@ -596,7 +605,9 @@ public slots:
     void retroLoadState();
     void retroReset();
     void retroPause(bool paused);                  // while the menu is open
+    void retroNextDisc();
     void setSubtitleTrack(int id);
+    void setAudioTrack(int id);
     void cycleSubtitles();
     void retroKey(const QString& key, bool down);  // the keyboard as a controller: "up" "down" "left" "right" "a" "b" "x" "y" "l" "r" "start" "select"
     void togglePlay();
@@ -652,6 +663,7 @@ public slots:
 signals:
     void closing();                     // the video is about to be closed or replaced (its position is still there)
     void subtitlesChanged();
+    void retroDiscChanged();
     void subtitleChanged();
     void updateChanged();
     void psChanged();
@@ -706,6 +718,7 @@ private:
     bool demoActive_ = false;
     bool retroActive_ = false;
     quint32 retroKeys_ = 0;
+    int retroDiscs_ = 0, retroDisc_ = 0;
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;
@@ -849,7 +862,11 @@ private:
     QRectF subBox_;
     double subAspect_ = 16.0 / 9.0;
     quint64 subCueId_ = ~0ull;
-    int subFileNo_ = 0;              // the video file that is open (to reopen it after a restart)
+    int subFileNo_ = 0;
+    QString lastPath_, lastHeaders_;          // the open file / stream, for opening it again with another sound track
+    bool reopening_ = false;
+    struct SubData { QByteArray data; QString title, lang, ext; };
+    QList<SubData> subData_;                  // subtitles added from a server (added again after a reopen)              // the video file that is open (to reopen it after a restart)
     bool lsfgOffPending_ = false;   // a restart without lsfg-vk is on its way
     bool lsfgHighNoticed_ = false;  // the 120 Hz hint for Lossless Scaling was shown
     int overRefreshTicks_ = 0;      // 100 ms ticks the output was above the screen's refresh rate (or back below it)

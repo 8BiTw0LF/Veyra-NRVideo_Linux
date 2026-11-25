@@ -129,11 +129,23 @@ Rectangle {
         id: nowBar
         x: 20; anchors.top: header.bottom; anchors.topMargin: visible ? 8 : 0
         width: parent.width - 40; spacing: 8
-        visible: player.retroActive || media.playingFromLibrary || player.subtitleTracks.length > 0
+        visible: player.retroActive || media.playingFromLibrary || player.subtitleTracks.length > 0 || player.audioTracks.length > 1
         height: visible ? implicitHeight : 0
         Btn { visible: player.retroActive; text: tr("gameSave"); onClicked: player.retroSaveState() }
         Btn { visible: player.retroActive; text: tr("gameLoad"); onClicked: player.retroLoadState() }
         Btn { visible: player.retroActive; text: tr("gameReset"); onClicked: player.retroReset() }
+        Btn { visible: player.retroActive && player.retroDiscs > 1; primary: true
+            text: tr("gameDisc").replace("%1", player.retroDisc % player.retroDiscs + 1).replace("%2", player.retroDiscs)
+            onClicked: player.retroNextDisc() }
+        // sound tracks (language and format), when there is more than one
+        Text { visible: player.audioTracks.length > 1; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("soundTrack"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.audioTracks.length > 1 ? player.audioTracks : []
+            delegate: Btn { required property var modelData; text: modelData.name; opacity: player.audioTrack === modelData.id ? 1 : 0.6
+                onClicked: player.audioTrack = modelData.id }
+        }
+        Item { visible: player.audioTracks.length > 1 && player.subtitleTracks.length > 0; width: parent.width; height: 1 }
         // subtitles: off and each track
         Text { visible: player.subtitleTracks.length > 0; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
             text: tr("subtitles"); color: Theme.label; font.pixelSize: 14 }

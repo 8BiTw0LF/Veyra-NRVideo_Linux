@@ -19,7 +19,7 @@ namespace veyamux::retro {
 
 struct Game {
     std::string core;        // the core (.so)
-    std::string rom;         // the game file (.zip is unpacked when the core cannot read it)
+    std::string rom;         // the game file (.zip / .7z / .rar is unpacked when the core cannot read it)
     std::string title;       // shown as the source's name
     std::string systemDir;   // BIOS files
     std::string saveDir;     // battery saves (.srm)
@@ -46,6 +46,10 @@ void saveState(int slot);
 void loadState(int slot);
 bool hasState(int slot);
 void reset();
+// games on several discs (.m3u): how many, which one is in (0 = the first), change to the next
+int discCount();
+int discIndex();
+void nextDisc();
 void setPaused(bool p);
 // the last thing that went wrong, or a done message ("State saved") for the UI; cleared when read
 std::string takeMessage();
@@ -75,7 +79,8 @@ private:
     uint64_t seen_ = 0;
 };
 
-// ---- zip (also used for downloaded cores): the files in it, and one of them unpacked
+// ---- archives: zip, 7z, rar (also used for downloaded cores): the files in it, and one of them unpacked
+bool isArchive(const std::string& path);
 struct ZipEntry { std::string name; uint64_t size = 0; };
 std::vector<ZipEntry> zipList(const std::string& zipPath);
 bool zipRead(const std::string& zipPath, const std::string& name, std::vector<uint8_t>& out, std::string& error);

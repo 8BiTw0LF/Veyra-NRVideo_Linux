@@ -169,7 +169,7 @@ QString detectSystem(const QString& path, const QString& root) {
         const QString k = folderKey(parts[i]);
         for (const auto& s : gameSystems()) {
             if (!listHas(s.folders, k)) continue;
-            if (!listHas(s.folderExts, ext)) return {};   // a file the system's games never are (a readme, a cover)
+            if (!listHas(s.folderExts, ext) && ext != "zip" && ext != "7z" && ext != "rar") return {};   // a file the system's games never are (a readme, a cover)
             if ((ext == "cue" || ext == "chd" || ext == "iso" || ext == "m3u") && QString(s.id) != "psx" && QString(s.id) != "segacd"
                 && QString(s.id) != "saturn" && QString(s.id) != "pcecd") return {};
             return s.id;
@@ -177,7 +177,7 @@ QString detectSystem(const QString& path, const QString& root) {
     }
     // the file type alone
     for (const auto& s : gameSystems()) if (listHas(s.exts, ext)) return s.id;
-    if (ext == "zip") return zipSystem(path);
+    if (ext == "zip" || ext == "7z" || ext == "rar") return zipSystem(path);
     if (ext == "cue" || ext == "iso" || ext == "m3u" || ext == "ccd") return sniffDisc(path);
     return {};
 }
@@ -409,6 +409,76 @@ QHash<QString, ArcadeName> arcadeNames(const QString& dir, bool download) {
 }
 } // namespace
 
+bool GameLibrary::isBiosFile(const QString& path, const QString& root) {
+    const QString stem = QFileInfo(path).completeBaseName().toLower();
+    if (stem.contains("[bios]") || stem == "bios" || stem.endsWith(" bios") || stem.endsWith("_bios")) return true;
+    if (stem.startsWith("bios") && stem.size() > 4 && !stem[4].isLetter()) return true;   // bios_E, bios-u, bios (Japan)
+    static const QRegularExpression names(
+        R"re(^(syscard\d*[uj]?|gecard|gexpress|sgb\d?(\b.*)?|super game boy.*|game ?genie.*|gamegenie.*|disksys|lynxboot|scph\d+.*|ps1_rom|)re"
+        R"re(mpr-\d+.*|sega_101|saturn_bios|kick\d.*|firmware.*|dmg_boot|cgb_boot|gba_bios|gb_bios|gbc_bios|sgb_bios|.*_bios|)re"
+        R"re(.*\(bios\).*|bios_cd_[euj]|bios[_ ][euj]|bios_md|bios_ms|bios_gg|segacd_.*bios.*|mpr-17933|sega cd bios.*)$)re");
+    if (names.match(stem).hasMatch()) return true;
+    // a folder of BIOS files inside the games folder
+    for (const auto& part : QDir(root).relativeFilePath(QFileInfo(path).absolutePath()).toLower().split('/'))
+        if (part == "bios" || part == "bioses" || part == "firmware") return true;
+    return false;
+}
+
+// BIOS files found among the games: copied to the BIOS folder when it does not have them yet
+void GameLibrary::copyBios(const QStringList& files) {
+    const QString dir = biosFolder();
+    for (const auto& f : files) {
+        const QFileInfo fi(f);
+        if (fi.size() > (64ll << 20)) continue;
+        const QString dest = dir + "/" + fi.fileName();
+        if (!QFile::exists(dest) && QFile::copy(f, dest)) qInfo("Games: BIOS file %s copied to the BIOS folder", qPrintable(fi.fileName()));
+    }
+}
+
+// Games on several discs ("Metal Gear Solid (USA) (Disc 1).cue", "(Disc 2)") become one game: VeyAmux writes a
+// playlist (.m3u) with the discs in order, which the emulator opens; the disc is changed from the menu.
+void GameLibrary::groupDiscs(std::vector<Entry>& found) {
+    static const QRegularExpression disc(R"re(\s*[\(\[]\s*(?:disc|disk|cd)\s*(\d+)(?:\s*of\s*\d+)?\s*[\)\]])re",
+                                         QRegularExpression::CaseInsensitiveOption);
+    struct Group { std::vector<std::pair<int, size_t>> discs; };
+    QHash<QString, Group> groups;
+    for (size_t i = 0; i < found.size(); ++i) {
+        const QString stem = QFileInfo(found[i].path).completeBaseName();
+        const auto m = disc.match(stem);
+        if (!m.hasMatch() || QFileInfo(found[i].path).suffix().toLower() == "m3u") continue;
+        QString base = stem;
+        base.remove(m.capturedStart(), m.capturedLength());
+        groups[found[i].system + '\n' + QFileInfo(found[i].path).absolutePath().section('/', 0, -1) + '\n' + base.trimmed()]
+            .discs.push_back({m.captured(1).toInt(), i});
+    }
+    std::vector<bool> drop(found.size(), false);
+    const QString m3uDir = dataDir("playlists");
+    for (auto it = groups.begin(); it != groups.end(); ++it) {
+        auto& d = it.value().discs;
+        if (d.size() < 2) continue;
+        std::sort(d.begin(), d.end());
+        const QString base = it.key().section('\n', 2);
+        const QString sys = it.key().section('\n', 0, 0);
+        QDir().mkpath(m3uDir + "/" + sys);
+        const QString m3u = m3uDir + "/" + sys + "/" + base + ".m3u";
+        QStringList lines;
+        for (const auto& [num, idx] : d) lines << found[idx].path;
+        QFile f(m3u);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) continue;
+        f.write((lines.join('\n') + '\n').toUtf8());
+        f.close();
+        Entry e = found[d.front().second];
+        e.path = m3u;
+        e.title = displayTitle(base);
+        if (e.thumb.isEmpty()) e.thumb = base;
+        for (const auto& [num, idx] : d) drop[idx] = true;
+        found.push_back(e);
+    }
+    std::vector<Entry> keep;
+    for (size_t i = 0; i < found.size(); ++i) if (i >= drop.size() || !drop[i]) keep.push_back(found[i]);
+    found = std::move(keep);
+}
+
 void GameLibrary::scanThread(QString root) {
     std::vector<Entry> found;
     QSet<QString> skip;   // tracks a .cue or .m3u lists (shown once, by the .cue / .m3u)
@@ -435,15 +505,26 @@ void GameLibrary::scanThread(QString root) {
         }
     }
     int n = 0;
+    QStringList biosFiles;
     QHash<QString, ArcadeName> arcade;
     bool arcadeLoaded = false;
     for (const auto& p : files) {
         if (quit_) return;
         if (++n % 200 == 0) setBusy("gamesScanning", QString::number(n) + " / " + QString::number(files.size()), n * 100 / int(files.size()));
         if (skip.contains(QDir::cleanPath(p))) continue;
+        // a BIOS folder inside the games folder: its files go to the BIOS folder too
+        if (const QString rel = QDir(root).relativeFilePath(p).toLower(); rel.startsWith("bios/") || rel.contains("/bios/")
+                                                                           || rel.startsWith("firmware/") || rel.contains("/firmware/")) {
+            const QString ext = QFileInfo(p).suffix().toLower();
+            if (ext != "txt" && ext != "md" && ext != "pdf" && ext != "jpg" && ext != "png" && ext != "nfo") biosFiles << p;
+            continue;
+        }
         const QString sys = detectSystem(p, root);
         if (sys.isEmpty()) continue;
         const QString stem = QFileInfo(p).completeBaseName();
+        // BIOS and add-on files (bios_E.sms, syscard3.pce, SGB1.sfc, gamegenie.nes, "[BIOS] ...") are no games:
+        // they go to the BIOS folder instead, where the emulators look for them
+        if (isBiosFile(p, root)) { biosFiles << p; continue; }
         const QStringList r = regionsOf(stem);
         QString region;
         for (const auto& x : r)
@@ -464,6 +545,8 @@ void GameLibrary::scanThread(QString root) {
         }
         found.push_back({p, sys, displayTitle(stem), region, QString()});
     }
+    copyBios(biosFiles);
+    groupDiscs(found);
     std::sort(found.begin(), found.end(), [](const Entry& a, const Entry& b) {
         const int c = QString::compare(a.title, b.title, Qt::CaseInsensitive);
         return c != 0 ? c < 0 : a.path < b.path;

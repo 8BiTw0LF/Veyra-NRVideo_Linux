@@ -5,6 +5,9 @@
 #include "Libretro.h"
 #include "CaptureSource.h"
 
+#include <archive.h>
+#include <archive_entry.h>
+
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -44,6 +47,24 @@ static void writeZip(const std::string& path, const std::string& name, const std
     const uint32_t cdSize = uint32_t(z.size()) - cd;
     le32(z, 0x06054b50); le16(z, 0); le16(z, 0); le16(z, 1); le16(z, 1); le32(z, cdSize); le32(z, cd); le16(z, 0);
     std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(z.data()), std::streamsize(z.size()));
+}
+
+// the same as a 7z file (libarchive writes it)
+static bool write7z(const std::string& path, const std::string& name, const std::vector<uint8_t>& data) {
+    archive* a = archive_write_new();
+    archive_write_set_format_7zip(a);
+    if (archive_write_open_filename(a, path.c_str()) != ARCHIVE_OK) { archive_write_free(a); return false; }
+    archive_entry* e = archive_entry_new();
+    archive_entry_set_pathname(e, name.c_str());
+    archive_entry_set_size(e, la_int64_t(data.size()));
+    archive_entry_set_filetype(e, AE_IFREG);
+    archive_entry_set_perm(e, 0644);
+    archive_write_header(a, e);
+    archive_write_data(a, data.data(), data.size());
+    archive_entry_free(e);
+    archive_write_close(a);
+    archive_write_free(a);
+    return true;
 }
 
 static bool runOnce(const std::string& core, const std::string& rom, const fs::path& dir, bool full) {
@@ -109,6 +130,9 @@ int main(int argc, char** argv) {
     std::string e;
     check(retro::zipRead(zip, list.empty() ? "" : list[0].name, back, e) && back == data, "zip: unpacked");
     check(runOnce(argv[1], zip, dir, false), "the zipped game runs");
+    const std::string sz = (dir / "game.7z").string();
+    check(write7z(sz, fs::path(argv[2]).filename().string(), data) && retro::zipList(sz).size() == 1, "7z: the list");
+    check(runOnce(argv[1], sz, dir, false), "the game in a 7z file runs");
     fs::remove_all(dir);
     std::printf(failures ? "%d FAILED\n" : "all ok\n", failures);
     return failures ? 1 : 0;

@@ -149,7 +149,8 @@
   "The zip file holds no game this emulator can run": "Zip-filen indeholder intet spil, som denne emulator kan køre",
   "Could not load the emulator core: ": "Kunne ikke indlæse emulatoren: ",
   "The game was closed": "Spillet blev lukket",
-  "Starting the game…": "Starter spillet…"
+  "Starting the game…": "Starter spillet…",
+  "Disc changed": "Disken er skiftet"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -395,7 +396,8 @@
   "The zip file holds no game this emulator can run": "Die Zip-Datei enthält kein Spiel, das dieser Emulator ausführen kann",
   "Could not load the emulator core: ": "Der Emulator konnte nicht geladen werden: ",
   "The game was closed": "Das Spiel wurde beendet",
-  "Starting the game…": "Das Spiel wird gestartet…"
+  "Starting the game…": "Das Spiel wird gestartet…",
+  "Disc changed": "Disc gewechselt"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -641,7 +643,8 @@
   "The zip file holds no game this emulator can run": "El archivo zip no contiene ningún juego que este emulador pueda ejecutar",
   "Could not load the emulator core: ": "No se pudo cargar el emulador: ",
   "The game was closed": "El juego se cerró",
-  "Starting the game…": "Iniciando el juego…"
+  "Starting the game…": "Iniciando el juego…",
+  "Disc changed": "Disco cambiado"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -887,7 +890,8 @@
   "The zip file holds no game this emulator can run": "Le fichier zip ne contient aucun jeu que cet émulateur peut lancer",
   "Could not load the emulator core: ": "Impossible de charger l'émulateur : ",
   "The game was closed": "Le jeu a été fermé",
-  "Starting the game…": "Lancement du jeu…"
+  "Starting the game…": "Lancement du jeu…",
+  "Disc changed": "Disque changé"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1133,7 +1137,8 @@
   "The zip file holds no game this emulator can run": "Zip-filen inneholder ikke noe spill denne emulatoren kan kjøre",
   "Could not load the emulator core: ": "Kunne ikke laste inn emulatoren: ",
   "The game was closed": "Spillet ble lukket",
-  "Starting the game…": "Starter spillet…"
+  "Starting the game…": "Starter spillet…",
+  "Disc changed": "Platen er byttet"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1379,7 +1384,8 @@
   "The zip file holds no game this emulator can run": "В zip-файле нет игры, которую может запустить этот эмулятор",
   "Could not load the emulator core: ": "Не удалось загрузить эмулятор: ",
   "The game was closed": "Игра закрыта",
-  "Starting the game…": "Запуск игры…"
+  "Starting the game…": "Запуск игры…",
+  "Disc changed": "Диск сменён"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1625,6 +1631,7 @@
   "The zip file holds no game this emulator can run": "Zip-filen innehåller inget spel som emulatorn kan köra",
   "Could not load the emulator core: ": "Kunde inte läsa in emulatorn: ",
   "The game was closed": "Spelet stängdes",
-  "Starting the game…": "Startar spelet…"
+  "Starting the game…": "Startar spelet…",
+  "Disc changed": "Skivan är bytt"
  }
 }

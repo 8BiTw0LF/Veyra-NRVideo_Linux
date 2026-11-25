@@ -8,6 +8,8 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "soundTrack": "Sound",
+        "gameDisc": "Change to disc %1 of %2",
         "subtitles": "Subtitles",
         "subsOff": "Off",
         "mediaAll": "All",
@@ -367,6 +369,8 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "soundTrack": "Lyd",
+        "gameDisc": "Skift til disk %1 af %2",
         "subtitles": "Undertekster",
         "subsOff": "Fra",
         "mediaAll": "Alle",
@@ -726,6 +730,8 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "soundTrack": "Ton",
+        "gameDisc": "Zu Disc %1 von %2 wechseln",
         "subtitles": "Untertitel",
         "subsOff": "Aus",
         "mediaAll": "Alle",
@@ -1061,6 +1067,8 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "soundTrack": "Audio",
+        "gameDisc": "Cambiar al disco %1 de %2",
         "subtitles": "Subtítulos",
         "subsOff": "Desactivados",
         "mediaAll": "Todo",
@@ -1396,6 +1404,8 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "soundTrack": "Son",
+        "gameDisc": "Passer au disque %1 sur %2",
         "subtitles": "Sous-titres",
         "subsOff": "Désactivés",
         "mediaAll": "Tout",
@@ -1731,6 +1741,8 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "soundTrack": "Ljud",
+        "gameDisc": "Byt till skiva %1 av %2",
         "subtitles": "Undertexter",
         "subsOff": "Av",
         "mediaAll": "Alla",
@@ -2066,6 +2078,8 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "soundTrack": "Lyd",
+        "gameDisc": "Bytt til plate %1 av %2",
         "subtitles": "Undertekster",
         "subsOff": "Av",
         "mediaAll": "Alle",
@@ -2401,6 +2415,8 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "soundTrack": "Звук",
+        "gameDisc": "Сменить на диск %1 из %2",
         "subtitles": "Субтитры",
         "subsOff": "Выкл.",
         "mediaAll": "Все",

@@ -1031,10 +1031,14 @@ void PlayerBridge::closeMedia() {
 
 bool PlayerBridge::openMedia(const QString& path, const QString& headers) {
     std::string err;
-    if (engine_.isOpen()) emit closing();
+    if (engine_.isOpen() && !reopening_) emit closing();
+    if (!reopening_) subData_.clear();
+    lastPath_ = path;
+    lastHeaders_ = headers;
+    engine_.setPreferredAudioLanguage(QSettings().value("audio/lang").toString().toStdString());
     // a server stream is not reopened after a restart (its token is in the headers)
     openFile_ = headers.isEmpty() ? path : QString();
-    streamTitle_.clear();
+    if (!reopening_) streamTitle_.clear();
     demoActive_ = false;
     retroActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
@@ -1882,7 +1886,7 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         // games (Libretro.cpp)
         "State saved", "State loaded", "No saved state yet", "Could not save the state", "Could not load the state",
         "This emulator cannot save states", "The emulator could not start the game (a missing BIOS file? See the BIOS folder)",
-        "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed",
+        "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed", "Disc changed",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

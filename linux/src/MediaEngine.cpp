@@ -140,7 +140,40 @@ bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGp
     }
     vIndex_ = av_find_best_stream(fmt_, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     if (vIndex_ >= 0 && (fmt_->streams[vIndex_]->disposition & AV_DISPOSITION_ATTACHED_PIC)) vIndex_ = -1;
-    aIndex_ = av_find_best_stream(fmt_, AVMEDIA_TYPE_AUDIO, -1, vIndex_, nullptr, 0);
+    // the sound tracks (language, format, channels); the one asked for, else FFmpeg's choice
+    {
+        std::vector<AudioTrack> tracks;
+        for (unsigned i = 0; i < fmt_->nb_streams; ++i) {
+            const AVStream* st = fmt_->streams[i];
+            if (st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) continue;
+            AudioTrack t;
+            t.index = int(i);
+            if (const AVDictionaryEntry* e = av_dict_get(st->metadata, "language", nullptr, 0)) t.lang = e->value;
+            if (const AVDictionaryEntry* e = av_dict_get(st->metadata, "title", nullptr, 0)) t.title = e->value;
+            const AVCodecDescriptor* d = avcodec_descriptor_get(st->codecpar->codec_id);
+            t.codec = d ? d->name : "";
+            // DTS: its profile says more ("DTS-HD MA"); the others by their name
+            if (st->codecpar->codec_id == AV_CODEC_ID_DTS)
+                if (const char* prof = avcodec_profile_name(st->codecpar->codec_id, st->codecpar->profile)) t.codec = prof;
+            if (st->codecpar->codec_id == AV_CODEC_ID_TRUEHD && st->codecpar->ch_layout.nb_channels >= 8) t.codec = "TrueHD";
+            t.channels = st->codecpar->ch_layout.nb_channels;
+            char lay[64] = {};
+            if (av_channel_layout_describe(&st->codecpar->ch_layout, lay, sizeof lay) > 0) t.layout = lay;
+            t.isDefault = st->disposition & AV_DISPOSITION_DEFAULT;
+            tracks.push_back(t);
+        }
+        std::lock_guard l(tracksM_);
+        audioTracks_ = std::move(tracks);
+    }
+    aIndex_ = -1;
+    if (preferredAudio_ >= 0 && preferredAudio_ < int(fmt_->nb_streams) && fmt_->streams[preferredAudio_]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+        aIndex_ = preferredAudio_;
+    preferredAudio_ = -1;
+    if (aIndex_ < 0 && !preferredAudioLang_.empty()) {
+        std::lock_guard l(tracksM_);
+        for (const auto& t : audioTracks_) if (t.lang == preferredAudioLang_) { aIndex_ = t.index; break; }
+    }
+    if (aIndex_ < 0) aIndex_ = av_find_best_stream(fmt_, AVMEDIA_TYPE_AUDIO, -1, vIndex_, nullptr, 0);
     if (vIndex_ < 0 && aIndex_ < 0) {
         error = "The file contains no playable audio or video";
         avformat_close_input(&fmt_);
@@ -246,6 +279,7 @@ void MediaEngine::close() {
     if (actx_) avcodec_free_context(&actx_);
     if (hwDevice_) av_buffer_unref(&hwDevice_);
     subs_.reset();
+    { std::lock_guard l(tracksM_); audioTracks_.clear(); }
     avformat_close_input(&fmt_);
     vIndex_ = aIndex_ = -1;
     playing_ = false;

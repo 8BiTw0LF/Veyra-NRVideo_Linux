@@ -596,6 +596,14 @@ int main(int argc, char** argv) {
     // Test hook: start a game from the Games page (VEYAMUX_TEST_GAME=<the game's file>)
     if (const QString tg = qEnvironmentVariable("VEYAMUX_TEST_GAME"); !tg.isEmpty())
         QTimer::singleShot(1500, [&games, tg] { games.play(tg); });
+    // (VEYAMUX_TEST_AUDIO=<stream>: switch to that sound track after 2 s)
+    if (const int ta = qEnvironmentVariableIntValue("VEYAMUX_TEST_AUDIO"); ta > 0)
+        QTimer::singleShot(2000, [&player, ta] {
+            const double before = player.position();
+            player.setAudioTrack(ta);
+            qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
+                  qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
+        });
     // (VEYAMUX_TEST_COVERS=1: fetch the box art at start)
     if (qEnvironmentVariableIsSet("VEYAMUX_TEST_COVERS")) QTimer::singleShot(2500, [&games] { games.downloadCovers(); });
     // --capture last: the card used last time (Steam / Game Mode shortcut)

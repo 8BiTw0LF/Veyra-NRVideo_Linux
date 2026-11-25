@@ -5,7 +5,8 @@
 #include "../third_party/libretro/libretro.h"
 
 #include <dlfcn.h>
-#include <zlib.h>
+#include <archive.h>
+#include <archive_entry.h>
 
 #include <algorithm>
 #include <atomic>
@@ -139,7 +140,14 @@ std::map<std::string, std::string> options;   // core option -> value
 std::string optionValue;                      // returned by GET_VARIABLE (must stay valid)
 std::string sysDirC, saveDirC, coreDirC, libPathC;
 bool shutdownAsked = false;
-std::vector<uint32_t> rowRgba;                // one source row as RGBA
+std::vector<uint32_t> rowRgba;
+// discs (a game on several CDs, opened as a .m3u playlist): the core's disc tray
+retro_set_eject_state_t diskEject = nullptr;
+retro_get_image_index_t diskGetIndex = nullptr;
+retro_set_image_index_t diskSetIndex = nullptr;
+retro_get_num_images_t diskCount = nullptr;
+int diskInsertIn = 0;            // frames until the tray closes again after a change
+std::atomic<int> disksNow{0}, diskNow{0};                // one source row as RGBA
 std::vector<int> xmap, ymap;
 
 // ------------------------------------------------------------------ core callbacks
@@ -198,6 +206,17 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS: case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
     case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE: case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
         return true;
+    case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION: *static_cast<unsigned*>(data) = 1; return true;
+    case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: {
+        const auto* d = static_cast<const retro_disk_control_callback*>(data);
+        diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
+        return true;
+    }
+    case RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE: {
+        const auto* d = static_cast<const retro_disk_control_ext_callback*>(data);
+        diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
+        return true;
+    }
     case RETRO_ENVIRONMENT_SET_HW_RENDER: case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
         return false;   // software cores only
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
@@ -428,6 +447,8 @@ void coreThread(Runner* r, Game g) {
     geometry = {};
     options.clear();
     shutdownAsked = false;
+    diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; diskInsertIn = 0;
+    disksNow = 0; diskNow = 0;
     sysDirC = g.systemDir; saveDirC = g.saveDir; libPathC = g.core;
     { std::error_code ec; fs::create_directories(g.systemDir, ec); fs::create_directories(g.saveDir, ec); fs::create_directories(g.stateDir, ec); }
     if (!core.load(g.core, err)) { fail(err); return; }
@@ -450,7 +471,7 @@ void coreThread(Runner* r, Game g) {
     // the file themselves)
     std::string romPath = g.rom, tmpFile;
     std::vector<uint8_t> romData;
-    if (extOf(g.rom) == "zip" && !extListed(exts, "zip")) {
+    if (isArchive(g.rom) && !extListed(exts, extOf(g.rom))) {
         const auto entries = zipList(g.rom);
         const ZipEntry* pick = nullptr;
         // (a core that names no file types: the largest file)
@@ -532,6 +553,8 @@ void coreThread(Runner* r, Game g) {
         for (auto& c : cmds) c();
         if (r->paused.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
         core.run();
+        if (diskCount) { disksNow = int(diskCount()); if (diskGetIndex) diskNow = int(diskGetIndex()); }
+        if (diskInsertIn > 0 && --diskInsertIn == 0 && diskEject) diskEject(false);   // the new disc is in: tray closed
         const auto period = std::chrono::duration_cast<clk::duration>(std::chrono::duration<double>(1.0 / fpsNow));
         next += period;
         const auto now = clk::now();
@@ -673,6 +696,23 @@ void loadState(int slot) {
 
 bool hasState(int slot) { std::error_code ec; return fs::exists(statePathFor(slot), ec); }
 
+int discCount() { return disksNow.load(); }
+int discIndex() { return diskNow.load(); }
+
+// the next disc: the tray opens, the disc is changed, and a second later it closes (the game sees the lid open and
+// shut, as on the console)
+void nextDisc() {
+    post([] {
+        if (!diskCount || !diskSetIndex || !diskEject || diskCount() < 2) return;
+        const unsigned n = diskCount(), i = diskGetIndex ? diskGetIndex() : 0;
+        diskEject(true);
+        diskSetIndex((i + 1) % n);
+        diskInsertIn = 60;
+        diskNow = int((i + 1) % n);
+        say("Disc changed");
+    });
+}
+
 void reset() {
     post([] { if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f(); });
 }
@@ -799,87 +839,55 @@ int Stream::height() const {
 }
 std::string Stream::name() const { const auto g = game(); return g.title.empty() ? baseName(g.rom) : g.title; }
 
-// ------------------------------------------------------------------ zip
+// ------------------------------------------------------------------ archives (zip, 7z, rar: libarchive)
 
 namespace {
-uint16_t le16(const uint8_t* p) { return uint16_t(p[0] | (p[1] << 8)); }
-uint32_t le32(const uint8_t* p) { return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24); }
-
-struct CdEntry { std::string name; uint16_t method = 0; uint32_t csize = 0, usize = 0, local = 0; };
-
-bool centralDirectory(std::ifstream& f, std::vector<CdEntry>& out) {
-    f.seekg(0, std::ios::end);
-    const int64_t size = f.tellg();
-    if (size < 22) return false;
-    const int64_t tail = std::min<int64_t>(size, 65557);
-    std::vector<uint8_t> t(static_cast<size_t>(tail));
-    f.seekg(size - tail);
-    f.read(reinterpret_cast<char*>(t.data()), tail);
-    if (!f) return false;
-    int64_t eocd = -1;
-    for (int64_t i = tail - 22; i >= 0; --i) if (le32(&t[size_t(i)]) == 0x06054b50u) { eocd = i; break; }
-    if (eocd < 0) return false;
-    const uint16_t count = le16(&t[size_t(eocd) + 10]);
-    const uint32_t cdSize = le32(&t[size_t(eocd) + 12]), cdOff = le32(&t[size_t(eocd) + 16]);
-    if (int64_t(cdOff) + cdSize > size || cdSize > (64u << 20)) return false;
-    std::vector<uint8_t> cd(cdSize);
-    f.seekg(cdOff);
-    f.read(reinterpret_cast<char*>(cd.data()), cdSize);
-    if (!f) return false;
-    size_t p = 0;
-    for (int i = 0; i < count && p + 46 <= cd.size(); ++i) {
-        if (le32(&cd[p]) != 0x02014b50u) return false;
-        CdEntry e;
-        e.method = le16(&cd[p + 10]);
-        e.csize = le32(&cd[p + 20]);
-        e.usize = le32(&cd[p + 24]);
-        const uint16_t nl = le16(&cd[p + 28]), xl = le16(&cd[p + 30]), cl = le16(&cd[p + 32]);
-        e.local = le32(&cd[p + 42]);
-        if (p + 46 + nl > cd.size()) return false;
-        e.name.assign(reinterpret_cast<const char*>(&cd[p + 46]), nl);
-        p += 46 + size_t(nl) + xl + cl;
-        if (!e.name.empty() && e.name.back() != '/') out.push_back(std::move(e));
-    }
-    return true;
-}
+struct Reader {
+    archive* a = archive_read_new();
+    Reader() { archive_read_support_filter_all(a); archive_read_support_format_zip(a); archive_read_support_format_7zip(a);
+               archive_read_support_format_rar(a); archive_read_support_format_rar5(a); }
+    ~Reader() { archive_read_free(a); }
+    bool open(const std::string& path) { return archive_read_open_filename(a, path.c_str(), 1 << 16) == ARCHIVE_OK; }
+};
 } // namespace
 
+bool isArchive(const std::string& path) {
+    const std::string e = extOf(path);
+    return e == "zip" || e == "7z" || e == "rar";
+}
+
 std::vector<ZipEntry> zipList(const std::string& zipPath) {
-    std::ifstream f(zipPath, std::ios::binary);
-    std::vector<CdEntry> cd;
     std::vector<ZipEntry> out;
-    if (!f || !centralDirectory(f, cd)) return out;
-    for (const auto& e : cd) out.push_back({e.name, e.usize});
+    Reader r;
+    if (!r.open(zipPath)) return out;
+    archive_entry* e;
+    while (archive_read_next_header(r.a, &e) == ARCHIVE_OK) {
+        if (archive_entry_filetype(e) == AE_IFREG && archive_entry_pathname(e))
+            out.push_back({archive_entry_pathname(e), uint64_t(std::max<la_int64_t>(0, archive_entry_size(e)))});
+        archive_read_data_skip(r.a);
+    }
     return out;
 }
 
 bool zipRead(const std::string& zipPath, const std::string& name, std::vector<uint8_t>& out, std::string& error) {
-    std::ifstream f(zipPath, std::ios::binary);
-    std::vector<CdEntry> cd;
-    if (!f || !centralDirectory(f, cd)) { error = "Not a zip file: " + zipPath; return false; }
-    const CdEntry* e = nullptr;
-    for (const auto& c : cd) if (c.name == name) e = &c;
-    if (!e) { error = name + " is not in the zip file"; return false; }
-    if (e->usize > (1u << 30) || e->csize > (1u << 30)) { error = "The file in the zip is too large"; return false; }
-    uint8_t lh[30];
-    f.seekg(e->local);
-    f.read(reinterpret_cast<char*>(lh), 30);
-    if (!f || le32(lh) != 0x04034b50u) { error = "Broken zip file"; return false; }
-    f.seekg(int64_t(e->local) + 30 + le16(lh + 26) + le16(lh + 28));
-    std::vector<uint8_t> comp(e->csize);
-    f.read(reinterpret_cast<char*>(comp.data()), e->csize);
-    if (!f) { error = "Broken zip file"; return false; }
-    if (e->method == 0) { out = std::move(comp); return true; }
-    if (e->method != 8) { error = "The zip file uses a packing method VeyAmux cannot unpack"; return false; }
-    out.assign(e->usize, 0);
-    z_stream z{};
-    if (inflateInit2(&z, -MAX_WBITS) != Z_OK) { error = "zlib"; return false; }
-    z.next_in = comp.data(); z.avail_in = uInt(comp.size());
-    z.next_out = out.data(); z.avail_out = uInt(out.size());
-    const int r = inflate(&z, Z_FINISH);
-    inflateEnd(&z);
-    if (r != Z_STREAM_END || z.total_out != e->usize) { error = "Broken zip file"; return false; }
-    return true;
+    Reader r;
+    if (!r.open(zipPath)) { error = "Not an archive VeyAmux can unpack: " + zipPath; return false; }
+    archive_entry* e;
+    while (archive_read_next_header(r.a, &e) == ARCHIVE_OK) {
+        if (!archive_entry_pathname(e) || name != archive_entry_pathname(e)) { archive_read_data_skip(r.a); continue; }
+        if (archive_entry_size(e) > (la_int64_t(1) << 30)) { error = "The file in the archive is too large"; return false; }
+        out.clear();
+        out.reserve(size_t(std::max<la_int64_t>(0, archive_entry_size(e))));
+        uint8_t buf[1 << 16];
+        for (;;) {
+            const la_ssize_t n = archive_read_data(r.a, buf, sizeof buf);
+            if (n == 0) return true;
+            if (n < 0) { error = std::string("Broken archive: ") + archive_error_string(r.a); return false; }
+            out.insert(out.end(), buf, buf + n);
+        }
+    }
+    error = name + " is not in the archive";
+    return false;
 }
 
 } // namespace veyamux::retro
