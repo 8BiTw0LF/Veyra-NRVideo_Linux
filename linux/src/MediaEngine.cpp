@@ -406,10 +406,10 @@ void MediaEngine::captureLoop() {
             lastShown = clk::now();
         }
         if (toGpu) {
-            // A picture that hardly moves (a console's menu or dashboard, a pause screen: a few new pictures a second or
+            // A picture that hardly moves (a console's menu or dashboard, a pause screen: a few new pictures a second (under 12) or
             // none) has no rhythm to even out; held for one, each new picture would only come later. Straight through.
             const auto ct = cap_->content();
-            const bool lowMotion = ct.staticPicture || (ct.contentFps > 0.5 && ct.contentFps < 20.0);
+            const bool lowMotion = ct.staticPicture || (ct.contentFps > 0.5 && ct.contentFps < 12.0);
             if (pacingRepair_.load() && skipRepeats_.load() && cb_.onLiveFrame && !lowMotion) {
                 // even out a locked game's uneven showing: hand the picture to the pacer thread with its due time
                 if (pacingReset_.exchange(false)) { repair.reset(); lateness.clear(); holdMs = 0.0; }

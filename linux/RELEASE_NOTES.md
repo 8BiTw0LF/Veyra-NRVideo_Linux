@@ -3,7 +3,7 @@
 ### Fix
 - **Less delay on a console's dashboard and menus.** A picture that hardly moves (the PS5 dashboard, a pause screen)
   only gets a few new pictures a second. *Even out frame pacing* still held each of them for an even rhythm, so the
-  delay figure rose to about 60 ms and the menu felt slow. Pictures that hardly move now go straight through; in a
+  delay figure rose to about 60 ms and the menu felt slow. Pictures that hardly move (under 12 new pictures a second) now go straight through; in a
   game the pacing works as before.
 - The delay figure says when it comes from a still picture (it is then based on only a few pictures).
 

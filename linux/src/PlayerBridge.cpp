@@ -825,7 +825,7 @@ QString PlayerBridge::delayText(double ms, bool live, QSize size) {
     QString still;
     if (live) {
         const auto c = engine_.liveContent();
-        if (c.staticPicture || (c.contentFps > 0.5 && c.contentFps < 20.0))
+        if (c.staticPicture || (c.contentFps > 0.5 && c.contentFps < 12.0))
             still = L(" · still picture, the figure is from a few pictures", " · stillestående billede, tallet bygger på få billeder");
     }
     return (live ? L("Delay in VeyAmux: %1 ms", "Forsinkelse i VeyAmux: %1 ms") : L("Processing: %1 ms per picture", "Behandling: %1 ms pr. billede"))
