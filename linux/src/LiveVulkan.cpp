@@ -231,6 +231,8 @@ void LiveVulkan::onBeforeRendering() {
         pace_.push_back(p);
         while (pace_.size() > 900) pace_.pop_front();
     }
+    if (isNew && current_.captured.time_since_epoch().count())
+        drawnCaptured_ = std::chrono::duration_cast<std::chrono::nanoseconds>(current_.captured.time_since_epoch()).count();
     if (current_.reset) { chain_->resetHistory(); current_.reset = false; }   // a video file was seeked
     LiveInput in;
     switch (current_.fmt) {

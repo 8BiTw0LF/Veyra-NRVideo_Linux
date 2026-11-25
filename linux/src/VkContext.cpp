@@ -169,6 +169,7 @@ bool VkContext::finishInit(std::string& error, bool shared) {
     VkPhysicalDeviceCooperativeMatrixMaintenance1FeaturesEXT fCoopM1{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_MAINTENANCE_1_FEATURES_EXT};
     VkPhysicalDeviceShaderFloat8FeaturesEXT fF8{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT8_FEATURES_EXT};
     VkPhysicalDevicePerformanceQueryFeaturesKHR fPerf{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR};
+    VkPhysicalDevicePresentWaitFeaturesKHR fPresentWait{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR};
     caps_ = Caps{};
     caps_.vendor = dp.vendorID;
     caps_.intDot = v13 && f13.shaderIntegerDotProduct;
@@ -189,8 +190,12 @@ bool VkContext::finishInit(std::string& error, bool shared) {
             const bool hCoopM1 = hCoop && has(VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME);
             const bool hF8 = has(VK_EXT_SHADER_FLOAT8_EXTENSION_NAME);
             const bool hPerf = kDebugBuildCtx && has(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME);
+            // capture-to-screen timing (VEYAMUX_SCREEN_TIMING=1, VeyAmux Debug): present IDs + waiting for a present
+            const bool hPW = std::getenv("VEYAMUX_SCREEN_TIMING") && std::strcmp(std::getenv("VEYAMUX_SCREEN_TIMING"), "1") == 0 &&
+                             has(VK_KHR_PRESENT_ID_EXTENSION_NAME) && has(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
             if (hAnti) link(&fAntiLag);
-            if (hLL) link(&fPresentId);
+            if (hLL || hPW) link(&fPresentId);
+            if (hPW) link(&fPresentWait);
             if (hCoop) link(&fCoop);
             if (hCoopM1) link(&fCoopM1);
             if (hF8) link(&fF8);
@@ -200,11 +205,19 @@ bool VkContext::finishInit(std::string& error, bool shared) {
             void** dtail = v13 ? &f13.pNext : v12 ? &f12.pNext : &f11.pNext;
             auto enable = [&](void* s) { static_cast<VkBaseOutStructure*>(s)->pNext = nullptr; *dtail = s; dtail = reinterpret_cast<void**>(&static_cast<VkBaseOutStructure*>(s)->pNext); };
             if (hAnti && fAntiLag.antiLag) { enable(&fAntiLag); devExts.push_back(VK_AMD_ANTI_LAG_EXTENSION_NAME); caps_.antiLag = true; }
+            bool presentIdOn = false;
             if (hLL && fPresentId.presentId && v12 && f12.timelineSemaphore) {
                 enable(&fPresentId);
+                presentIdOn = true;
                 devExts.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
                 devExts.push_back(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);
                 caps_.lowLatency2 = true;
+            }
+            if (hPW && fPresentId.presentId && fPresentWait.presentWait) {
+                if (!presentIdOn) { enable(&fPresentId); devExts.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME); }
+                enable(&fPresentWait);
+                devExts.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+                caps_.presentWait = true;
             }
             if (hCoop && fCoop.cooperativeMatrix) {
                 fCoop.cooperativeMatrixRobustBufferAccess = VK_FALSE;
@@ -238,7 +251,8 @@ bool VkContext::finishInit(std::string& error, bool shared) {
         devExts.erase(std::remove_if(devExts.begin(), devExts.end(), [](const char* e) {
             for (const char* o : {VK_AMD_ANTI_LAG_EXTENSION_NAME, VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_NV_LOW_LATENCY_2_EXTENSION_NAME,
                                   VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, VK_EXT_COOPERATIVE_MATRIX_MAINTENANCE_1_EXTENSION_NAME,
-                                  VK_EXT_SHADER_FLOAT8_EXTENSION_NAME, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME})
+                                  VK_EXT_SHADER_FLOAT8_EXTENSION_NAME, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME,
+                                  VK_KHR_PRESENT_WAIT_EXTENSION_NAME})
                 if (std::strcmp(e, o) == 0) return true;
             return false;
         }), devExts.end());
@@ -253,8 +267,8 @@ bool VkContext::finishInit(std::string& error, bool shared) {
         device_ = VK_NULL_HANDLE;
     }
     if (device_ == VK_NULL_HANDLE) VK_TRY(vkCreateDevice(phys_, &dci, nullptr, &device_), "vkCreateDevice");
-    std::fprintf(stderr, "Vulkan extras: anti-lag %d, low-latency2 %d, cooperative matrix %d (maintenance1 %d, conversions %d, fp8 %d), int8 dot %d, performance query %d\n",
-          caps_.antiLag, caps_.lowLatency2, caps_.coopMatrix, caps_.coopMatrixM1, caps_.coopConversions, caps_.float8, caps_.intDot, caps_.perfQuery);
+    std::fprintf(stderr, "Vulkan extras: anti-lag %d, low-latency2 %d, present wait %d, cooperative matrix %d (maintenance1 %d, conversions %d, fp8 %d), int8 dot %d, performance query %d\n",
+          caps_.antiLag, caps_.lowLatency2, caps_.presentWait, caps_.coopMatrix, caps_.coopMatrixM1, caps_.coopConversions, caps_.float8, caps_.intDot, caps_.perfQuery);
     vkGetDeviceQueue(device_, family_, 0, &queue_);
 
     // Luma plane: R16F when it is filterable + storage-capable, otherwise R32F.

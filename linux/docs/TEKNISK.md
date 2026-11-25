@@ -672,6 +672,14 @@ dets NOTICE.md (eksplicit register for pre-passets vægte, `QuadReadAcross*` som
   matrixenhederne i almindelig HLSL; med `VEYAMUX_FSR4_FP8=emulate` (og `VEYAMUX_FENCE_TIMEOUT_S=3000`, for den er langsom)
   kører de på lavapipe og sammenlignes med INT8.
 
+## Capture → skærm (VeyAmux Debug)
+`src/ScreenTiming.cpp`. VeyAmux' egen forsinkelse slutter, når billedet er færdigt på GPU'en; tiden derefter (swapchain,
+køen til skærmen, VSync) er dér, Anti-Lag/Reflex og VSync gør en forskel. Med Debug-kontakten *Measure to the screen*
+(`VEYAMUX_SCREEN_TIMING=1`, genstart) slår enheden VK_KHR_present_id + VK_KHR_present_wait til, VeyAmux' eget Vulkan-lag
+(`src/vklayer`) indlæses på alle GPU'er og giver hver present et ID, og en tråd venter på present'en efter hvert nyt
+capture-billede: capture-tidsstempel → present færdig. Benchmarken får kolonnen *to screen* (`screen_ms` i CSV'en), og
+rapporten et gennemsnit. Med Lossless Scaling er det det første billede, lsfg-vk viser efter VeyAmux'.
+
 ## Grafikkortets hardwaretællere (VeyAmux Debug)
 `src/GpuCounters.cpp`. VK_KHR_performance_query (RADV på RDNA 4 og andre nyere kort). Kun tællere med scope COMMAND,
 der kan måles i ét pass (Qt sender kommandobufferen, så multi-pass-submit-info kan ikke tilføjes), de mest sigende
@@ -681,7 +689,7 @@ holdes til VeyAmux lukker. Gennemsnit kommer i rapporten og som `counters`-kolon
 ## Miljøvariabler
 `VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_HDR_MODE=hdr10|scrgb` · `VEYAMUX_GAMESCOPE=0` · `VEYAMUX_AUDIO_MS=<ms>` ·
 `--fullscreen` · `--capture last` · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) ·
-`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1|0` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt) · `VEYAMUX_VK_OPTIONAL=0` (ingen ekstra Vulkan-udvidelser) · `VEYAMUX_LOW_LATENCY_LAYER=0|1` · `VEYAMUX_FSR4_DIR=<mappe>` · `VEYAMUX_FSR4_FP8=0|emulate` · `VEYAMUX_FENCE_TIMEOUT_S=<s>`
+`VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1|0` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_PS_SWDECODE=1` (Remote Play: software-afkodning) · `VEYAMUX_FILE_GPU=0` (videofiler: gammel CPU-vej) · `VEYAMUX_CAPTURE_COPY=1` (capture: kopi som før) · `VEYAMUX_DEDUP_SPARSE=1` (dublet-fjernelse med det gamle glisne gitter) · `VEYAMUX_NO_UPDATE_CHECK=1` (ingen automatisk søgning efter opdateringer) · `VEYAMUX_DEBUG_PACE=1` (logger for hvert billede: capture → pacer → renderer → tegning) · `VEYAMUX_QT_UPDATE=1` (tegn via Qt's update() som før, der venter på compositorens frame callback) · `VEYAMUX_GAMESCOPE_KEEPALIVE=0` (gamescope: slå hold-markøren-i-live fra) · `VEYAMUX_BENCH_FAST=1` (VeyAmux Debug: en meget kort benchmark, til test) · `VEYAMUX_FSR_OWN_MOTION=1` (FSR 3.1 beregner sin egen bevægelse som før 1.9 i stedet for at genbruge kædens fælles bevægelsesfelt) · `VEYAMUX_VK_OPTIONAL=0` (ingen ekstra Vulkan-udvidelser) · `VEYAMUX_LOW_LATENCY_LAYER=0|1` · `VEYAMUX_FSR4_DIR=<mappe>` · `VEYAMUX_FSR4_FP8=0|emulate` · `VEYAMUX_FENCE_TIMEOUT_S=<s>` · `VEYAMUX_SCREEN_TIMING=1` (Debug: capture → skærm)
 
 **VeyAmux Debug** bygges med `VEYAMUX_FLAVOR=debug scripts/build-appimage.sh` (CMake: `-DVEYAMUX_DEBUG_BUILD=ON`, RelWithDebInfo, `VEYAMUX_BUILD_NUMBER`). Den hedder `VeyAmux-Debug` over for Qt (egne indstillinger og datamappe), opdaterer sig fra pre-releasen `debug-build`, som CI flytter ved hvert push til main, og har Debug-fanen (src/PlayerBridgeDebug.cpp, src/Diagnostics.cpp). CI-jobbet `sanitizers` bygger testene med ASan + UBSan. · `--tab=N` (åbn menuen på fane N, med `--panel`) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 

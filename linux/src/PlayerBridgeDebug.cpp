@@ -8,6 +8,7 @@
 // time of every stage, frame rate, jitter, delay, CPU use and memory. It answers "what does each setting cost on this
 // machine" (MarkStokes-outlook/VeyAmux#13) and is written as a CSV next to the reports.
 #include "PlayerBridge.h"
+#include "ScreenTiming.h"
 #include "CaptureSource.h"
 #include "Diagnostics.h"
 #include "LosslessScaling.h"
@@ -106,6 +107,8 @@ const Switch kSwitches[] = {
     {"VEYAMUX_FILE_GPU", "0", "Video files on the CPU path", "instead of the GPU (live) path"},
     {"VEYAMUX_PS_SWDECODE", "1", "Remote Play: decode on the CPU", "instead of VA-API"},
     {"VEYAMUX_GAMESCOPE_KEEPALIVE", "0", "gamescope: no pointer keep-alive", "to test whether frame generation stops without it"},
+    {"VEYAMUX_SCREEN_TIMING", "1", "Measure to the screen",
+     "capture → picture on screen (VK_KHR_present_wait through VeyAmux's Vulkan layer): the benchmark's \"to screen\" column and the report"},
     {"VEYAMUX_VSYNC", "1", "VSync on", "the UI waits for the display (off by default, on with Lossless Scaling; VEYAMUX_VSYNC=0 keeps it off)"},
 };
 
@@ -453,8 +456,12 @@ void PlayerBridge::startBenchmark() {
         bench_.steps.back().lowLatency = 0;
         add(T, m + " on", nullptr);
         bench_.steps.back().lowLatency = 1;
-        bench_.notes << L("The delay column ends when VeyAmux's picture is finished; the time it then waits for the screen (what Anti-Lag and Reflex shorten) is not in it.",
-                          "Forsinkelseskolonnen slutter, når VeyAmux' billede er færdigt; tiden det derefter venter på skærmen (det Anti-Lag og Reflex forkorter) er ikke med.");
+        if (screenTiming_ && screenTiming_->available())
+            bench_.notes << L("\"To screen\" goes from the capture timestamp until the picture's present is complete (VK_KHR_present_wait), so it includes what Anti-Lag, Reflex and VSync change. With Lossless Scaling it is the first picture lsfg-vk shows after VeyAmux's.",
+                              "\"Til skærm\" går fra capture-tidsstemplet, til billedets present er færdigt (VK_KHR_present_wait), så det er med, hvad Anti-Lag, Reflex og VSync ændrer. Med Lossless Scaling er det det første billede, lsfg-vk viser efter VeyAmux'.");
+        else
+            bench_.notes << L("The delay column ends when VeyAmux's picture is finished; the time it then waits for the screen (what Anti-Lag and Reflex shorten) is not in it. Debug → \"Measure to the screen\" adds it.",
+                              "Forsinkelseskolonnen slutter, når VeyAmux' billede er færdigt; tiden det derefter venter på skærmen (det Anti-Lag og Reflex forkorter) er ikke med. Debug → \"Measure to the screen\" tager det med.");
     } else {
         bench_.notes << L("Low latency left out: this GPU/driver has neither AMD Anti-Lag nor NVIDIA Reflex.",
                           "Lav forsinkelse udeladt: grafikkortet/driveren har hverken AMD Anti-Lag eller NVIDIA Reflex.");
@@ -555,6 +562,7 @@ void PlayerBridge::benchTick() {
         bench_.cpuTicks0 = cpuTicks();
         bench_.threads0 = threadTicks();
         liveVk_->resetGpuSums();
+        if (screenTiming_ && screenTiming_->available()) screenTiming_->reset();
         return;
     }
     // phase 2: measuring
@@ -564,6 +572,10 @@ void PlayerBridge::benchTick() {
     if (t - bench_.t0 < kMeasure) return;
     const double secs = (t - bench_.t0) / 1000.0;
     if (r.samples) r.delay /= r.samples;
+    if (screenTiming_ && screenTiming_->available()) {
+        const auto st = screenTiming_->sums();
+        r.screen = st.n ? st.total / st.n : -1;
+    }
     const auto g = liveVk_->gpuSums();
     r.gpuFrames = g.frames;
     if (gpuCounters_) {
@@ -645,11 +657,12 @@ void PlayerBridge::finishBenchmark() {
         o << "# " << buildInfo() << " · " << bench_.source << " · "
           << (liveVk_ && liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
         for (const QString& n : bench_.notes) o << "# " << n << "\n";
-        o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,gpu_framegen,"
+        o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,screen_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,gpu_framegen,"
              "gpu_frames,cpu_pct,rss_mb,threads,flag,counters\n";
         for (const auto& b : bench_.rows) {
             o << '"' << b.section << "\",\"" << b.name << "\",\"" << b.source << '"';
-            for (double v : {b.fps, b.frameMs, b.jitter, b.p99, b.delay, b.gpu}) o << ',' << QString::number(v, 'f', 3);
+            for (double v : {b.fps, b.frameMs, b.jitter, b.p99, b.delay}) o << ',' << QString::number(v, 'f', 3);
+            o << ',' << (b.screen < 0 ? QString() : QString::number(b.screen, 'f', 3)) << ',' << QString::number(b.gpu, 'f', 3);
             for (double v : b.stages) o << ',' << (v < 0 ? QString() : QString::number(v, 'f', 3));
             o << ',' << b.gpuFrames << ',' << QString::number(b.cpu, 'f', 1) << ',' << QString::number(b.rssMb, 'f', 0)
               << ",\"" << b.threads << "\"," << b.flag << ",\"" << b.counters << "\"\n";
@@ -716,12 +729,13 @@ QString PlayerBridge::benchTable() const {
         if (b.section != section) {
             section = b.section;
             r << "" << "**" + section + "**" << ""
-              << "| Step | Source | fps | jitter ms | 99 % ms | delay ms | GPU ms | + vs plain | input | denoise/AF | AA | upscale | finish | output | frame gen | CPU % | busiest threads (% of a core) | |"
-              << "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|";
+              << "| Step | Source | fps | jitter ms | 99 % ms | delay ms | to screen ms | GPU ms | + vs plain | input | denoise/AF | AA | upscale | finish | output | frame gen | CPU % | busiest threads (% of a core) | |"
+              << "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|";
         }
         const double ref = b.name.startsWith("1080p") ? baseLow : base;
-        QString line = QStringLiteral("| %1 | %2 | %3 | %4 | %5 | %6 | %7 | %8").arg(b.name, b.source).arg(b.fps, 0, 'f', 1).arg(b.jitter, 0, 'f', 2)
-                           .arg(b.p99, 0, 'f', 1).arg(b.delay, 0, 'f', 1).arg(b.gpu, 0, 'f', 2)
+        QString line = QStringLiteral("| %1 | %2 | %3 | %4 | %5 | %6 | %7 | %8 | %9").arg(b.name, b.source).arg(b.fps, 0, 'f', 1).arg(b.jitter, 0, 'f', 2)
+                           .arg(b.p99, 0, 'f', 1).arg(b.delay, 0, 'f', 1)
+                           .arg(b.screen < 0 ? QStringLiteral("–") : QString::number(b.screen, 'f', 1)).arg(b.gpu, 0, 'f', 2)
                            .arg(ref >= 0 && b.gpu >= 0 ? QStringLiteral("%1%2").arg(b.gpu - ref >= 0 ? "+" : "").arg(b.gpu - ref, 0, 'f', 2) : QStringLiteral("–"));
         for (double v : b.stages) line += v < 0 ? QStringLiteral(" | –") : QStringLiteral(" | %1").arg(v, 0, 'f', 2);
         line += QStringLiteral(" | %1 | %2 | %3 |").arg(b.cpu, 0, 'f', 0).arg(b.threads, b.flag == "uneven" ? "⚠ uneven" : b.flag);

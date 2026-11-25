@@ -5,6 +5,7 @@
 // The performance report is text to paste into a bug report: the graphics card, the settings that matter and what
 // VeyAmux measured itself. Nothing personal: no file or folder names, no account, no address.
 #include "PlayerBridge.h"
+#include "ScreenTiming.h"
 #include "CaptureSource.h"
 #include "LosslessScaling.h"
 
@@ -194,6 +195,16 @@ QString PlayerBridge::perfReport() {
                  .arg(fp8 ? QString("possible") : "not possible (" + why + ")")
                  .arg(liveVk_->fsr4Path().isEmpty() ? QString("-") : liveVk_->fsr4Path() +
                       (liveVk_->fsr4Fp8Why().isEmpty() ? QString() : " (" + liveVk_->fsr4Fp8Why() + ")"));
+    }
+    if (screenTiming_) {
+        if (screenTiming_->available()) {
+            const auto st = screenTiming_->sums();
+            r << QString("Capture -> on screen: %1 ms average over %2 pictures since the last benchmark step%3")
+                     .arg(st.n ? st.total / st.n : 0.0, 0, 'f', 1).arg(st.n)
+                     .arg(st.timeouts ? QString(", %1 presents never completed").arg(st.timeouts) : QString());
+        } else {
+            r << "Capture -> on screen: not measured, " + screenTiming_->why();
+        }
     }
     QString fg = "off";
     if (s_.lsfgFg()) fg = QString("Lossless Scaling %1x (lsfg-vk %2, %3)").arg(s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : 2)

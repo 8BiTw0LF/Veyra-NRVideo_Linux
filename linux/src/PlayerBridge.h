@@ -33,6 +33,7 @@
 #include <memory>
 
 class LowLatency;
+class ScreenTiming;
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
@@ -397,6 +398,7 @@ public:
         emit enhanceChanged();
     }
     QString lowLatencyMethod() const { return lowLatency_ ? lowLatency_->method() : QString(); }
+    void setScreenTiming(ScreenTiming* t) { screenTiming_ = t; }
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
         if (l) { fsr4Dir_ = fsr4InstalledDir(); l->setFsr4Dir(fsr4Dir_); }
@@ -712,6 +714,7 @@ private:
     struct BenchRow {
         QString section, name, source, threads, flag;
         double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
+        double screen = -1;         // capture -> on screen (ScreenTiming), -1 when not measured
         std::array<double, veyamux::GpuTimer::kStages> stages{};
         int samples = 0, gpuFrames = 0;
         QString counters;           // hardware counters (when switched on): "name=value unit; .."
@@ -741,6 +744,7 @@ private:
     } bench_;
     QString lastReport_;
     LowLatency* lowLatency_ = nullptr;
+    ScreenTiming* screenTiming_ = nullptr;   // VeyAmux Debug: capture -> on screen (VEYAMUX_SCREEN_TIMING=1)
     bool gpuCounters_ = false;
     bool fsr4Busy_ = false;
     QString fsr4Text_;

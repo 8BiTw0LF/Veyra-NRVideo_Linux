@@ -9,7 +9,10 @@
 //   - vkQueuePresentKHR: chains VkPresentIdKHR with an increasing ID for that swapchain (unless one is there already).
 // VeyAmux itself (src/LowLatency.cpp) turns low-latency mode on, sleeps and sets the markers through the driver, and
 // reads the swapchain and the next present ID from here (veyamux_ll_swapchain / veyamux_ll_next_present_id).
-// Everything else passes straight through. Without VK_NV_low_latency2 on the device the layer changes nothing.
+// VeyAmux Debug's capture-to-screen timing (src/ScreenTiming.cpp, VEYAMUX_SCREEN_TIMING=1) uses the same present IDs
+// to wait (VK_KHR_present_wait) until each picture is on the screen; then the layer is loaded on any GPU.
+// Everything else passes straight through. Without VK_NV_low_latency2 or VK_KHR_present_id on the device the layer
+// changes nothing.
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 
@@ -134,7 +137,11 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice dev, const VkSwapchai
                                                   VkSwapchainKHR* out) {
     DeviceData d;
     if (!device(dev, d) || !d.createSwapchain) return VK_ERROR_INITIALIZATION_FAILED;
-    if (!d.lowLatency) return d.createSwapchain(dev, ci, alloc, out);
+    if (!d.lowLatency) {   // present IDs only (capture-to-screen timing): remember the swapchain
+        const VkResult r = d.createSwapchain(dev, ci, alloc, out);
+        if (r == VK_SUCCESS && d.presentId) gSwapchain = *out;
+        return r;
+    }
     VkSwapchainCreateInfoKHR c = *ci;
     VkSwapchainLatencyCreateInfoNV lat{VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV};
     lat.latencyModeEnable = VK_TRUE;

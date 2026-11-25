@@ -52,6 +52,7 @@ public:
     struct Caps {
         bool antiLag = false;            // VK_AMD_anti_lag (RADV from Mesa 26.3, AMD's own drivers)
         bool lowLatency2 = false;        // VK_NV_low_latency2 + VK_KHR_present_id (NVIDIA Reflex)
+        bool presentWait = false;        // VK_KHR_present_id + VK_KHR_present_wait (capture-to-screen timing, debug)
         bool coopMatrix = false;         // VK_KHR_cooperative_matrix (matrix units: RDNA 3/4, NVIDIA tensor cores, Intel XMX)
         bool coopMatrixM1 = false;       // VK_EXT_cooperative_matrix_maintenance1 (per-element ops, conversions)
         bool coopConversions = false;    //   ... with cooperativeMatrixConversions (accumulator -> A/B: FSR 4 FP8)

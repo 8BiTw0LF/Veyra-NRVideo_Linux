@@ -36,6 +36,8 @@ public:
     // VeyAmux Debug: hardware counters around the live work (EnhanceChain / GpuCounters)
     bool countersAvailable() const;
     void setFsr4Dir(const QString& dir);
+    // ScreenTiming: the capture time (steady_clock ns) of a new picture drawn in the frame being rendered, 0 if none
+    int64_t takeDrawnCaptured() { return drawnCaptured_.exchange(0); }
     bool fsr4Supported(QString* why) const;
     bool fsr4Fp8Supported(QString* why) const;
     QString fsr4Path() const;      // "FP8" / "INT8" while FSR 4 runs
@@ -94,6 +96,7 @@ private:
     std::string error_;
     std::string upError_;
     std::atomic<bool> active_{false};
+    std::atomic<int64_t> drawnCaptured_{0};   // capture time (steady_clock ns) of the new picture drawn in this frame
     std::atomic<uint64_t> image_{0}, gen_{0};
     std::atomic<int> imgW_{0}, imgH_{0};
     std::atomic<double> lastMs_{0};

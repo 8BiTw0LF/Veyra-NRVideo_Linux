@@ -1,5 +1,6 @@
 #include "LiveVulkan.h"
 #include "LowLatency.h"
+#include "ScreenTiming.h"
 #include "LosslessScaling.h"
 #include "PlayerBridge.h"
 #include "Diagnostics.h"
@@ -314,7 +315,9 @@ int main(int argc, char** argv) {
         // swapchain). Only on a PC with an NVIDIA GPU, not with Lossless Scaling (lsfg-vk presents its own frames).
         // VEYAMUX_LOW_LATENCY_LAYER=0 leaves it out, =1 loads it on any GPU (a test of the pass-through).
         const QString llEnv = qEnvironmentVariable("VEYAMUX_LOW_LATENCY_LAYER");
-        if (!lsfgEnabled && llEnv != "0" && (hasNvidiaGpu() || llEnv == "1")) {
+        // VeyAmux Debug's capture-to-screen timing (VEYAMUX_SCREEN_TIMING=1) needs the layer's present IDs on any GPU
+        const bool screenTiming = veyamux::diag::kDebugBuild && qEnvironmentVariable("VEYAMUX_SCREEN_TIMING") == "1";
+        if ((!lsfgEnabled && llEnv != "0" && (hasNvidiaGpu() || llEnv == "1")) || screenTiming) {
             const QString dir = findLayerDir();
             if (!dir.isEmpty()) {
                 // a relaunch inherits the old value: drop earlier VeyAmux layer folders (old AppImage mounts) first
@@ -414,6 +417,7 @@ int main(int argc, char** argv) {
         if (live->init(err)) { player.setLiveVulkan(live.get()); player.setGpuDevice(QString::fromStdString(vkCtx->deviceName())); }
         else { qWarning("Zero-copy live path disabled: %s", err.c_str()); live.reset(); }
         player.setLowLatency(new LowLatency(win, vkCtx.get(), lowLatencyLayer, &player));
+        if (live) player.setScreenTiming(new ScreenTiming(win, vkCtx.get(), lowLatencyLayer, live.get(), &player));
     }
     player.setWindow(win);
     player.setHdrOutputState(hdrOutSetting, false);   // until the swapchain test below says otherwise
