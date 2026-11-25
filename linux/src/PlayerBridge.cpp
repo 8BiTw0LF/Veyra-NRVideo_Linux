@@ -144,6 +144,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         checkOverRefresh();
         updatePixelGrid();
         pollRetroMessage();
+        updateSubtitle();
         if (demoActive_) {
             const double p = veyamux::demo::progress();
             if (p != demoProgress_) {
@@ -1057,6 +1058,7 @@ bool PlayerBridge::openMedia(const QString& path, const QString& headers) {
     engine_.setMuted(muted_);
     applyEnhance();
     setStatus({});
+    subtitlesOpened(headers.isEmpty() ? path : QString());
     emit mediaChanged();
     engine_.play();
     lastPlaying_ = true;

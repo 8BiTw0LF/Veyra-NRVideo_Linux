@@ -147,6 +147,12 @@ bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGp
         return false;
     }
     startTime_ = fmt_->start_time != AV_NOPTS_VALUE ? double(fmt_->start_time) / AV_TIME_BASE : 0.0;
+    subs_.reset();
+    {
+        const int vw = vIndex_ >= 0 ? fmt_->streams[vIndex_]->codecpar->width : 0, vh = vIndex_ >= 0 ? fmt_->streams[vIndex_]->codecpar->height : 0;
+        for (unsigned i = 0; i < fmt_->nb_streams; ++i)
+            if (fmt_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) subs_.addStream(fmt_, int(i), vw, vh);
+    }
     info_ = {};
     info_.duration = fmt_->duration > 0 ? double(fmt_->duration) / AV_TIME_BASE : 0.0;
     if (AVDictionaryEntry* t = av_dict_get(fmt_->metadata, "title", nullptr, 0)) info_.title = t->value;
@@ -239,6 +245,7 @@ void MediaEngine::close() {
     if (vctx_) avcodec_free_context(&vctx_);
     if (actx_) avcodec_free_context(&actx_);
     if (hwDevice_) av_buffer_unref(&hwDevice_);
+    subs_.reset();
     avformat_close_input(&fmt_);
     vIndex_ = aIndex_ = -1;
     playing_ = false;
@@ -655,6 +662,7 @@ void MediaEngine::demuxLoop() {
                 { std::lock_guard l(fq_m_); frames_.clear(); fq_cv_.notify_all(); }
                 if (vIndex_ >= 0) pushPacket(vpkts_, {nullptr, ser, Pkt::Flush});
                 if (aIndex_ >= 0) pushPacket(apkts_, {nullptr, ser, Pkt::Flush});
+                subs_.flush();
                 eof_ = false;
                 endedFired_ = false;
                 showOne_ = !playing_.load();
@@ -685,7 +693,10 @@ void MediaEngine::demuxLoop() {
         }
         if (pkt->stream_index == vIndex_) pushPacket(vpkts_, {pkt, serial_.load(), Pkt::Data});
         else if (pkt->stream_index == aIndex_) pushPacket(apkts_, {pkt, serial_.load(), Pkt::Data});
-        else av_packet_free(&pkt);
+        else {
+            if (pkt->stream_index == subs_.selectedStream()) subs_.feed(pkt);   // subtitles: decoded here, ahead of time
+            av_packet_free(&pkt);
+        }
     }
 }
 

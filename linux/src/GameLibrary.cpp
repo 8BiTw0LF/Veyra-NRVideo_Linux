@@ -341,7 +341,8 @@ void GameLibrary::load() {
     entries_.clear();
     for (const auto& v : o.value("games").toArray()) {
         const QJsonObject g = v.toObject();
-        entries_.push_back({g.value("path").toString(), g.value("system").toString(), g.value("title").toString(), g.value("region").toString()});
+        entries_.push_back({g.value("path").toString(), g.value("system").toString(), g.value("title").toString(), g.value("region").toString(),
+                            g.value("thumb").toString()});
     }
 }
 
@@ -349,7 +350,8 @@ void GameLibrary::save() const {
     QJsonArray a;
     {
         std::lock_guard l(m_);
-        for (const auto& e : entries_) a.append(QJsonObject{{"path", e.path}, {"system", e.system}, {"title", e.title}, {"region", e.region}});
+        for (const auto& e : entries_)
+            a.append(QJsonObject{{"path", e.path}, {"system", e.system}, {"title", e.title}, {"region", e.region}, {"thumb", e.thumb}});
     }
     QFile f(dataDir({}) + "/games.json");
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -363,6 +365,49 @@ void GameLibrary::rescan() {
     setBusy("gamesScanning", {}, -1);
     work([this, root] { scanThread(root); });
 }
+
+// Arcade games are named by their short ROM set name (sf2.zip). FinalBurn Neo's list (its DAT, fetched once from
+// libretro's GitHub and kept as a small table) gives the full title, which is also the name of the box art, and tells
+// which zips are no games (BIOS and device sets such as neogeo.zip).
+namespace {
+struct ArcadeName { QString title; bool bios = false; };
+QHash<QString, ArcadeName> arcadeNames(const QString& dir, bool download) {
+    QHash<QString, ArcadeName> out;
+    const QString table = dir + "/arcade-names.tsv";
+    QFile f(table);
+    if (!f.exists() && download) {
+        const QString dat = dir + "/fbneo.dat.part";
+        QString err;
+        if (httpsDownload("https://raw.githubusercontent.com/libretro/FBNeo/master/dats/"
+                          "FinalBurn%20Neo%20(ClrMame%20Pro%20XML%2C%20Arcade%20only).dat", dat, 64ll << 20, {}, err)) {
+            QFile d(dat);
+            if (d.open(QIODevice::ReadOnly)) {
+                const QString xml = QString::fromUtf8(d.readAll());
+                static const QRegularExpression game(R"re(<game name="([^"]+)"([^>]*)>\s*<description>([^<]*)</description>)re");
+                QStringList lines;
+                for (auto m = game.globalMatch(xml); m.hasNext();) {
+                    const auto g = m.next();
+                    QString title = g.captured(3);
+                    title.replace("&amp;", "&").replace("&apos;", "'").replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">");
+                    const bool bios = g.captured(2).contains("isbios=\"yes\"") || g.captured(2).contains("isdevice=\"yes\"");
+                    lines << g.captured(1) + '\t' + title + '\t' + (bios ? "b" : "");
+                }
+                if (lines.size() > 1000 && f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { f.write(lines.join('\n').toUtf8()); f.close(); }
+            }
+        } else {
+            qWarning("Games: could not fetch FinalBurn Neo's game list: %s", qPrintable(err));
+        }
+        QFile::remove(dat);
+    }
+    if (f.open(QIODevice::ReadOnly)) {
+        for (const auto& line : QString::fromUtf8(f.readAll()).split('\n')) {
+            const QStringList p = line.split('\t');
+            if (p.size() >= 2) out.insert(p[0], {p[1], p.size() > 2 && p[2] == "b"});
+        }
+    }
+    return out;
+}
+} // namespace
 
 void GameLibrary::scanThread(QString root) {
     std::vector<Entry> found;
@@ -390,6 +435,8 @@ void GameLibrary::scanThread(QString root) {
         }
     }
     int n = 0;
+    QHash<QString, ArcadeName> arcade;
+    bool arcadeLoaded = false;
     for (const auto& p : files) {
         if (quit_) return;
         if (++n % 200 == 0) setBusy("gamesScanning", QString::number(n) + " / " + QString::number(files.size()), n * 100 / int(files.size()));
@@ -402,7 +449,20 @@ void GameLibrary::scanThread(QString root) {
         for (const auto& x : r)
             if (x == "usa" || x == "europe" || x == "japan" || x == "world" || x == "germany" || x == "france" || x == "spain"
                 || x == "italy" || x == "sweden" || x == "korea" || x == "brazil" || x == "australia") { region = x; break; }
-        found.push_back({p, sys, displayTitle(stem), region});
+        if (sys == "arcade") {
+            // BIOS sets that are in other lists than FinalBurn Neo's arcade one
+            static const QSet<QString> bioses = {"neogeo", "neocdz", "pgm", "skns", "cps3", "decocass", "isgsm", "nmk004", "ym2608",
+                                                 "qsound", "hng64", "naomi", "awbios", "stvbios", "coleco", "msx", "spectrum"};
+            if (bioses.contains(stem.toLower())) continue;
+            if (!arcadeLoaded) { arcade = arcadeNames(dataDir({}), true); arcadeLoaded = true; }
+            const auto it = arcade.constFind(stem.toLower());
+            if (it != arcade.constEnd()) {
+                if (it->bios) continue;   // a BIOS or device set, no game
+                found.push_back({p, sys, displayTitle(it->title), region, it->title});
+                continue;
+            }
+        }
+        found.push_back({p, sys, displayTitle(stem), region, QString()});
     }
     std::sort(found.begin(), found.end(), [](const Entry& a, const Entry& b) {
         const int c = QString::compare(a.title, b.title, Qt::CaseInsensitive);
@@ -585,8 +645,10 @@ void GameLibrary::downloadCovers() {
             setBusy("gamesFetchingCovers", QStringLiteral("%1 / %2").arg(n).arg(todo.size()), n * 100 / int(todo.size()));
             const GameSystem* s = gameSystem(e.system);
             if (!s) continue;
-            const QString thumbs = QString::fromLatin1(s->thumbs);
-            const QString stem = QFileInfo(e.path).completeBaseName();
+            // arcade box art is also in MAME's set
+            const QStringList sets = e.system == "arcade" ? QStringList{QString::fromLatin1(s->thumbs), "MAME"} : QStringList{QString::fromLatin1(s->thumbs)};
+            QString thumbs = sets.first();
+            const QString stem = e.thumb.isEmpty() ? QFileInfo(e.path).completeBaseName() : e.thumb;
             const QString dest = coverPath(e.system, e.path);
             QDir().mkpath(QFileInfo(dest).absolutePath());
             auto fetch = [&](const QString& name) {
@@ -603,7 +665,10 @@ void GameLibrary::downloadCovers() {
                 QFile::remove(dest + ".part");
                 return false;
             };
-            if (fetch(thumbnailName(stem))) { ++got; continue; }
+            bool done = false;
+            for (const auto& set : sets) { thumbs = set; if ((done = fetch(thumbnailName(stem)))) break; }
+            thumbs = sets.first();
+            if (done) { ++got; continue; }
             // not under the file's own name: the closest name in libretro's list (the list is fetched once per system
             // and kept for a week)
             if (!indexes.contains(e.system)) {

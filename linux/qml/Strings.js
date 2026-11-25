@@ -8,6 +8,12 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "subtitles": "Subtitles",
+        "subsOff": "Off",
+        "mediaAll": "All",
+        "mediaRecent": "Recently added",
+        "mediaUnwatched": "Not watched",
+        "mediaGenres": "Categories",
         "startMedia": "Media",
         "startMediaSub": "Your films and series: folders, Jellyfin, Plex",
         "startGames": "Games",
@@ -361,6 +367,12 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "subtitles": "Undertekster",
+        "subsOff": "Fra",
+        "mediaAll": "Alle",
+        "mediaRecent": "Senest tilføjet",
+        "mediaUnwatched": "Ikke set",
+        "mediaGenres": "Kategorier",
         "startMedia": "Medier",
         "startMediaSub": "Dine film og serier: mapper, Jellyfin, Plex",
         "startGames": "Spil",
@@ -714,6 +726,12 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "subtitles": "Untertitel",
+        "subsOff": "Aus",
+        "mediaAll": "Alle",
+        "mediaRecent": "Kürzlich hinzugefügt",
+        "mediaUnwatched": "Nicht gesehen",
+        "mediaGenres": "Kategorien",
         "startMedia": "Medien",
         "startMediaSub": "Deine Filme und Serien: Ordner, Jellyfin, Plex",
         "startGames": "Spiele",
@@ -1043,6 +1061,12 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "subtitles": "Subtítulos",
+        "subsOff": "Desactivados",
+        "mediaAll": "Todo",
+        "mediaRecent": "Añadido recientemente",
+        "mediaUnwatched": "Sin ver",
+        "mediaGenres": "Categorías",
         "startMedia": "Multimedia",
         "startMediaSub": "Tus películas y series: carpetas, Jellyfin, Plex",
         "startGames": "Juegos",
@@ -1372,6 +1396,12 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "subtitles": "Sous-titres",
+        "subsOff": "Désactivés",
+        "mediaAll": "Tout",
+        "mediaRecent": "Ajouts récents",
+        "mediaUnwatched": "Non vus",
+        "mediaGenres": "Catégories",
         "startMedia": "Médias",
         "startMediaSub": "Vos films et séries : dossiers, Jellyfin, Plex",
         "startGames": "Jeux",
@@ -1701,6 +1731,12 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "subtitles": "Undertexter",
+        "subsOff": "Av",
+        "mediaAll": "Alla",
+        "mediaRecent": "Nyligen tillagda",
+        "mediaUnwatched": "Inte sedda",
+        "mediaGenres": "Kategorier",
         "startMedia": "Media",
         "startMediaSub": "Dina filmer och serier: mappar, Jellyfin, Plex",
         "startGames": "Spel",
@@ -2030,6 +2066,12 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "subtitles": "Undertekster",
+        "subsOff": "Av",
+        "mediaAll": "Alle",
+        "mediaRecent": "Nylig lagt til",
+        "mediaUnwatched": "Ikke sett",
+        "mediaGenres": "Kategorier",
         "startMedia": "Medier",
         "startMediaSub": "Filmene og seriene dine: mapper, Jellyfin, Plex",
         "startGames": "Spill",
@@ -2359,6 +2401,12 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "subtitles": "Субтитры",
+        "subsOff": "Выкл.",
+        "mediaAll": "Все",
+        "mediaRecent": "Недавно добавленные",
+        "mediaUnwatched": "Не просмотрено",
+        "mediaGenres": "Категории",
         "startMedia": "Медиа",
         "startMediaSub": "Ваши фильмы и сериалы: папки, Jellyfin, Plex",
         "startGames": "Игры",

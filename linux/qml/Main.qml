@@ -382,6 +382,39 @@ Window {
         Text { font.family: Theme.font; x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
     }
 
+    // ------------------------------------------------------------- subtitles
+    // text lines at the bottom (above the controls while they show), or a picture subtitle (Blu-ray / DVD) at its own
+    // place on the video, which fits the window by its aspect
+    Item {
+        id: subs
+        visible: player.hasMedia && !player.live
+        anchors.fill: parent
+        readonly property real vw: Math.min(width, height * player.subtitleAspect)
+        readonly property real vh: vw / player.subtitleAspect
+        readonly property real vx: (width - vw) / 2
+        readonly property real vy: (height - vh) / 2
+        Image {
+            visible: player.subtitleImage !== ""
+            source: player.subtitleImage
+            cache: false
+            smooth: true
+            x: subs.vx + player.subtitleBox.x * subs.vw; y: subs.vy + player.subtitleBox.y * subs.vh
+            width: player.subtitleBox.width * subs.vw; height: player.subtitleBox.height * subs.vh
+        }
+        Text {
+            visible: player.subtitleText !== ""
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom
+                      bottomMargin: Math.max(parent.height * 0.06, controlsShown ? bottomBar.height + 8 : 0) }
+            Behavior on anchors.bottomMargin { NumberAnimation { duration: 200 } }
+            width: parent.width * 0.86
+            horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+            text: player.subtitleText
+            color: "white"; style: Text.Outline; styleColor: "#e0000000"
+            font.pixelSize: Math.max(18, parent.height * 0.045); font.weight: Font.DemiBold
+            textFormat: Text.PlainText
+        }
+    }
+
     // ------------------------------------------------------------- bottom controls
     Rectangle {
         id: bottomBar
@@ -421,6 +454,9 @@ Window {
             spacing: 2
             // back to the start screen, or to the Media / Games page the video or game came from
             IconButton { size: 40; source: "icons/home.svg"; onClicked: { if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
+            // subtitles: off -> each track -> off (S)
+            IconButton { visible: player.subtitleTracks.length > 0; size: 40; source: "icons/subtitles.svg"; opacity: player.subtitleTrack >= 0 ? 1 : 0.55
+                onClicked: { player.cycleSubtitles(); wake() } }
             IconButton { size: 40; source: "icons/capture.svg"; active: player.live; onClicked: capDlg.openDialog() }
             // a game: save and load its state (one slot), start it over
             IconButton { visible: player.retroActive; size: 40; source: "icons/save.svg"; onClicked: { player.retroSaveState(); wake() } }
@@ -641,6 +677,7 @@ Window {
             case Qt.Key_F10: player.toggleRecording(); break
             case Qt.Key_F6: player.addMarker(); break
             case Qt.Key_F12: case Qt.Key_Print: player.screenshot(); break
+            case Qt.Key_S: player.cycleSubtitles(); break
             case Qt.Key_F2: player.retroSaveState(); break
             case Qt.Key_F4: player.retroLoadState(); break
             case Qt.Key_Home: if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia(); break

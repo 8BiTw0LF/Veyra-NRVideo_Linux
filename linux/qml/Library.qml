@@ -146,7 +146,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.min(implicitWidth, header.width * 0.35); elide: Text.ElideLeft
                 font.family: Theme.font; color: Theme.label; font.pixelSize: 15 * lib.k
-                text: media.crumbs.map(function (c) { return c === "mediaResume" ? lib.tr(c) : c }).join("  ›  ")
+                text: media.crumbs.map(function (c) { return /^media[A-Z]/.test(c) ? lib.tr(c) : c }).join("  ›  ")
             }
         }
         Row {
@@ -254,7 +254,7 @@ Item {
                             anchors.centerIn: parent; width: 64 * lib.k; height: width; radius: width / 2 * Theme.round
                             gradient: Theme.sunset
                             Image { anchors.centerIn: parent; width: 30 * lib.k; height: width; sourceSize: Qt.size(64, 64)
-                                source: card.modelData.kind === "action" ? "icons/plus.svg" : card.modelData.kind === "folder" ? (card.modelData.virtual ? "icons/restore.svg" : "icons/folder.svg")
+                                source: card.modelData.kind === "action" ? "icons/plus.svg" : card.modelData.kind === "folder" ? (card.modelData.title === "mediaResume" || card.modelData.title === "mediaRecent" ? "icons/restore.svg" : card.modelData.title === "mediaGenres" ? "icons/image.svg" : "icons/folder.svg")
                                       : card.modelData.kind === "game" ? "icons/joystick.svg" : "icons/play.svg" }
                         }
                         // watched / how far

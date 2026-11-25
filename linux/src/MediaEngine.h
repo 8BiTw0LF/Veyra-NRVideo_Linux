@@ -6,6 +6,7 @@
 #include <array>
 #include "CaptureSource.h"
 #include "EnhanceChain.h"
+#include "Subtitles.h"
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -216,12 +217,15 @@ private:
 public:
     // The FSR 4 add-on's folder for this engine's own enhancement chain (the path without the window's Vulkan device)
     void setFsr4Dir(const std::string& dir);
+    // a file's subtitles (Subtitles.h): its tracks, added files, the one shown
+    Subtitles& subtitles() { return subs_; }
     // live: share of new pictures the pacing repair moved (last few seconds), -1 when it is off
     double pacingRepairShare();
     double pacingHoldMs() const { return pacingHold_.load(); }   // the delay the even rhythm costs now
 private:
     std::mutex fsr4M_;
     std::string fsr4Dir_;
+    Subtitles subs_;
     std::atomic<int> mjpegDecode_{0};
     mutable std::mutex capM_;      // cap_ against captureStats()/takeCaptureArrivals() from the UI thread
     std::string capAudioSource_;

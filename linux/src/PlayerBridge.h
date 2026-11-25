@@ -1,5 +1,6 @@
 // QML-facing wrapper around veyamux::MediaEngine.
 #pragma once
+#include <QRectF>
 #include <map>
 #include <array>
 #include "AppUpdate.h"
@@ -57,6 +58,14 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
     Q_PROPERTY(bool retroActive READ retroActive NOTIFY mediaChanged)   // a game from the Games page runs
+    // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
+    // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
+    Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY subtitlesChanged)
+    Q_PROPERTY(int subtitleTrack READ subtitleTrack WRITE setSubtitleTrack NOTIFY subtitlesChanged)
+    Q_PROPERTY(QString subtitleText READ subtitleText NOTIFY subtitleChanged)
+    Q_PROPERTY(QString subtitleImage READ subtitleImage NOTIFY subtitleChanged)
+    Q_PROPERTY(QRectF subtitleBox READ subtitleBox NOTIFY subtitleChanged)
+    Q_PROPERTY(double subtitleAspect READ subtitleAspect NOTIFY subtitleChanged)
     Q_PROPERTY(double demoProgress READ demoProgress NOTIFY demoChanged)
     Q_PROPERTY(bool live READ live NOTIFY mediaChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
@@ -225,6 +234,16 @@ public:
     bool demoAvailable() const;
     bool demoActive() const { return demoActive_ && engine_.isOpen(); }
     bool retroActive() const { return retroActive_ && engine_.isOpen(); }
+    QVariantList subtitleTracks() const;
+    int subtitleTrack() const;
+    QString subtitleText() const { return subText_; }
+    QString subtitleImage() const { return subImageUrl_; }
+    QRectF subtitleBox() const { return subBox_; }
+    double subtitleAspect() const { return subAspect_; }
+    static class QQuickImageProvider* subtitleImageProvider();   // "image://subs/..."
+    // a subtitle file's contents for the open video (from a media server); announce: pick it if it fits the
+    // remembered language and tell the UI
+    void addSubtitleData(const QByteArray& data, const QString& title, const QString& lang, const QString& ext, bool announce = true);
     double demoProgress() const { return demoProgress_; }
     bool live() const { return engine_.isLive(); }
     bool playing() const { return engine_.playing(); }
@@ -577,6 +596,8 @@ public slots:
     void retroLoadState();
     void retroReset();
     void retroPause(bool paused);                  // while the menu is open
+    void setSubtitleTrack(int id);
+    void cycleSubtitles();
     void retroKey(const QString& key, bool down);  // the keyboard as a controller: "up" "down" "left" "right" "a" "b" "x" "y" "l" "r" "start" "select"
     void togglePlay();
     void play();
@@ -630,6 +651,8 @@ public slots:
 
 signals:
     void closing();                     // the video is about to be closed or replaced (its position is still there)
+    void subtitlesChanged();
+    void subtitleChanged();
     void updateChanged();
     void psChanged();
     void psRumble(int low, int high);
@@ -818,7 +841,15 @@ private:
     QString openFile_;
     QString streamTitle_;           // a media server's name for the video that is open
     bool openMedia(const QString& path, const QString& headers);
-    void pollRetroMessage();              // the video file that is open (to reopen it after a restart)
+    void pollRetroMessage();
+    void subtitlesOpened(const QString& path);
+    void pickSubtitles();
+    void updateSubtitle();
+    QString subText_, subImageUrl_;
+    QRectF subBox_;
+    double subAspect_ = 16.0 / 9.0;
+    quint64 subCueId_ = ~0ull;
+    int subFileNo_ = 0;              // the video file that is open (to reopen it after a restart)
     bool lsfgOffPending_ = false;   // a restart without lsfg-vk is on its way
     bool lsfgHighNoticed_ = false;  // the 120 Hz hint for Lossless Scaling was shown
     int overRefreshTicks_ = 0;      // 100 ms ticks the output was above the screen's refresh rate (or back below it)

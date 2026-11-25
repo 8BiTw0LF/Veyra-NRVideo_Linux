@@ -6,6 +6,7 @@
 #include "Diagnostics.h"
 #include "Gamepad.h"
 #include "GameLibrary.h"
+#include <QQuickImageProvider>
 #include "MediaLibrary.h"
 #include "VideoItem.h"
 #include "VkContext.h"
@@ -390,6 +391,7 @@ int main(int argc, char** argv) {
         if (b == "y" && player.demoActive()) player.demoPose(-1);
     });
     engine.rootContext()->setContextProperty("player", &player);
+    engine.addImageProvider("subs", PlayerBridge::subtitleImageProvider());
     QObject::connect(&games, &veyamux::GameLibrary::launch, &player,
                      [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys) {
                          player.openGame(core, rom, title, sys, games.biosFolder());
@@ -579,14 +581,17 @@ int main(int argc, char** argv) {
         } else {
             QTimer::singleShot(300, [&media, url] { media.addJellyfin(url, "u", "pw"); });
         }
+        // root -> a library (its categories) -> Categories -> the first genre -> play the first film
         QTimer::singleShot(2500, [&media, dump] { dump("root"); media.openItem(1); });
-        QTimer::singleShot(4500, [&media, dump] { dump("library"); media.play(0, false); });
-        QTimer::singleShot(7000, [&media, &player] {
+        QTimer::singleShot(3500, [&media, dump] { dump("library"); media.openItem(3); });
+        QTimer::singleShot(5000, [&media, dump] { dump("genres"); media.openItem(0); });
+        QTimer::singleShot(6500, [&media, dump] { dump("genre"); media.play(0, false); });
+        QTimer::singleShot(9000, [&media, &player] {
             qInfo("TEST playing: hasMedia %d position %.2f fromLibrary %d title %s", player.hasMedia(), player.position(),
                   media.playingFromLibrary(), qPrintable(player.title()));
             media.stopPlayback();
         });
-        QTimer::singleShot(8500, [dump] { dump("after"); QCoreApplication::quit(); });
+        QTimer::singleShot(10500, [dump] { dump("after"); QCoreApplication::quit(); });
     }
     // Test hook: start a game from the Games page (VEYAMUX_TEST_GAME=<the game's file>)
     if (const QString tg = qEnvironmentVariable("VEYAMUX_TEST_GAME"); !tg.isEmpty())

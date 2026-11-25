@@ -88,7 +88,7 @@ signals:
     void message(const QString& key, const QString& arg, bool error);
 
 private:
-    struct Entry { QString path, system, title, region; };
+    struct Entry { QString path, system, title, region, thumb; };   // thumb: the name for box art (arcade: the full title)
     void load();
     void save() const;
     void scanThread(QString root);

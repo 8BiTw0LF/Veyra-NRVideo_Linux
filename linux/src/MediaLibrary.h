@@ -87,6 +87,7 @@ private:
     void listJellyfin(const Source& s, const Level& l);
     void listPlex(const Source& s, const Level& l);
     void setItems(QVariantList items, int gen);
+    static QVariantList categoryFolders(const QString& itemsLevel, const QString& genresLevel, const QString& id, const QString& extra);
     // network
     QNetworkReply* get(const Source& s, const QString& path, std::function<void(int status, const QByteArray& body)> done, int timeoutMs = 20000);
     QNetworkReply* post(const Source& s, const QString& path, const QByteArray& json, std::function<void(int status, const QByteArray& body)> done);
@@ -98,6 +99,7 @@ private:
     void pumpImages();
     // playback
     void startPlayback(const Source& s, const QVariantMap& item, bool fromStart);
+    void fetchSubtitles(const Source& s, const QString& item);
     void report(const QString& state);
     void jellyfinSignedIn(const QString& url, const QString& name, const QByteArray& authBody);
 

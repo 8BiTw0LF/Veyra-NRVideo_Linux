@@ -431,13 +431,15 @@ void coreThread(Runner* r, Game g) {
     sysDirC = g.systemDir; saveDirC = g.saveDir; libPathC = g.core;
     { std::error_code ec; fs::create_directories(g.systemDir, ec); fs::create_directories(g.saveDir, ec); fs::create_directories(g.stateDir, ec); }
     if (!core.load(g.core, err)) { fail(err); return; }
+    // RetroArch's order: the environment, retro_init, then the other callbacks (Mesen only creates what its
+    // set_video_refresh writes to in retro_init)
     core.setEnvironment(environment);
+    core.init();
     core.setVideoRefresh(videoRefresh);
     core.setAudioSample(audioSample);
     core.setAudioSampleBatch(audioBatch);
     core.setInputPoll(inputPoll);
     core.setInputState(inputState);
-    core.init();
     retro_system_info si{};
     core.getSystemInfo(&si);
     const std::string coreName = std::string(si.library_name ? si.library_name : "core") + " " + (si.library_version ? si.library_version : "");

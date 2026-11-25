@@ -348,8 +348,9 @@ QVariantMap jellyfinItem(const QJsonObject& o) {
     } else if (o.contains("ChildCount")) {
         sub = QString::number(o.value("ChildCount").toInt());
     }
-    const QString level = type == "Series" ? "jf-series" : "jf-items";
     QString collection = o.value("CollectionType").toString();
+    // a library of films or series opens on its categories (all, recently added, unwatched, genres)
+    const QString level = type == "Series" ? "jf-series" : (collection == "movies" || collection == "tvshows") ? "jf-lib" : "jf-items";
     return QVariantMap{{"key", o.value("Id").toString()}, {"title", o.value("Name").toString()}, {"sub", sub},
                        {"kind", video ? "video" : "folder"}, {"level", level}, {"extra", collection},
                        {"shape", type == "Episode" || type == "Video" || type == "CollectionFolder" || type == "UserView" ? "wide" : "poster"},
@@ -358,6 +359,21 @@ QVariantMap jellyfinItem(const QJsonObject& o) {
                        {"imageTag", o.value("ImageTags").toObject().value("Primary").toString()}};
 }
 } // namespace
+
+// a film or series library's first page: everything, recently added, not watched yet, and its genres
+QVariantList MediaLibrary::categoryFolders(const QString& itemsLevel, const QString& genresLevel, const QString& id, const QString& extra) {
+    QVariantList out;
+    const bool plex = itemsLevel == "plex";
+    auto add = [&](const char* title, const QString& level, const QString& key, const QString& x) {
+        out << QVariantMap{{"key", key}, {"title", title}, {"kind", "folder"}, {"level", level}, {"extra", x}, {"shape", "wide"},
+                           {"virtual", true}, {"icon", title}};
+    };
+    add("mediaAll", itemsLevel, plex ? id + "/all" : id, extra + ";all");
+    add("mediaRecent", itemsLevel, plex ? id + "/recentlyAdded" : id, extra + ";recent");
+    add("mediaUnwatched", itemsLevel, plex ? id + "/unwatched" : id, extra + ";unwatched");
+    add("mediaGenres", genresLevel, plex ? id + "/genre" : id, extra);
+    return out;
+}
 
 void MediaLibrary::listJellyfin(const Source& s, const Level& l) {
     const int gen = gen_;
@@ -413,12 +429,34 @@ void MediaLibrary::listJellyfin(const Source& s, const Level& l) {
         });
     } else if (l.kind == "jf-series") {
         get(s, "/Shows/" + l.id + "/Seasons?userId=" + uid + "&" + fields, [fill, failed](int st, const QByteArray& b) { if (st == 200) fill(b, {}); else failed(st); });
+    } else if (l.kind == "jf-lib") {
+        setItems(categoryFolders("jf-items", "jf-genres", l.id, l.extra), gen);
+    } else if (l.kind == "jf-genres") {
+        const QString types = l.extra == "tvshows" ? "Series" : "Movie";
+        get(s, "/Genres?userId=" + uid + "&ParentId=" + l.id + "&IncludeItemTypes=" + types + "&SortBy=SortName",
+            [this, s, l, gen, failed](int st, const QByteArray& b) {
+                if (gen != gen_) return;
+                if (st != 200) { failed(st); return; }
+                QVariantList out;
+                for (const auto& v : QJsonDocument::fromJson(b).object().value("Items").toArray()) {
+                    const QJsonObject o = v.toObject();
+                    out << QVariantMap{{"key", l.id}, {"title", o.value("Name").toString()}, {"kind", "folder"}, {"level", "jf-items"},
+                                       {"extra", l.extra + ";genre:" + o.value("Id").toString()}, {"shape", "wide"}, {"genre", true}};
+                }
+                setItems(out, gen);
+            });
     } else {
-        // a library of films or series lists them all (they may lie in sub folders); anything else its own children
-        QString q = "/Items?userId=" + uid + "&ParentId=" + l.id + "&SortBy=SortName&SortOrder=Ascending&" + fields;
-        if (l.extra == "movies") q += "&Recursive=true&IncludeItemTypes=Movie";
-        else if (l.extra == "tvshows") q += "&Recursive=true&IncludeItemTypes=Series";
-        else if (l.extra == "music" || l.extra == "books" || l.extra == "photos") { setItems({}, gen); return; }
+        // a library of films or series lists them all (they may lie in sub folders); anything else its own children.
+        // extra: "<collection>;<view>" (all, recent, unwatched, genre:<id>)
+        const QString collection = l.extra.section(';', 0, 0), view = l.extra.section(';', 1);
+        QString q = "/Items?userId=" + uid + "&ParentId=" + l.id + "&" + fields;
+        if (collection == "movies") q += "&Recursive=true&IncludeItemTypes=Movie";
+        else if (collection == "tvshows") q += "&Recursive=true&IncludeItemTypes=Series";
+        else if (collection == "music" || collection == "books" || collection == "photos") { setItems({}, gen); return; }
+        if (view == "recent") q += "&SortBy=DateCreated&SortOrder=Descending&Limit=60";
+        else q += "&SortBy=SortName&SortOrder=Ascending";
+        if (view == "unwatched") q += "&Filters=IsUnplayed";
+        if (view.startsWith("genre:")) q += "&GenreIds=" + view.mid(6);
         get(s, q, [fill, failed](int st, const QByteArray& b) { if (st == 200) fill(b, {}); else failed(st); });
     }
 }
@@ -624,9 +662,9 @@ QVariantMap plexItem(const QJsonObject& o) {
         if (!parts.isEmpty()) part = parts.first().toObject().value("key").toString();
     }
     const QString thumb = o.value("thumb").toString();
-    return QVariantMap{{"key", section ? "/library/sections/" + o.value("key").toString() + "/all" : o.value("key").toString()},
+    return QVariantMap{{"key", section ? "/library/sections/" + o.value("key").toString() : o.value("key").toString()},
                        {"rating", o.value("ratingKey").toString()}, {"title", o.value("title").toString()}, {"sub", sub},
-                       {"kind", video ? "video" : "folder"}, {"level", "plex"}, {"part", part},
+                       {"kind", video ? "video" : "folder"}, {"level", section ? "plex-section" : "plex"}, {"part", part},
                        {"shape", type == "episode" || type == "clip" || section ? "wide" : "poster"},
                        {"resume", resume}, {"duration", dur}, {"progress", dur > 0 ? std::min(1.0, resume / dur) : 0.0},
                        {"played", o.value("viewCount").toInt() > 0}, {"overview", o.value("summary").toString()}, {"thumb", thumb}};
@@ -677,6 +715,22 @@ void MediaLibrary::listPlex(const Source& s, const Level& l) {
                 root["MediaContainer"] = mc;
                 fill(QJsonDocument(root).toJson(QJsonDocument::Compact), head);
             });
+        } else if (l.kind == "plex-section") {
+            setItems(categoryFolders("plex", "plex-genres", l.id, QString()), gen);
+        } else if (l.kind == "plex-genres") {
+            // id: /library/sections/<n>/genre; each genre's films: /library/sections/<n>/all?genre=<key>
+            const QString section = l.id.section('/', 0, -2);
+            get(s, l.id, [this, gen, section, failed](int st, const QByteArray& b) {
+                if (gen != gen_) return;
+                if (st != 200) { failed(st); return; }
+                QVariantList out;
+                for (const auto& v : QJsonDocument::fromJson(b).object().value("MediaContainer").toObject().value("Directory").toArray()) {
+                    const QJsonObject o = v.toObject();
+                    out << QVariantMap{{"key", section + "/all?genre=" + o.value("key").toString()}, {"title", o.value("title").toString()},
+                                       {"kind", "folder"}, {"level", "plex"}, {"shape", "wide"}, {"genre", true}};
+                }
+                setItems(out, gen);
+            });
         } else {
             get(s, l.id, [fill, failed](int st, const QByteArray& b) { if (st == 200) fill(b, {}); else failed(st); });
         }
@@ -718,9 +772,50 @@ void MediaLibrary::startPlayback(const Source& s, const QVariantMap& it, bool fr
     playing_.duration = it.value("duration").toDouble();
     playing_.started = true;
     if (resume > 5) player_->seek(resume);
+    if (s.kind != "local") fetchSubtitles(s, playing_.item);
     report("start");
     progress_.start();
     emit playbackChanged();
+}
+
+// subtitle files the server keeps beside the video (the ones inside the file come with the stream)
+void MediaLibrary::fetchSubtitles(const Source& s, const QString& item) {
+    auto add = [this, s, item](const QString& path, const QString& title, const QString& lang, const QString& ext) {
+        get(s, path, [this, item, title, lang, ext](int st, const QByteArray& b) {
+            if (st == 200 && !b.isEmpty() && playing_.item == item) player_->addSubtitleData(b, title, lang, ext);
+        });
+    };
+    if (s.kind == "jellyfin") {
+        get(s, "/Items/" + item + "?userId=" + s.user, [this, s, item, add](int st, const QByteArray& b) {
+            if (st != 200 || playing_.item != item) return;
+            const QJsonArray sources = QJsonDocument::fromJson(b).object().value("MediaSources").toArray();
+            if (sources.isEmpty()) return;
+            const QJsonObject ms = sources.first().toObject();
+            for (const auto& v : ms.value("MediaStreams").toArray()) {
+                const QJsonObject o = v.toObject();
+                if (o.value("Type").toString() != "Subtitle" || !o.value("IsExternal").toBool() || !o.value("IsTextSubtitleStream").toBool(true)) continue;
+                // Jellyfin hands any text subtitle out as SubRip
+                add(QStringLiteral("/Videos/%1/%2/Subtitles/%3/0/Stream.srt").arg(item, ms.value("Id").toString()).arg(o.value("Index").toInt()),
+                    o.value("Title").toString(), o.value("Language").toString(), "srt");
+            }
+        });
+    } else if (s.kind == "plex") {
+        get(s, "/library/metadata/" + item, [this, item, add](int st, const QByteArray& b) {
+            if (st != 200 || playing_.item != item) return;
+            const QJsonArray md = QJsonDocument::fromJson(b).object().value("MediaContainer").toObject().value("Metadata").toArray();
+            if (md.isEmpty()) return;
+            const QJsonArray media = md.first().toObject().value("Media").toArray();
+            if (media.isEmpty()) return;
+            const QJsonArray parts = media.first().toObject().value("Part").toArray();
+            if (parts.isEmpty()) return;
+            for (const auto& v : parts.first().toObject().value("Stream").toArray()) {
+                const QJsonObject o = v.toObject();
+                const QString codec = o.value("codec").toString();
+                if (o.value("streamType").toInt() != 3 || !o.contains("key") || (codec != "srt" && codec != "ass" && codec != "ssa" && codec != "vtt" && codec != "webvtt")) continue;
+                add(o.value("key").toString(), o.value("title").toString(), o.value("languageCode").toString(), codec == "webvtt" ? "vtt" : codec);
+            }
+        });
+    }
 }
 
 void MediaLibrary::stopPlayback() {

@@ -129,12 +129,22 @@ Rectangle {
         id: nowBar
         x: 20; anchors.top: header.bottom; anchors.topMargin: visible ? 8 : 0
         width: parent.width - 40; spacing: 8
-        visible: player.retroActive || media.playingFromLibrary
+        visible: player.retroActive || media.playingFromLibrary || player.subtitleTracks.length > 0
         height: visible ? implicitHeight : 0
         Btn { visible: player.retroActive; text: tr("gameSave"); onClicked: player.retroSaveState() }
         Btn { visible: player.retroActive; text: tr("gameLoad"); onClicked: player.retroLoadState() }
         Btn { visible: player.retroActive; text: tr("gameReset"); onClicked: player.retroReset() }
-        Btn { primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
+        // subtitles: off and each track
+        Text { visible: player.subtitleTracks.length > 0; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("subtitles"); color: Theme.label; font.pixelSize: 14 }
+        Btn { visible: player.subtitleTracks.length > 0; text: tr("subsOff"); primary: false; opacity: player.subtitleTrack < 0 ? 1 : 0.6
+            onClicked: player.subtitleTrack = -1 }
+        Repeater {
+            model: player.subtitleTracks
+            delegate: Btn { required property var modelData; text: modelData.name; opacity: player.subtitleTrack === modelData.id ? 1 : 0.6
+                onClicked: player.subtitleTrack = modelData.id }
+        }
+        Btn { visible: player.retroActive || media.playingFromLibrary; primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
             onClicked: { menu.closeRequested(); if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
     }
 

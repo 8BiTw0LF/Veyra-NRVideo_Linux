@@ -55,6 +55,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/Users/AuthenticateWithQuickConnect": return self.send(200, {"AccessToken": TOKEN, "User": {"Id": "user1"}})
         if p.startswith("/plex"): pass
         elif not self.authed(): return self.send(401)
+        if p == "/Genres": return self.send(200, {"Items": [{"Name": "Action", "Id": "g1"}, {"Name": "Drama", "Id": "g2"}]})
         if p == "/UserViews": return self.send(200, {"Items": JF["views"]})
         if p == "/UserItems/Resume": return self.send(200, {"Items": JF["lib1"]})
         if p == "/Items": return self.send(200, {"Items": JF.get(q["ParentId"][0], [])})
@@ -68,7 +69,9 @@ class H(BaseHTTPRequestHandler):
         if p == "/library/sections":
             return self.send(200, {"MediaContainer": {"Directory": [{"key": "1", "title": "Movies", "type": "movie", "agent": "tv.plex.agents.movie"},
                                                                     {"key": "3", "title": "Music", "type": "artist", "agent": "x"}]}})
-        if p == "/library/sections/1/all":
+        if p == "/library/sections/1/genre":
+            return self.send(200, {"MediaContainer": {"Directory": [{"key": "5", "title": "Action", "fastKey": "/library/sections/1/all?genre=5"}]}})
+        if p in ("/library/sections/1/all", "/library/sections/1/recentlyAdded", "/library/sections/1/unwatched"):
             return self.send(200, {"MediaContainer": {"Metadata": [{"ratingKey": "77", "key": "/library/metadata/77", "type": "movie", "title": "Plex Movie",
                 "year": 2023, "duration": 3000, "viewOffset": 1500, "thumb": "/library/metadata/77/thumb/1", "Media": [{"Part": [{"key": "/library/parts/9/file.mp4"}]}]}]}})
         if p == "/library/onDeck": return self.send(200, {"MediaContainer": {"Metadata": []}})

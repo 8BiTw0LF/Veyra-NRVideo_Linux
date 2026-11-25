@@ -137,7 +137,7 @@ pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
 # ---- chiaki-ng (PlayStation Remote Play, AGPL-3.0) ----
 include(cmake/chiaki.cmake)
 
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/Subtitles.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -182,7 +182,7 @@ endif()
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)
 qt_standard_project_setup()
-qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/Download.cpp src/Download.h src/Fsr4Addon.cpp src/Fsr4Addon.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp src/LowLatency.cpp src/LowLatency.h src/ScreenTiming.cpp src/ScreenTiming.h src/PlayerBridgeGames.cpp src/GameLibrary.cpp src/GameLibrary.h src/MediaLibrary.cpp src/MediaLibrary.h)
+qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridgeRemotePlay.cpp src/PlayerBridgeSetup.cpp src/PlayerBridgeUpdate.cpp src/AppUpdate.cpp src/AppUpdate.h src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h src/LsfgInstall.cpp src/LsfgInstall.h src/Download.cpp src/Download.h src/Fsr4Addon.cpp src/Fsr4Addon.h src/DisplayVrr.cpp src/DisplayVrr.h src/FramePacingRepair.h src/SteamShortcut.cpp src/SteamShortcut.h src/Watcher.cpp src/Watcher.h src/ScreenCastPortal.cpp src/ScreenCastPortal.h src/Gamepad.cpp src/Gamepad.h src/Diagnostics.cpp src/Diagnostics.h src/PlayerBridgeDebug.cpp src/PlayerBridgeSignalTest.cpp src/LowLatency.cpp src/LowLatency.h src/ScreenTiming.cpp src/ScreenTiming.h src/PlayerBridgeGames.cpp src/PlayerBridgeSubtitles.cpp src/GameLibrary.cpp src/GameLibrary.h src/MediaLibrary.cpp src/MediaLibrary.h)
 # Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
 find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
 set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
@@ -201,7 +201,7 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
   qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg qml/icons/bug.svg
-  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg
+  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg qml/icons/subtitles.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)
