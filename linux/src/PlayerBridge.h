@@ -400,6 +400,7 @@ public:
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
         if (l) { fsr4Dir_ = fsr4InstalledDir(); l->setFsr4Dir(fsr4Dir_); }
+        engine_.setFsr4Dir(fsr4Dir_.toStdString());
         // QML has already read the properties that depend on the live path (hardware counters, FSR 4)
         emit benchChanged();
         emit fsr4Changed();

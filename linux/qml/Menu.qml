@@ -196,7 +196,7 @@ Rectangle {
                             // FSR 4 not installed (or not possible here) explains itself instead of a fallback warning
                             readonly property bool fsr4Waiting: player.upscaler === 4 && player.fsr4State !== 3
                             color: player.upscalerError !== "" && !fsr4Waiting ? Theme.warn : Theme.muted
-                            text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback") + player.upscalerError
+                            text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback").replace("FSR 3.1", player.upscaler === 4 ? "FSR 4" : "FSR 3.1") + player.upscalerError
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? tr("fsrNativeAaHint") : tr("fsr31Hint"))
                                      : player.upscaler === 3 ? tr("nisHint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
                                      : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") + (player.fsr4Path !== "" ? " (" + player.fsr4Path + ")" : "") : player.fsr4State === 0 ? tr("fsr4NoGpu")

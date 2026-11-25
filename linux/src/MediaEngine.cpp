@@ -957,6 +957,12 @@ void MediaEngine::startGpu() {
     gpuThread_ = std::thread([this] { threadName("vx-gpuinit"); ensureGpu(); });
 }
 
+void MediaEngine::setFsr4Dir(const std::string& dir) {
+    std::lock_guard l(fsr4M_);
+    fsr4Dir_ = dir;
+    if (gpuReady_.load() && chain_) chain_->setFsr4Dir(dir);   // EnhanceChain::setFsr4Dir has its own lock
+}
+
 void MediaEngine::ensureGpu() {
     if (const char* n = std::getenv("VEYAMUX_NO_GPU"); n && std::string(n) == "1") {
         if (cb_.onGpuMessage) cb_.onGpuMessage("GPU enhancement disabled (VEYAMUX_NO_GPU=1)");
@@ -974,6 +980,7 @@ void MediaEngine::ensureGpu() {
         return;
     }
     gpuName_ = vk->deviceName() + (vk->isSoftware() ? " (software)" : "");
+    { std::lock_guard l(fsr4M_); chain->setFsr4Dir(fsr4Dir_); }
     vk_ = std::move(vk);
     chain_ = std::move(chain);
     gpuReady_ = true;

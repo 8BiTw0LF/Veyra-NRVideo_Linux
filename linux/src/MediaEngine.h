@@ -213,10 +213,14 @@ private:
     std::atomic<uint64_t> pacedRepaired_{0}, pacedTotal_{0};
     void pacerLoop();
 public:
+    // The FSR 4 add-on's folder for this engine's own enhancement chain (the path without the window's Vulkan device)
+    void setFsr4Dir(const std::string& dir);
     // live: share of new pictures the pacing repair moved (last few seconds), -1 when it is off
     double pacingRepairShare();
     double pacingHoldMs() const { return pacingHold_.load(); }   // the delay the even rhythm costs now
 private:
+    std::mutex fsr4M_;
+    std::string fsr4Dir_;
     std::atomic<int> mjpegDecode_{0};
     mutable std::mutex capM_;      // cap_ against captureStats()/takeCaptureArrivals() from the UI thread
     std::string capAudioSource_;

@@ -1609,6 +1609,7 @@ void PlayerBridge::installFsr4() {
             if (r.ok) {
                 fsr4Dir_ = fsr4addon::installedDir();
                 if (liveVk_) liveVk_->setFsr4Dir(fsr4Dir_);
+                engine_.setFsr4Dir(fsr4Dir_.toStdString());
                 fsr4Text_.clear();
                 showNotice(L("FSR 4 installed", "FSR 4 installeret"));
                 applyEnhance();   // a failed attempt before the download is tried again
