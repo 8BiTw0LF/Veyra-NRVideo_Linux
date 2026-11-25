@@ -668,6 +668,19 @@ void PlayerBridge::finishBenchmark() {
 
 void PlayerBridge::stopBenchmark() { stopBenchmark(true); }
 
+// Back to the card's own mode after the 1080p steps. Right after the switch the driver can still hold the device for a
+// moment ("in use"), so a failed start is tried again a few times before VeyAmux gives up (it went to the start
+// screen before).
+void PlayerBridge::restoreCaptureAfterBench(const QString& device, const veyamux::CaptureMode& mode, const QString& audio, int attempt) {
+    const veyamux::EnhanceSettings keep = s_;
+    const bool ok = startCapture(device, mode, audio);
+    s_ = keep;
+    if (ok) { applyEnhance(); return; }
+    if (attempt >= 5) return;
+    qInfo("Benchmark: the card did not start %s again yet (%s), trying again", mode.label.c_str(), qPrintable(lastCaptureError_));
+    QTimer::singleShot(1500, this, [this, device, mode, audio, attempt] { restoreCaptureAfterBench(device, mode, audio, attempt + 1); });
+}
+
 void PlayerBridge::stopBenchmark(bool save) {
     if (bench_.timer) { bench_.timer->stop(); bench_.timer->deleteLater(); bench_.timer = nullptr; }
     if (lowLatency_) lowLatency_->setEnabled(QSettings().value("disp/lowLatency", false).toBool());   // as the user set it
@@ -678,11 +691,11 @@ void PlayerBridge::stopBenchmark(bool save) {
     }
     if (bench_.running) {
         bench_.running = false;
+        s_ = bench_.saved;
         if (bench_.onLowRes && bench_.savedMode.fourcc) {   // the card back to the mode it had
             bench_.onLowRes = false;
-            startCapture(bench_.device, bench_.savedMode, bench_.audio);
+            restoreCaptureAfterBench(bench_.device, bench_.savedMode, bench_.audio, 0);
         }
-        s_ = bench_.saved;
         applyEnhance();
     }
     emit benchChanged();

@@ -682,6 +682,7 @@ private:
     veyamux::ScreenCastPortal* portal_ = nullptr;
     QString scAudio_;
     bool startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource);
+    void restoreCaptureAfterBench(const QString& device, const veyamux::CaptureMode& mode, const QString& audio, int attempt);
     // Remote Play: one background task at a time (network, registration, wake-up)
     QString psBusy_, psMessage_;
     bool psMessageError_ = false;

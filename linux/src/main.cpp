@@ -317,8 +317,12 @@ int main(int argc, char** argv) {
         if (!lsfgEnabled && llEnv != "0" && (hasNvidiaGpu() || llEnv == "1")) {
             const QString dir = findLayerDir();
             if (!dir.isEmpty()) {
-                const QByteArray old = qgetenv("VK_ADD_LAYER_PATH");
-                qputenv("VK_ADD_LAYER_PATH", old.isEmpty() ? dir.toLocal8Bit() : dir.toLocal8Bit() + ':' + old);
+                // a relaunch inherits the old value: drop earlier VeyAmux layer folders (old AppImage mounts) first
+                QStringList keep;
+                for (const QString& e : qEnvironmentVariable("VK_ADD_LAYER_PATH").split(':', Qt::SkipEmptyParts))
+                    if (!e.endsWith("/veyamux/vklayer") && e != dir) keep << e;
+                keep.prepend(dir);
+                qputenv("VK_ADD_LAYER_PATH", keep.join(':').toLocal8Bit());
                 lowLatencyLayer = dir + "/libVkLayer_veyamux_low_latency.so";
             }
         }
