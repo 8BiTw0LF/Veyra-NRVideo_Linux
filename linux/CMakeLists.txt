@@ -201,7 +201,7 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
   qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg qml/icons/bug.svg
-  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg qml/icons/subtitles.svg
+  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg qml/icons/subtitles.svg qml/icons/audiotrack.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
   i18n/messages.json)

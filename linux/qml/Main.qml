@@ -43,7 +43,7 @@ Window {
     onPointerHiddenChanged: player.setPointerHidden(pointerHidden)
     readonly property var scales: [1.0, 1.5, 2.0, 3.0]
 
-    Timer { id: hideTimer; interval: 2600; onTriggered: if (player.playing && !panelOpen && !scrubbing && !keepControls) controlsShown = false }
+    Timer { id: hideTimer; interval: 2600; onTriggered: if (player.playing && !panelOpen && !scrubbing && !keepControls && !trackPopup.visible) controlsShown = false }
 
     // ------------------------------------------------------------- video surface
     // HDR output: the whole window is drawn into an FP16 layer and converted to scRGB light for the HDR swapchain
@@ -415,6 +415,51 @@ Window {
         }
     }
 
+    // ------------------------------------------------------------- sound track / subtitle list (bottom bar buttons)
+    Rectangle {
+        id: trackPopup
+        property string kind: "audio"
+        property Item anchorItem: null
+        function toggle(k, it) {
+            if (visible && kind === k) { visible = false; return }
+            kind = k; anchorItem = it; visible = true; wake()
+        }
+        readonly property var rows: kind === "audio" ? player.audioTracks
+                                    : [{ id: -1, name: t("subsOff") }].concat(player.subtitleTracks)
+        readonly property int current: kind === "audio" ? player.audioTrack : player.subtitleTrack
+        visible: false
+        z: 20
+        width: Math.min(420, Math.max(220, popCol.implicitWidth + 16))
+        height: popCol.implicitHeight + 16
+        radius: 12 * Theme.round; color: Theme.surfaceDeep; border.color: Theme.border
+        x: anchorItem ? Math.max(8, Math.min(parent.width - width - 8, anchorItem.mapToItem(parent, 0, 0).x)) : 0
+        y: anchorItem ? anchorItem.mapToItem(parent, 0, 0).y - height - 10 : 0
+        Connections { target: player; function onMediaChanged() { if (!player.hasMedia) trackPopup.visible = false } }
+        Column {
+            id: popCol
+            x: 8; y: 8
+            Text { font.family: Theme.font; text: t(trackPopup.kind === "audio" ? "soundTrack" : "subtitles"); color: Theme.label
+                font.pixelSize: 12; leftPadding: 10; bottomPadding: 4 }
+            Repeater {
+                model: trackPopup.rows
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool sel: modelData.id === trackPopup.current
+                    width: Math.max(popCol.width, rowText.implicitWidth + 40); height: 36; radius: 8 * Theme.round
+                    color: sel ? Theme.accentSoft : (rm.containsMouse ? Theme.surfaceHover : "transparent")
+                    Text { visible: sel; font.family: Theme.font; anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                        text: "✓"; color: Theme.heading; font.pixelSize: 14 }
+                    Text { id: rowText; font.family: Theme.font; anchors { left: parent.left; leftMargin: 30; verticalCenter: parent.verticalCenter }
+                        text: modelData.name; color: sel ? Theme.heading : Theme.text; font.pixelSize: 14
+                        font.weight: sel ? Font.DemiBold : Font.Normal }
+                    MouseArea { id: rm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: { if (trackPopup.kind === "audio") player.audioTrack = modelData.id; else player.subtitleTrack = modelData.id
+                                     trackPopup.visible = false; wake() } }
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------- bottom controls
     Rectangle {
         id: bottomBar
@@ -454,9 +499,11 @@ Window {
             spacing: 2
             // back to the start screen, or to the Media / Games page the video or game came from
             IconButton { size: 40; source: "icons/home.svg"; onClicked: { if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
-            // subtitles: off -> each track -> off (S)
-            IconButton { visible: player.subtitleTracks.length > 0; size: 40; source: "icons/subtitles.svg"; opacity: player.subtitleTrack >= 0 ? 1 : 0.55
-                onClicked: { player.cycleSubtitles(); wake() } }
+            // sound track and subtitles: a list to pick from, above the button (S still steps through the subtitles)
+            IconButton { id: audioBtn; visible: player.audioTracks.length > 1; size: 40; source: "icons/audiotrack.svg"
+                onClicked: trackPopup.toggle("audio", audioBtn) }
+            IconButton { id: subsBtn; visible: player.subtitleTracks.length > 0; size: 40; source: "icons/subtitles.svg"; opacity: player.subtitleTrack >= 0 ? 1 : 0.55
+                onClicked: trackPopup.toggle("subs", subsBtn) }
             IconButton { size: 40; source: "icons/capture.svg"; active: player.live; onClicked: capDlg.openDialog() }
             // a game: save and load its state (one slot), start it over
             IconButton { visible: player.retroActive; size: 40; source: "icons/save.svg"; onClicked: { player.retroSaveState(); wake() } }
@@ -691,6 +738,7 @@ Window {
         hideTimer.start()
         if (startDialog) capDlg.openDialog()
         if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
-        if (testPage !== "") lib.openPage(testPage)                                               // VEYAMUX_TEST_PAGE
+        if (testPage === "audio") Qt.callLater(function () { trackPopup.toggle("audio", audioBtn) })   // VEYAMUX_TEST_PAGE=audio
+        else if (testPage !== "") lib.openPage(testPage)                                          // VEYAMUX_TEST_PAGE
     }
 }
