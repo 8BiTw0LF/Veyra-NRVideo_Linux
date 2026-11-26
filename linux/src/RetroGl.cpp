@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace veyamux::retro::gl {
@@ -64,6 +65,84 @@ struct Gl {
     const unsigned char* (*getString)(GLenum) = nullptr;
 } glf;
 
+// ---- GLX (X11 / XWayland): what RetroArch uses on Linux, and what some cores need - PPSSPP's GLEW loads OpenGL only
+// with a GLX display. It also runs on the GPU the desktop is on (EGL's surfaceless platform takes the first one).
+using XDisplay = void*; using GLXFBConfig = void*; using GLXContext = void*; using GLXPbuffer = unsigned long;
+constexpr int GLX_DRAWABLE_TYPE = 0x8010, GLX_PBUFFER_BIT = 0x4, GLX_RENDER_TYPE = 0x8011, GLX_RGBA_BIT = 0x1,
+              GLX_RED_SIZE = 8, GLX_GREEN_SIZE = 9, GLX_BLUE_SIZE = 10, GLX_ALPHA_SIZE = 11, GLX_PBUFFER_WIDTH = 0x8041,
+              GLX_PBUFFER_HEIGHT = 0x8040, GLX_CONTEXT_MAJOR_VERSION_ARB = 0x2091, GLX_CONTEXT_MINOR_VERSION_ARB = 0x2092,
+              GLX_CONTEXT_PROFILE_MASK_ARB = 0x9126, GLX_CONTEXT_CORE_PROFILE_BIT_ARB = 0x1,
+              GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB = 0x2;
+struct Glx {
+    void* x11 = nullptr;
+    void* gl = nullptr;
+    XDisplay (*openDisplay)(const char*) = nullptr;
+    int (*closeDisplay)(XDisplay) = nullptr;
+    int (*xfree)(void*) = nullptr;
+    int (*defaultScreen)(XDisplay) = nullptr;
+    GLXFBConfig* (*chooseFbConfig)(XDisplay, int, const int*, int*) = nullptr;
+    GLXPbuffer (*createPbuffer)(XDisplay, GLXFBConfig, const int*) = nullptr;
+    void (*destroyPbuffer)(XDisplay, GLXPbuffer) = nullptr;
+    int (*makeContextCurrent)(XDisplay, GLXPbuffer, GLXPbuffer, GLXContext) = nullptr;
+    void (*destroyContext)(XDisplay, GLXContext) = nullptr;
+    void* (*getProcAddress)(const unsigned char*) = nullptr;
+    GLXContext (*createContextAttribs)(XDisplay, GLXFBConfig, GLXContext, int, const int*) = nullptr;
+} glx;
+XDisplay xdpy = nullptr;
+GLXContext xctx = nullptr;
+GLXPbuffer xpb = 0;
+
+bool loadGlx() {
+    if (glx.gl) return true;
+    glx.x11 = dlopen("libX11.so.6", RTLD_NOW | RTLD_LOCAL);
+    glx.gl = dlopen("libGL.so.1", RTLD_NOW | RTLD_GLOBAL);   // (global: the core's own OpenGL calls find the same)
+    if (!glx.x11 || !glx.gl) return false;
+    auto x = [](auto& f, const char* n) { f = reinterpret_cast<std::remove_reference_t<decltype(f)>>(dlsym(glx.x11, n)); return f != nullptr; };
+    auto g = [](auto& f, const char* n) { f = reinterpret_cast<std::remove_reference_t<decltype(f)>>(dlsym(glx.gl, n)); return f != nullptr; };
+    const bool ok = x(glx.openDisplay, "XOpenDisplay") && x(glx.closeDisplay, "XCloseDisplay") && x(glx.xfree, "XFree") &&
+                    x(glx.defaultScreen, "XDefaultScreen") && g(glx.chooseFbConfig, "glXChooseFBConfig") &&
+                    g(glx.createPbuffer, "glXCreatePbuffer") && g(glx.destroyPbuffer, "glXDestroyPbuffer") &&
+                    g(glx.makeContextCurrent, "glXMakeContextCurrent") && g(glx.destroyContext, "glXDestroyContext") &&
+                    g(glx.getProcAddress, "glXGetProcAddressARB");
+    if (ok) glx.createContextAttribs = reinterpret_cast<decltype(glx.createContextAttribs)>(
+                glx.getProcAddress(reinterpret_cast<const unsigned char*>("glXCreateContextAttribsARB")));
+    return ok && glx.createContextAttribs;
+}
+
+// a GLX context on a 16x16 pbuffer of the X display (DISPLAY: X11, XWayland, gamescope)
+bool createGlx(const retro_hw_render_callback& cb) {
+    const char* d = std::getenv("DISPLAY");
+    if (!d || !*d || std::getenv("VEYAMUX_RETRO_EGL") || !loadGlx()) return false;
+    xdpy = glx.openDisplay(nullptr);
+    if (!xdpy) return false;
+    const int fa[] = {GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_RED_SIZE, 8, GLX_GREEN_SIZE, 8,
+                      GLX_BLUE_SIZE, 8, GLX_ALPHA_SIZE, 8, 0};
+    int n = 0;
+    GLXFBConfig* cfgs = glx.chooseFbConfig(xdpy, glx.defaultScreen(xdpy), fa, &n);
+    if (!cfgs || n < 1) { if (cfgs) glx.xfree(cfgs); glx.closeDisplay(xdpy); xdpy = nullptr; return false; }
+    GLXFBConfig cfg = cfgs[0];
+    glx.xfree(cfgs);
+    std::vector<int> ca;
+    if (cb.context_type == RETRO_HW_CONTEXT_OPENGL_CORE)
+        ca = {GLX_CONTEXT_MAJOR_VERSION_ARB, int(cb.version_major ? cb.version_major : 3), GLX_CONTEXT_MINOR_VERSION_ARB, int(cb.version_minor),
+              GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB};
+    else
+        ca = {GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB};
+    ca.push_back(0);
+    xctx = glx.createContextAttribs(xdpy, cfg, nullptr, 1, ca.data());
+    const int pa[] = {GLX_PBUFFER_WIDTH, 16, GLX_PBUFFER_HEIGHT, 16, 0};
+    if (xctx) xpb = glx.createPbuffer(xdpy, cfg, pa);
+    if (!xctx || !xpb || !glx.makeContextCurrent(xdpy, xpb, xpb, xctx)) {
+        if (xpb) glx.destroyPbuffer(xdpy, xpb);
+        if (xctx) glx.destroyContext(xdpy, xctx);
+        glx.closeDisplay(xdpy);
+        xdpy = xctx = nullptr;
+        xpb = 0;
+        return false;
+    }
+    return true;
+}
+
 EGLDisplay dpy = nullptr;
 EGLContext ctx = nullptr;
 EGLSurface surf = nullptr;
@@ -112,6 +191,7 @@ EGLDisplay openDisplay(std::string& how) {
 }
 
 void* glSym(const char* name) {
+    if (xctx) return glx.getProcAddress(reinterpret_cast<const unsigned char*>(name));
     if (void* p = egl.getProcAddress ? egl.getProcAddress(name) : nullptr) return p;
     if (!libGl) libGl = dlopen(gles ? "libGLESv2.so.2" : "libOpenGL.so.0", RTLD_NOW | RTLD_LOCAL);
     if (!libGl && !gles) libGl = dlopen("libGL.so.1", RTLD_NOW | RTLD_LOCAL);
@@ -120,11 +200,13 @@ void* glSym(const char* name) {
 
 } // namespace
 
+bool finish(const retro_hw_render_callback& cb, int maxW, int maxH, const std::string& how, std::string& error);
+
 bool supported(const retro_hw_render_callback& cb) {
     switch (cb.context_type) {
     case RETRO_HW_CONTEXT_OPENGL: case RETRO_HW_CONTEXT_OPENGL_CORE: case RETRO_HW_CONTEXT_OPENGLES2:
     case RETRO_HW_CONTEXT_OPENGLES3: case RETRO_HW_CONTEXT_OPENGLES_VERSION:
-        return loadEgl();
+        return loadEgl() || loadGlx();
     default:
         return false;   // Vulkan, Direct3D: not here (the cores that need them have an OpenGL choice)
     }
@@ -132,10 +214,11 @@ bool supported(const retro_hw_render_callback& cb) {
 
 bool create(const retro_hw_render_callback& cb, int maxW, int maxH, std::string& error) {
     destroy();
-    if (!loadEgl()) { error = "OpenGL is not available (libEGL.so.1 not found)"; return false; }
     gles = cb.context_type == RETRO_HW_CONTEXT_OPENGLES2 || cb.context_type == RETRO_HW_CONTEXT_OPENGLES3 ||
            cb.context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION;
     std::string how;
+    if (!gles && createGlx(cb)) { how = "GLX"; return finish(cb, maxW, maxH, how, error); }
+    if (!loadEgl()) { error = "OpenGL is not available (libEGL.so.1 not found)"; return false; }
     dpy = openDisplay(how);
     if (!dpy) { error = "OpenGL is not available (no EGL display)"; return false; }
     egl.bindApi(gles ? EGL_OPENGL_ES_API : EGL_OPENGL_API);
@@ -166,6 +249,11 @@ bool create(const retro_hw_render_callback& cb, int maxW, int maxH, std::string&
     const EGLint pb[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
     surf = egl.createPbuffer(dpy, cfg, pb);
     if (!egl.makeCurrent(dpy, surf, surf, ctx)) { error = "OpenGL could not be made current"; destroy(); return false; }
+    return finish(cb, maxW, maxH, how, error);
+}
+
+// the framebuffer the core draws into, on the context made current above
+bool finish(const retro_hw_render_callback& cb, int maxW, int maxH, const std::string& how, std::string& error) {
 
     auto g = [](auto& f, const char* name) { f = reinterpret_cast<std::remove_reference_t<decltype(f)>>(glSym(name)); return f != nullptr; };
     if (!(g(glf.genFramebuffers, "glGenFramebuffers") && g(glf.bindFramebuffer, "glBindFramebuffer") &&
@@ -204,10 +292,10 @@ bool create(const retro_hw_render_callback& cb, int maxW, int maxH, std::string&
 
 uintptr_t framebuffer() { return fbo; }
 void* procAddress(const char* name) { return glSym(name); }
-bool active() { return ctx != nullptr; }
+bool active() { return ctx != nullptr || xctx != nullptr; }
 
 bool read(int w, int h, bool bottomLeft, std::vector<uint8_t>& out) {
-    if (!ctx || w <= 0 || h <= 0) return false;
+    if (!active() || w <= 0 || h <= 0) return false;
     static std::vector<uint8_t> rgba;
     rgba.resize(size_t(w) * h * 4);
     glf.bindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -224,7 +312,7 @@ bool read(int w, int h, bool bottomLeft, std::vector<uint8_t>& out) {
 }
 
 void destroy() {
-    if (ctx && glf.deleteFramebuffers) {
+    if (active() && glf.deleteFramebuffers) {
         if (fbo) glf.deleteFramebuffers(1, &fbo);
         if (colorRb) glf.deleteRenderbuffers(1, &colorRb);
         if (depthRb) glf.deleteRenderbuffers(1, &depthRb);
@@ -237,6 +325,14 @@ void destroy() {
         egl.terminate(dpy);
     }
     dpy = ctx = surf = nullptr;
+    if (xdpy) {
+        glx.makeContextCurrent(xdpy, 0, 0, nullptr);
+        if (xpb) glx.destroyPbuffer(xdpy, xpb);
+        if (xctx) glx.destroyContext(xdpy, xctx);
+        glx.closeDisplay(xdpy);
+    }
+    xdpy = xctx = nullptr;
+    xpb = 0;
 }
 
 } // namespace veyamux::retro::gl

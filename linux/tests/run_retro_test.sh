@@ -24,6 +24,11 @@ cc -shared -fPIC -O1 -o "$WORK/crash_libretro.so" "$SRC/crash_core.c"
 # and one that draws with OpenGL (as N64 / Dreamcast / PSP emulators do): Mesa's software OpenGL on CI
 cc -shared -fPIC -O1 -o "$WORK/gl_libretro.so" "$SRC/gl_core.c"
 "$BUILD/veyamux-retro-test" "$WORK/gambatte_libretro.so" "$WORK/dmg-acid2.gb" "$WORK/crash_libretro.so" "$WORK/gl_libretro.so"
+# again with an X display (Xvfb): the OpenGL core must then get GLX, as PPSSPP's GLEW needs
+if command -v xvfb-run >/dev/null 2>&1; then
+    xvfb-run -a -s "-screen 0 640x480x24" "$BUILD/veyamux-retro-test" "$WORK/gambatte_libretro.so" "$WORK/dmg-acid2.gb" \
+        "$WORK/crash_libretro.so" "$WORK/gl_libretro.so"
+fi
 
 # Genesis Plus GX (non-commercial licence; built here for the test only, never shipped) with a tiny Mega Drive
 # program made on the spot: it passes no data for "no disc control" on cartridges, which crashed VeyAmux once.

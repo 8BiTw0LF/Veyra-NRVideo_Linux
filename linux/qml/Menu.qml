@@ -275,6 +275,14 @@ Rectangle {
                     visible: menu.tab === 0
                     width: parent.width; spacing: 16
                     SwitchRow { text: tr("enhance"); checked: player.enhance; onToggled: (v) => player.enhance = v }
+                    // anti-flicker first: with frame generation on it matters most for a clean picture (flickering
+                    // detail is what frame generation makes worse)
+                    Column {
+                        width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
+                        SwitchRow { text: tr("deflicker"); checked: player.deflicker; active: player.enhance; onToggled: (v) => player.deflicker = v }
+                        Hint { text: tr("deflickerHint") }
+                    }
+                    Sep {}
                     Column {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
                         Label_ { text: tr("upscale") }
@@ -325,8 +333,6 @@ Rectangle {
                         Segmented { width: parent.width; model: tr("aaq"); enabled: player.enhance && player.fxaa
                             current: player.fxaaQuality; onPicked: (i) => player.fxaaQuality = i }
                         Hint { text: player.smaa ? tr("smaaHint") : tr("fxaaHint") }
-                        SwitchRow { text: tr("deflicker"); checked: player.deflicker; active: player.enhance; onToggled: (v) => player.deflicker = v }
-                        Hint { text: tr("deflickerHint") }
                     }
                     Sep {}
                     Column {

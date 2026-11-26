@@ -43,13 +43,14 @@ Item {
     function pickSource(id) { detail.item = null; if (isMedia) media.select(id); else games.select(id) }
     readonly property string currentId: isMedia ? media.current : games.current
     // keep the controller's choice on screen
+    function inGrid(it) { for (let x = it; x; x = x.parent) if (x === grid) return true; return false }
     function ensureVisible(it) {
-        if (!it || !visible) return
-        let p = it.mapToItem(grid.contentItem, 0, 0)
-        if (p.y < 0 || p.y > grid.contentHeight + 10) return   // not in the grid
-        if (p.y < grid.contentY + 10) grid.contentY = Math.max(0, p.y - 20)
-        else if (p.y + it.height > grid.contentY + grid.height - 10)
-            grid.contentY = Math.max(0, Math.min(grid.contentHeight - grid.height, p.y + it.height - grid.height + 20))
+        if (!it || !visible || !inGrid(it)) return
+        // in the grid's own view, with room for the highlight ring around it
+        const q = it.mapToItem(grid, 0, 0), m = 14 * k
+        const top = grid.originY, bottom = grid.originY + Math.max(0, grid.contentHeight - grid.height)
+        if (q.y < m) grid.contentY = Math.max(top, grid.contentY + q.y - m)
+        else if (q.y + it.height > grid.height - m) grid.contentY = Math.min(bottom, grid.contentY + q.y + it.height - grid.height + m)
     }
 
     function sourceName(s) {

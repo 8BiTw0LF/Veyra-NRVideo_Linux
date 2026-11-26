@@ -145,8 +145,8 @@ Window {
                     model: [
                         { icon: "icons/capture.svg", title: "startCapture", sub: "startCaptureSub", act: 0 },
                         { icon: "icons/gamepad.svg", title: "startPs", sub: "startPsSub", act: 1 },
-                        { icon: "icons/tv.svg", title: "startMedia", sub: "startMediaSub", act: 2 },
-                        { icon: "icons/joystick.svg", title: "startGames", sub: "startGamesSub", act: 3 }
+                        { icon: "icons/joystick.svg", title: "startGames", sub: "startGamesSub", act: 3 },
+                        { icon: "icons/tv.svg", title: "startMedia", sub: "startMediaSub", act: 2 }
                     ]
                     delegate: Rectangle {
                         required property var modelData
@@ -750,13 +750,21 @@ Window {
     Rectangle {
         id: padRing
         z: 1000
-        visible: padNav.active && padNav.scope() !== null && padNav.current !== null && padNav.targets().indexOf(padNav.current) >= 0
+        visible: padNav.active && !hidden && padNav.scope() !== null && padNav.current !== null && padNav.targets().indexOf(padNav.current) >= 0
+        property bool hidden: false   // its card is scrolled out of the Media / Games grid
         color: "transparent"; border.width: 3; border.color: Theme.accent; radius: 8 * Theme.round
         function place() {
             var t = padNav.current; if (!t) return
+            if (lib.visible && lib.inGrid(t)) {
+                var g = t.mapToItem(lib.flick, 0, 0)
+                hidden = g.y < -4 || g.y + t.height > lib.flick.height + 4
+            } else {
+                hidden = false
+            }
             var p = t.mapToItem(win.contentItem, 0, 0), q = t.mapToItem(win.contentItem, t.width, t.height)
             x = p.x - 4; y = p.y - 4; width = q.x - p.x + 8; height = q.y - p.y + 8
         }
+        Connections { target: lib.flick; function onContentYChanged() { padRing.place() } }
         Connections { target: padNav; function onCurrentChanged() {
             // the menu scrolls: bring the selected control into view
             if (padNav.current && panelOpen) {

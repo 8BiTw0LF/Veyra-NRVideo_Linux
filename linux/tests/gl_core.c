@@ -3,6 +3,9 @@
  * depends on the frame and on button B, and draws a red square in the lower left corner (scissored clear) - so the test
  * sees that the picture arrives, the right way up, and that the input reaches the core. Built by
  * tests/run_retro_test.sh, never shipped. */
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -47,6 +50,12 @@ static void context_reset(void) {
     glDisable_ = (void (*)(GLenum))hw.get_proc_address("glDisable");
     glScissor_ = (void (*)(GLint, GLint, GLsizei, GLsizei))hw.get_proc_address("glScissor");
     ready = glClearColor_ && glClear_ && glViewport_ && glBindFramebuffer_ && glEnable_ && glDisable_ && glScissor_;
+    /* like PPSSPP's GLEW: with an X display, OpenGL is only loaded when a GLX context is current */
+    const char* d = getenv("DISPLAY");
+    if (d && *d) {
+        void* (*current)(void) = (void* (*)(void))dlsym(RTLD_DEFAULT, "glXGetCurrentDisplay");
+        if (!current || !current()) ready = false;
+    }
 }
 static void context_destroy(void) { ready = false; }
 

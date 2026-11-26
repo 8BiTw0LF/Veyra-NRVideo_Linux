@@ -437,6 +437,14 @@ int hostMain() {
         } else if (m == "open") {
             std::string err;
             if (!stream.open(err)) { sendMsg(sock, "open err " + err); break; }
+            {   // what runs, before the answer: the first picture may come before the sync thread's first round
+                const Info i = info();
+                sh->infoSeq.fetch_add(1);
+                std::snprintf(sh->infoCore, sizeof sh->infoCore, "%s", i.core.c_str());
+                sh->infoFps = i.fps; sh->infoRate = i.sampleRate; sh->infoW = i.w; sh->infoH = i.h; sh->infoAspect = i.aspect;
+                sh->infoSeq.fetch_add(1);
+                sh->running = 1;
+            }
             sendMsg(sock, "open ok");
             // the pictures into the shared slots
             video = std::thread([&] {

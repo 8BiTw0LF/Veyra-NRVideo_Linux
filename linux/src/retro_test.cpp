@@ -208,7 +208,11 @@ int main(int argc, char** argv) {
         check(opened, ("OpenGL core: opened " + e).c_str());
         if (opened) {
             RawFrame f;
-            auto pixel = [&](int x, int y) { const uint8_t* p = f.data.data() + (size_t(y) * f.w + x) * 4; return std::array<int, 3>{p[0], p[1], p[2]}; };
+            auto pixel = [&](int x, int y) {
+                if (f.w <= 0 || f.h <= 0 || x >= f.w || y < 0 || y >= f.h || f.data.size() < size_t(f.w) * f.h * 4) return std::array<int, 3>{-1, -1, -1};
+                const uint8_t* p = f.data.data() + (size_t(y) * f.w + x) * 4;
+                return std::array<int, 3>{p[0], p[1], p[2]};
+            };
             int frames = 0;
             const auto t0 = std::chrono::steady_clock::now();
             while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(1))
