@@ -482,8 +482,9 @@ int hostMain() {
             });
             // the controllers and switches in, the state and messages out
             sync = std::thread([&] {
-                int16_t ax[4][4];
+                int16_t ax[4][4]{};
                 uint32_t pads[4]{}, keys = 0;
+                unsigned tick = 0;
                 int lastRunAhead = -1, lastRewind = -1, lastRewinding = -1, lastPaused = -1;
                 while (!stop.load()) {
                     for (int p = 0; p < 4; ++p) {
@@ -497,15 +498,18 @@ int hostMain() {
                     if (lastRewind != sh->rewind.load()) setRewind((lastRewind = sh->rewind.load()) != 0);
                     if (lastRewinding != sh->rewinding.load()) setRewinding((lastRewinding = sh->rewinding.load()) != 0);
                     if (lastPaused != sh->paused.load()) setPaused((lastPaused = sh->paused.load()) != 0);
-                    sh->running = running() ? 1 : 0;
-                    sh->discCount = discCount();
-                    sh->discIndex = discIndex();
-                    const Info i = info();
-                    sh->infoSeq.fetch_add(1);
-                    std::snprintf(sh->infoCore, sizeof sh->infoCore, "%s", i.core.c_str());
-                    sh->infoFps = i.fps; sh->infoRate = i.sampleRate; sh->infoW = i.w; sh->infoH = i.h; sh->infoAspect = i.aspect;
-                    sh->infoSeq.fetch_add(1);
-                    if (std::string t = takeMessage(); !t.empty()) reply(t);
+                    // input every 0.5 ms (latency); the rest only every 20 ms - it changes rarely and takes locks
+                    if (tick++ % 40 == 0) {
+                        sh->running = running() ? 1 : 0;
+                        sh->discCount = discCount();
+                        sh->discIndex = discIndex();
+                        const Info i = info();
+                        sh->infoSeq.fetch_add(1);
+                        std::snprintf(sh->infoCore, sizeof sh->infoCore, "%s", i.core.c_str());
+                        sh->infoFps = i.fps; sh->infoRate = i.sampleRate; sh->infoW = i.w; sh->infoH = i.h; sh->infoAspect = i.aspect;
+                        sh->infoSeq.fetch_add(1);
+                        if (std::string t = takeMessage(); !t.empty()) reply(t);
+                    }
                     std::this_thread::sleep_for(std::chrono::microseconds(500));
                 }
             });

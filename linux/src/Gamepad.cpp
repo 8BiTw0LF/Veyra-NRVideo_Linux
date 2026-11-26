@@ -413,8 +413,11 @@ void GamepadInput::setGrabbed(bool g) {
     if (!g) { heldDir_.clear(); repeat_.stop(); }
     if (g) emit analog(0, 0, 0, 0, 0, 0, false);   // the demo stops swimming while the menu is open
     if (g) emit padState(0, 0, 0, 0, 0, 0, 0);       // and Remote Play gets an idle controller
-    if (g) for (const Pad* p : pads_) if (p->player >= 0) emit playerState(p->player, 0, 0, 0, 0, 0, 0, 0);
-    else emitPad();
+    if (g) {
+        for (const Pad* p : pads_) if (p->player >= 0) emit playerState(p->player, 0, 0, 0, 0, 0, 0, 0);
+    } else {
+        emitPad();   // the menu closed: what is held right now reaches the game at once
+    }
     applyGrab();
     emit grabbedChanged();
 }

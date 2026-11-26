@@ -827,7 +827,7 @@ void setRumbleCallback(std::function<void(int, int)> cb) {
 void audio(int16_t* out, int frames) {
     if (remote::on()) { remote::audio(out, frames); return; }
     auto r = get();
-    if (!r) { std::memset(out, 0, size_t(frames) * 4); std::this_thread::sleep_for(std::chrono::milliseconds(frames / 48)); return; }
+    if (!r) { std::memset(out, 0, size_t(frames) * 4); std::this_thread::sleep_for(std::chrono::milliseconds(std::max(1, frames / 48))); return; }
     // paced by the playback stream: wait until the core has made enough sound for this block, then resample. The
     // rate follows how full the queue is (a fraction of a percent), so the core's clock and the sound card's never
     // drift apart (no growing delay, no gaps).
