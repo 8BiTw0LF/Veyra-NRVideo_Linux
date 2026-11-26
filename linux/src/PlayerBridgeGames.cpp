@@ -26,6 +26,7 @@ void PlayerBridge::openGame(const QString& core, const QString& rom, const QStri
     g.stickAsDpad = !sys || !sys->analog;
     retroSystem_ = systemId;
     retroRewindKey_ = g.stickAsDpad;   // L2 is free on systems without analog sticks
+    retroRewinding_ = false;
     g.runAhead = retroRunAhead();
     g.rewind = retroRewind();
     g.resume = resume;
@@ -67,7 +68,11 @@ void PlayerBridge::psPad(quint32 buttons, double lx, double ly, double rx, doubl
 void PlayerBridge::psPlayer(int player, quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2) {
     if (!retroActive_) return;
     if (player == 0 && retroRewindKey_ && retroRewind()) {
-        veyamux::retro::setRewinding(l2 > 0.5);
+        // pressed past 3/4, let go below 1/4: a trigger that rests near half way (or a noisy one) cannot flicker it -
+        // stepping back while a button is held makes the game see that button pressed again
+        if (!retroRewinding_ && l2 > 0.75) retroRewinding_ = true;
+        else if (retroRewinding_ && l2 < 0.25) retroRewinding_ = false;
+        veyamux::retro::setRewinding(retroRewinding_);
         l2 = 0;
     }
     veyamux::retro::setPad(player, veyamux::retro::fromPlayStation(buttons, l2, r2), lx, ly, rx, ry);
@@ -90,7 +95,7 @@ bool PlayerBridge::retroRewind() const {
 void PlayerBridge::setRetroRewind(bool on) {
     QSettings().setValue("games/" + retroSystem_ + "/rewind", on);
     veyamux::retro::setRewind(on);
-    if (!on) veyamux::retro::setRewinding(false);
+    if (!on) { veyamux::retro::setRewinding(false); retroRewinding_ = false; }
     emit retroOptionsChanged();
 }
 void PlayerBridge::retroRewindHold(bool held) { if (retroActive() && retroRewind()) veyamux::retro::setRewinding(held); }

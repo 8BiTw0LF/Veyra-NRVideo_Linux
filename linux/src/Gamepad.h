@@ -71,11 +71,14 @@ private:
         int ffId = -1;
         // this controller alone (games with several players)
         int player = -1;
+        bool twin = false;               // a copy of another controller (Steam Input's): never a player of its own
+        bool lastMirrored = true;        // its last press was sent by another controller too
         quint32 ps = 0;
         double ax[6]{};
         bool trig[2]{};
     };
     void padKey(Pad& p, int code, bool down, bool dup);
+    void markTwins(const QString& firstPath, const QString& laterPath);
     void emitPlayer(const Pad& p);
     void scan();
     void addPad(const QString& path, bool test);
@@ -90,7 +93,8 @@ private:
     // Steam Input (Bazzite, SteamOS) adds a virtual copy of each controller: the same press then arrives from two
     // devices. A press already seen from another device within a few milliseconds is dropped.
     struct Seen { QString path; qint64 ms = -1; };
-    QHash<int, Seen> seen_;              // key: event code * 4 + value (+ 1)
+    QHash<int, Seen> seen_;
+    QHash<QString, int> pairStreak_;     // "pathA|pathB": presses in a row both sent              // key: event code * 4 + value (+ 1)
     QElapsedTimer clock_;
 
     QHash<QString, Pad*> pads_;

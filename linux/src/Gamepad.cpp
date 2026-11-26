@@ -209,7 +209,40 @@ bool GamepadInput::duplicate(const Pad& p, int key, int value) {
     Seen& s = seen_[key * 4 + value + 1];
     const bool dup = s.ms >= 0 && s.path != p.path && now - s.ms < 60;
     if (!dup) { s.path = p.path; s.ms = now; }
+    if (value != 0) {
+        // a copy mirrors every press; two players can press together now and then, but not three times in a row
+        // with nothing else between (a press of either that the other did not mirror starts the count again)
+        Pad& me = const_cast<Pad&>(p);
+        if (!dup) {
+            if (!me.lastMirrored)
+                for (auto it = pairStreak_.begin(); it != pairStreak_.end();)
+                    it = it.key().contains(me.path) ? pairStreak_.erase(it) : std::next(it);
+            me.lastMirrored = false;
+        } else if (Pad* first = pads_.value(s.path)) {
+            first->lastMirrored = me.lastMirrored = true;
+            const QString pair = first->path < me.path ? first->path + "|" + me.path : me.path + "|" + first->path;
+            if (++pairStreak_[pair] >= 3) markTwins(first->path, me.path);
+        }
+    }
     return dup;
+}
+
+// two controllers sent the same press at once: one is a copy of the other (Steam Input's virtual controller, or a
+// handheld's driver next to the raw device). The copy is never a player of its own; which one is the copy does not
+// depend on whose event came first this time - the one that is already a player stays it. Before this, the copy
+// could take player 2 when its event happened to arrive first, and then both sent the same presses.
+void GamepadInput::markTwins(const QString& firstPath, const QString& laterPath) {
+    Pad* a = pads_.value(firstPath);
+    Pad* b = pads_.value(laterPath);
+    if (!a || !b || a->twin || b->twin) return;
+    Pad* copy = (b->player < 0 || (a->player >= 0 && a->player < b->player)) ? b : a;
+    copy->twin = true;
+    qInfo("Controller: %s is a copy of %s (not a player of its own)", qPrintable(copy->name),
+          qPrintable((copy == a ? b : a)->name));
+    if (copy->player >= 0) {
+        emit playerState(copy->player, 0, 0, 0, 0, 0, 0, 0);
+        copy->player = -1;
+    }
 }
 
 bool GamepadInput::comboHeld() const { return select_ || start_ || guide_; }
@@ -270,10 +303,11 @@ void GamepadInput::padKey(Pad& p, int code, bool down, bool dup) {
     if (bit) p.ps = down ? (p.ps | bit) : (p.ps & ~bit);
     // the first press of a controller that has no place yet gives it the next free one (Steam Input's copy is a
     // duplicate and never gets one)
-    if (p.player < 0 && down && !dup && !p.touchpad) {
+    if (p.player < 0 && down && !dup && !p.twin && !p.touchpad) {
         bool used[4]{};
         for (const Pad* q : pads_) if (q->player >= 0 && q->player < 4) used[q->player] = true;
         for (int i = 0; i < 4; ++i) if (!used[i]) { p.player = i; break; }
+        if (p.player >= 0) qInfo("Controller: %s is player %d", qPrintable(p.name), p.player + 1);
     }
     emitPlayer(p);
 }

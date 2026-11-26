@@ -745,6 +745,7 @@ private:
     int retroDiscs_ = 0, retroDisc_ = 0;
     QString retroSystem_;
     bool retroRewindKey_ = false;
+    bool retroRewinding_ = false;      // L2 held for rewind (with hysteresis)
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;

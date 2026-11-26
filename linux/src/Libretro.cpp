@@ -87,6 +87,16 @@ Game current;
 
 std::atomic<uint32_t> padButtons[4]{}, keyButtons{0};    // players 1-4; the keyboard is player 1
 std::atomic<int16_t> axes[4][4]{};                         // per player: left x, left y, right x, right y
+// what the core reads: the above taken once per frame on the core thread (latchInput), so a press that comes while a
+// frame runs, or between the real frame and the frames ahead of it, is seen from the next frame on and never half
+uint32_t latchedButtons[4]{};
+int16_t latchedAxes[4][4]{};
+void latchInput() {
+    for (int i = 0; i < 4; ++i) {
+        latchedButtons[i] = padButtons[i].load() | (i == 0 ? keyButtons.load() : 0u);
+        for (int k = 0; k < 4; ++k) latchedAxes[i][k] = axes[i][k].load();
+    }
+}
 std::atomic<int> runAheadWanted{0};
 std::atomic<bool> rewindWanted{false}, rewindHeld{false};
 bool suppressVideo = false, suppressAudio = false;        // core thread: frames run only for run-ahead
@@ -387,9 +397,9 @@ void RETRO_CALLCONV inputPoll() {}
 
 int16_t RETRO_CALLCONV inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
     if (port > 3) return 0;
-    uint32_t b = padButtons[port].load() | (port == 0 ? keyButtons.load() : 0u);
+    uint32_t b = latchedButtons[port];
     if (stickDpad.load()) {   // the left stick as the D-pad
-        const int lx = axes[port][0].load(), ly = axes[port][1].load();
+        const int lx = latchedAxes[port][0], ly = latchedAxes[port][1];
         if (lx < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_LEFT;
         if (lx > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_RIGHT;
         if (ly < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_UP;
@@ -402,7 +412,7 @@ int16_t RETRO_CALLCONV inputState(unsigned port, unsigned device, unsigned index
     if (device == RETRO_DEVICE_ANALOG) {
         if (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON)
             return id < 16 && ((b >> id) & 1) ? 0x7fff : 0;
-        if (index <= RETRO_DEVICE_INDEX_ANALOG_RIGHT && id <= RETRO_DEVICE_ID_ANALOG_Y) return axes[port][index * 2 + id].load();
+        if (index <= RETRO_DEVICE_INDEX_ANALOG_RIGHT && id <= RETRO_DEVICE_ID_ANALOG_Y) return latchedAxes[port][index * 2 + id];
     }
     return 0;
 }
@@ -578,6 +588,7 @@ void coreThread(Runner* r, Game g) {
     bool runAheadBroken = false;
     auto frame = [&] {
         ++frameNo;
+        latchInput();
         // rewind: one kept state back per frame while held (shown, without its sound)
         if (rewindHeld.load() && rewindWanted.load()) {
             if (rewindBuf.empty()) return;
