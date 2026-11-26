@@ -1888,7 +1888,7 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         // games (Libretro.cpp)
         "State saved", "State loaded", "No saved state yet", "Could not save the state", "Could not load the state",
         "This emulator cannot save states", "The emulator could not start the game (a missing BIOS file? See the BIOS folder)",
-        "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed", "Disc changed",
+        "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed", "Disc changed", "Continued where you left off", "Run-ahead does not work with this emulator",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

@@ -6,6 +6,7 @@
 #include "Diagnostics.h"
 #include "Gamepad.h"
 #include "GameLibrary.h"
+#include "SteamShortcut.h"
 #include <QQuickImageProvider>
 #include <QMouseEvent>
 #include <QPointingDevice>
@@ -388,6 +389,8 @@ int main(int argc, char** argv) {
     QObject::connect(&gamepad, &veyamux::GamepadInput::analog, &player, &PlayerBridge::demoPad);
     // PlayStation Remote Play: the controller to the console, the game's rumble back
     QObject::connect(&gamepad, &veyamux::GamepadInput::padState, &player, &PlayerBridge::psPad);
+    QObject::connect(&gamepad, &veyamux::GamepadInput::playerState, &player, &PlayerBridge::psPlayer);
+    QObject::connect(&player, &PlayerBridge::playersReset, &gamepad, &veyamux::GamepadInput::resetPlayers);
     QObject::connect(&player, &PlayerBridge::psRumble, &gamepad, &veyamux::GamepadInput::rumble);
     QObject::connect(&gamepad, &veyamux::GamepadInput::freeButton, &player, [&player](const QString& b) {
         if (b == "y" && player.demoActive()) player.demoPose(-1);
@@ -415,8 +418,8 @@ int main(int argc, char** argv) {
     static TouchFilter touchFilter(&player);
     app.installEventFilter(&touchFilter);
     QObject::connect(&games, &veyamux::GameLibrary::launch, &player,
-                     [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys) {
-                         player.openGame(core, rom, title, sys, games.biosFolder());
+                     [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys, bool resume) {
+                         player.openGame(core, rom, title, sys, games.biosFolder(), resume);
                      });
     engine.rootContext()->setContextProperty("media", &media);
     engine.rootContext()->setContextProperty("games", &games);
@@ -626,6 +629,12 @@ int main(int argc, char** argv) {
             qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
                   qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
         });
+    // (VEYAMUX_TEST_ARTWORK=<folder>: write the Steam library artwork there and quit)
+    if (const QString ta = qEnvironmentVariable("VEYAMUX_TEST_ARTWORK"); !ta.isEmpty()) {
+        const auto art = veyamux::steam::artwork();
+        for (auto it = art.begin(); it != art.end(); ++it) it.value().save(ta + "/grid" + it.key() + ".png");
+        return 0;
+    }
     // (VEYAMUX_TEST_COVERS=1: fetch the box art at start)
     if (qEnvironmentVariableIsSet("VEYAMUX_TEST_COVERS")) QTimer::singleShot(2500, [&games] { games.downloadCovers(); });
     // --capture last: the card used last time (Steam / Game Mode shortcut)

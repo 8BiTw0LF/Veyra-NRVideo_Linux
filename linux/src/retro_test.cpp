@@ -105,8 +105,35 @@ static bool runOnce(const std::string& core, const std::string& rom, const fs::p
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     m = retro::takeMessage();
     check(m == "State loaded", "load the state");
+    // run-ahead (2 frames) and rewind, switched on while the game runs: still in time, and stepping back works
+    retro::setRunAhead(2);
+    retro::setRewind(true);
+    frames = 0;
+    const auto t1 = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - t1 < std::chrono::seconds(1))
+        if (s.readLatest(f, 100, e) == retro::Stream::Result::Frame) ++frames;
+    std::printf("     run-ahead 2: %d pictures in 1 s\n", frames);
+    check(frames > 0.8 * s.fps() && retro::takeMessage().empty(), "run-ahead keeps the core's rate");
+    retro::setRewinding(true);
+    frames = 0;
+    const auto t2 = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - t2 < std::chrono::milliseconds(500))
+        if (s.readLatest(f, 100, e) == retro::Stream::Result::Frame) ++frames;
+    retro::setRewinding(false);
+    retro::setRunAhead(0);
+    retro::setRewind(false);
+    check(frames > 0, "rewind shows pictures");
     s.close();
     check(!retro::running(), "closed");
+    // quitting wrote the automatic state; "Continue" loads it
+    check(fs::exists(retro::autoStatePath(g.stateDir, g.rom)), "the automatic state on quit");
+    g.resume = true;
+    retro::setGame(g);
+    retro::Stream s2;
+    check(s2.open(e), "opened again");
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    check(retro::takeMessage() == "Continued where you left off", "continue where it was quit");
+    s2.close();
     return true;
 }
 

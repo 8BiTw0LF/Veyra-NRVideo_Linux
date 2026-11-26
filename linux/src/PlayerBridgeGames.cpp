@@ -12,7 +12,8 @@
 
 namespace rp = veyamux::remoteplay;
 
-void PlayerBridge::openGame(const QString& core, const QString& rom, const QString& title, const QString& systemId, const QString& biosDir) {
+void PlayerBridge::openGame(const QString& core, const QString& rom, const QString& title, const QString& systemId, const QString& biosDir,
+                            bool resume) {
     const veyamux::GameSystem* sys = veyamux::gameSystem(systemId);
     const QString data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/games/";
     veyamux::retro::Game g;
@@ -23,6 +24,13 @@ void PlayerBridge::openGame(const QString& core, const QString& rom, const QStri
     g.saveDir = (data + "saves/" + systemId).toStdString();
     g.stateDir = (data + "states/" + systemId).toStdString();
     g.stickAsDpad = !sys || !sys->analog;
+    retroSystem_ = systemId;
+    retroRewindKey_ = g.stickAsDpad;   // L2 is free on systems without analog sticks
+    g.runAhead = retroRunAhead();
+    g.rewind = retroRewind();
+    g.resume = resume;
+    emit retroOptionsChanged();
+    emit playersReset();
     veyamux::retro::setGame(g);
     veyamux::retro::setRumbleCallback([this](int low, int high) {
         QMetaObject::invokeMethod(this, [this, low, high] { emit psRumble(low, high); }, Qt::QueuedConnection);
@@ -50,12 +58,42 @@ void PlayerBridge::retroKey(const QString& key, bool down) {
 
 // the controller: to the console (Remote Play) or to the game (libretro)
 void PlayerBridge::psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2) {
-    if (retroActive_) {
-        veyamux::retro::setPad(veyamux::retro::fromPlayStation(buttons, l2, r2), lx, ly, rx, ry);
-        return;
-    }
+    if (retroActive_) return;   // a game takes each controller as its own player (psPlayer)
     rp::setController(buttons, lx, ly, rx, ry, l2, r2);
 }
+
+// players 1-4 of a game. On a system without L2 (NES, SNES, Mega Drive, Game Boy, ...) player 1's L2 rewinds while
+// held, when rewind is on.
+void PlayerBridge::psPlayer(int player, quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2) {
+    if (!retroActive_) return;
+    if (player == 0 && retroRewindKey_ && retroRewind()) {
+        veyamux::retro::setRewinding(l2 > 0.5);
+        l2 = 0;
+    }
+    veyamux::retro::setPad(player, veyamux::retro::fromPlayStation(buttons, l2, r2), lx, ly, rx, ry);
+}
+
+// run-ahead and rewind, kept per system (games/<system>/runAhead, .../rewind); the defaults: 1 frame and rewind on for
+// cartridge systems, off for CD systems (their states are large and the emulators heavier)
+static bool cdSystem(const QString& s) { return s == "psx" || s == "saturn" || s == "segacd" || s == "pcecd"; }
+int PlayerBridge::retroRunAhead() const {
+    return QSettings().value("games/" + retroSystem_ + "/runAhead", cdSystem(retroSystem_) ? 0 : 1).toInt();
+}
+void PlayerBridge::setRetroRunAhead(int frames) {
+    QSettings().setValue("games/" + retroSystem_ + "/runAhead", frames);
+    veyamux::retro::setRunAhead(frames);
+    emit retroOptionsChanged();
+}
+bool PlayerBridge::retroRewind() const {
+    return QSettings().value("games/" + retroSystem_ + "/rewind", !cdSystem(retroSystem_)).toBool();
+}
+void PlayerBridge::setRetroRewind(bool on) {
+    QSettings().setValue("games/" + retroSystem_ + "/rewind", on);
+    veyamux::retro::setRewind(on);
+    if (!on) veyamux::retro::setRewinding(false);
+    emit retroOptionsChanged();
+}
+void PlayerBridge::retroRewindHold(bool held) { if (retroActive() && retroRewind()) veyamux::retro::setRewinding(held); }
 
 // done / failed messages of the emulator (state saved, ...), shown as a notice
 void PlayerBridge::retroNextDisc() { if (retroActive()) veyamux::retro::nextDisc(); }

@@ -68,8 +68,9 @@ public:
     Q_INVOKABLE void chooseBiosFolder();
     Q_INVOKABLE void openBiosFolder();
     Q_INVOKABLE void rescan();
+    Q_INVOKABLE void refresh() { emit changed(); }   // the page shown again (Continue may have come)
     Q_INVOKABLE void select(const QString& systemId);
-    Q_INVOKABLE void play(const QString& path);
+    Q_INVOKABLE void play(const QString& path, bool resume = false);   // resume: from the state written when it was quit
     Q_INVOKABLE void downloadCovers();          // box art for every game that has none
     Q_INVOKABLE void setCover(const QString& path);   // a picture of the user's own
     Q_INVOKABLE QString biosHint(const QString& systemId) const;
@@ -83,7 +84,7 @@ signals:
     void busyChanged();
     void coversChanged();
     // ready to play: PlayerBridge::openGame
-    void launch(const QString& core, const QString& rom, const QString& title, const QString& systemId);
+    void launch(const QString& core, const QString& rom, const QString& title, const QString& systemId, bool resume);
     // a Strings.js key and its %1
     void message(const QString& key, const QString& arg, bool error);
 

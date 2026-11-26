@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFont>
+#include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
@@ -213,19 +215,48 @@ void background(QPainter& p, const QSize& s, QPointF glowAt, double glowR) {
     p.restore();
 }
 
-void wordmark(QPainter& p, const QRectF& r, int px, Qt::Alignment align, const QString& sub = {}, int subPx = 0) {
-    QFont f;
-    f.setFamilies({"Inter", "Cantarell", "Noto Sans", "DejaVu Sans", "Sans Serif"});
+// VeyAmux's own copy of Inter (qml/fonts), so the artwork looks the same on every system
+QString artFont() {
+    static QString family = [] {
+        QString f;
+        for (const char* file : {":/qml/fonts/Inter-Black.ttf", ":/qml/fonts/Inter-SemiBold.ttf"}) {
+            const int id = QFontDatabase::addApplicationFont(QString::fromLatin1(file));
+            if (id >= 0 && f.isEmpty()) f = QFontDatabase::applicationFontFamilies(id).value(0);
+        }
+        return f.isEmpty() ? QStringLiteral("Sans Serif") : f;
+    }();
+    return family;
+}
+
+QFont artFontAt(int px, QFont::Weight w, int spacing = 100) {
+    QFont f(artFont());
     f.setPixelSize(px);
-    f.setWeight(QFont::Black);
-    f.setLetterSpacing(QFont::PercentageSpacing, 96);
-    p.setFont(f);
+    f.setWeight(w);
+    f.setLetterSpacing(QFont::PercentageSpacing, spacing);
+    f.setHintingPreference(QFont::PreferNoHinting);
+    return f;
+}
+
+// the sunset gradient of the theme, across a rectangle
+QLinearGradient sunset(const QRectF& r) {
+    QLinearGradient g(r.topLeft(), r.topRight());
+    g.setColorAt(0, QColor("#ffa477"));
+    g.setColorAt(1, QColor("#ff3d8e"));
+    return g;
+}
+
+// "VeyAmux" (Amux in the gradient), shrunk until it fits the rectangle's width; a line under it when given
+void wordmark(QPainter& p, const QRectF& r, int px, Qt::Alignment align, const QString& sub = {}, int subPx = 0) {
+    QFont f = artFontAt(px, QFont::Black, 96);
+    const QString vey = "Vey", amux = "Amux";
+    for (int i = 0; i < 40 && QFontMetricsF(f).horizontalAdvance(vey + amux) > r.width(); ++i) f.setPixelSize(int(f.pixelSize() * 0.95));
+    QFont sf = artFontAt(std::max(8, subPx), QFont::DemiBold, 110);
+    for (int i = 0; !sub.isEmpty() && i < 40 && QFontMetricsF(sf).horizontalAdvance(sub) > r.width(); ++i) sf.setPixelSize(std::max(8, int(sf.pixelSize() * 0.95)));
     const QFontMetricsF fm(f);
-    const double total = fm.height() + (sub.isEmpty() ? 0 : subPx * 1.6);
+    const double total = fm.height() + (sub.isEmpty() ? 0 : sf.pixelSize() * 1.6);
     double y = r.top();
     if (align & Qt::AlignVCenter) y = r.center().y() - total / 2;
     else if (align & Qt::AlignBottom) y = r.bottom() - total;
-    const QString vey = "Vey", amux = "Amux";
     const double w = fm.horizontalAdvance(vey + amux);
     double x = r.left();
     if (align & Qt::AlignHCenter) x = r.center().x() - w / 2;
@@ -238,20 +269,63 @@ void wordmark(QPainter& p, const QRectF& r, int px, Qt::Alignment align, const Q
     p.drawPath(path);
     QPainterPath path2;
     path2.addText(QPointF(x + fm.horizontalAdvance(vey), base), f, amux);
-    QLinearGradient g(x, y, x + w, y + fm.height());
-    g.setColorAt(0, QColor("#ffa477"));
-    g.setColorAt(1, QColor("#ff3d8e"));
-    p.setBrush(g);
+    p.setBrush(sunset(QRectF(x, y, w, fm.height())));
     p.drawPath(path2);
     if (!sub.isEmpty()) {
-        QFont s = f;
-        s.setPixelSize(subPx);
-        s.setWeight(QFont::DemiBold);
-        s.setLetterSpacing(QFont::PercentageSpacing, 108);
-        p.setFont(s);
-        p.setPen(QColor(255, 226, 212, 200));
-        const QRectF sr(r.left(), y + fm.height() + subPx * 0.25, r.width(), subPx * 1.4);
+        p.setFont(sf);
+        p.setPen(QColor(255, 226, 212, 210));
+        const QRectF sr(r.left(), y + fm.height() + sf.pixelSize() * 0.2, r.width(), sf.pixelSize() * 1.4);
         p.drawText(sr, int(align & Qt::AlignHorizontal_Mask) | Qt::AlignVCenter, sub);
+    }
+}
+
+// what VeyAmux does, for the library background: a headline and lines with a gradient mark before each
+void features(QPainter& p, const QRectF& r) {
+    struct Line { QString big, small; };
+    const Line lines[] = {
+        {"Lossless Scaling", "or free FSR 3.1 frame generation"},
+        {"PlayStation Remote Play", "PS5 · PS4"},
+        {"Jellyfin · Plex", "films and series, subtitles"},
+        {"Retro games", "26 consoles, run-ahead"},
+    };
+    // headline: 30 -> 60 FPS
+    QFont head = artFontAt(92, QFont::Black, 96);
+    const QString h1 = "30", arrow = "  →  ", h2 = "60 FPS";
+    const QFontMetricsF hm(head);
+    double x = r.left();
+    const double base = r.top() + hm.ascent();
+    QPainterPath a;
+    a.addText(QPointF(x, base), head, h1);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(255, 255, 255, 235));
+    p.drawPath(a);
+    x += hm.horizontalAdvance(h1);
+    QFont arrowFont = artFontAt(64, QFont::DemiBold);
+    p.setFont(arrowFont);
+    p.setPen(QColor(255, 226, 212, 170));
+    p.drawText(QRectF(x, r.top(), QFontMetricsF(arrowFont).horizontalAdvance(arrow), hm.height()), Qt::AlignVCenter, arrow);
+    x += QFontMetricsF(arrowFont).horizontalAdvance(arrow);
+    QPainterPath b;
+    b.addText(QPointF(x, base), head, h2);
+    p.setPen(Qt::NoPen);
+    p.setBrush(sunset(QRectF(x, r.top(), hm.horizontalAdvance(h2), hm.height())));
+    p.drawPath(b);
+    // the lines
+    double y = r.top() + hm.height() + 26;
+    const QFont big = artFontAt(34, QFont::Black, 98), small = artFontAt(25, QFont::DemiBold, 102);
+    for (const auto& l : lines) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(sunset(QRectF(r.left(), y, 10, 40)));
+        p.drawRoundedRect(QRectF(r.left(), y + 9, 8, 38), 4, 4);
+        p.setFont(big);
+        p.setPen(QColor("#ffffff"));
+        const double bw = QFontMetricsF(big).horizontalAdvance(l.big);
+        p.drawText(QRectF(r.left() + 26, y, bw + 4, 56), Qt::AlignVCenter | Qt::AlignLeft, l.big);
+        p.setFont(small);
+        p.setPen(QColor(255, 226, 212, 175));
+        if (QFontMetricsF(p.font()).horizontalAdvance(l.small) < r.width() - bw - 44)   // only when it fits whole
+            p.drawText(QRectF(r.left() + 26 + bw + 18, y + 3, r.width() - bw - 44, 56), Qt::AlignVCenter | Qt::AlignLeft, l.small);
+        y += 64;
     }
 }
 
@@ -264,32 +338,41 @@ QImage canvas(int w, int h, bool transparent) {
 } // namespace
 
 QMap<QString, QImage> artwork() {
-    const QString tag = QStringLiteral("CAPTURE  \u00b7  UPSCALE  \u00b7  FRAME GENERATION");
+    const QString tag = QStringLiteral("CAPTURE  ·  REMOTE PLAY  ·  MEDIA  ·  RETRO GAMES");
     QMap<QString, QImage> out;
     {   // portrait cover 600x900
         QImage img = canvas(600, 900, false);
         QPainter p(&img);
         p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
         background(p, img.size(), QPointF(300, 360), 420);
-        drawLogo(p, QRectF(150, 210, 300, 300));
-        wordmark(p, QRectF(30, 560, 540, 200), 104, Qt::AlignHCenter | Qt::AlignTop, tag, 19);
+        drawLogo(p, QRectF(150, 190, 300, 300));
+        wordmark(p, QRectF(40, 540, 520, 200), 104, Qt::AlignHCenter | Qt::AlignTop, tag, 17);
+        // what it does, small, at the bottom
+        p.setFont(artFontAt(21, QFont::DemiBold, 104));
+        p.setPen(QColor(255, 226, 212, 150));
+        p.drawText(QRectF(40, 760, 520, 90), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
+                   QStringLiteral("Upscaling · frame generation · 30 → 60 fps\nJellyfin · Plex · 26 retro consoles"));
         out.insert("p", img);
     }
     {   // wide cover 920x430
         QImage img = canvas(920, 430, false);
         QPainter p(&img);
         p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-        background(p, img.size(), QPointF(220, 215), 330);
-        drawLogo(p, QRectF(80, 90, 250, 250));
-        wordmark(p, QRectF(370, 0, 520, 430), 96, Qt::AlignLeft | Qt::AlignVCenter, tag, 17);
+        background(p, img.size(), QPointF(200, 215), 330);
+        drawLogo(p, QRectF(60, 105, 220, 220));
+        wordmark(p, QRectF(320, 0, 560, 430), 100, Qt::AlignLeft | Qt::AlignVCenter, tag, 17);
         out.insert("", img);
     }
-    {   // background 1920x620 (Steam puts the logo over it, left side)
+    {   // background 1920x620. Steam puts the logo over its left part, so what VeyAmux does stands on the right, inside
+        // the part every view of the library keeps
         QImage img = canvas(1920, 620, false);
         QPainter p(&img);
-        p.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-        background(p, img.size(), QPointF(1450, 310), 760);
-        drawLogo(p, QRectF(1210, 70, 480, 480));
+        p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+        background(p, img.size(), QPointF(1500, 300), 820);
+        p.setOpacity(0.05);
+        drawLogo(p, QRectF(1580, 40, 540, 540));   // the mark, faint, behind the text
+        p.setOpacity(1.0);
+        features(p, QRectF(1000, 120, 860, 440));
         out.insert("_hero", img);
     }
     {   // logo 1280x400, transparent
@@ -297,7 +380,7 @@ QMap<QString, QImage> artwork() {
         QPainter p(&img);
         p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
         drawLogo(p, QRectF(20, 40, 320, 320));
-        wordmark(p, QRectF(380, 0, 900, 400), 190, Qt::AlignLeft | Qt::AlignVCenter);
+        wordmark(p, QRectF(380, 0, 880, 400), 190, Qt::AlignLeft | Qt::AlignVCenter);
         out.insert("_logo", img);
     }
     return out;

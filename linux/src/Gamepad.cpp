@@ -122,6 +122,7 @@ void GamepadInput::addPad(const QString& path, bool test) {
 void GamepadInput::removePad(const QString& path) {
     Pad* p = pads_.take(path);
     if (!p) return;
+    if (p->player >= 0) emit playerState(p->player, 0, 0, 0, 0, 0, 0, 0);   // unplugged: that player lets go
     if (p->ffFd >= 0) ::close(p->ffFd);
     ::close(p->fd);
     delete p;
@@ -146,7 +147,9 @@ void GamepadInput::readPad(Pad& p) {
             if (e.type == EV_KEY) {
                 if (e.value == 2) continue;   // kernel auto-repeat: VeyAmux repeats itself
                 psKey(e.code, e.value != 0);   // (the Steam Input copy sends the same state: harmless here)
-                if (duplicate(p, e.code, e.value != 0)) continue;
+                const bool dup = duplicate(p, e.code, e.value != 0);
+                padKey(p, e.code, e.value != 0, dup);
+                if (dup) continue;
                 onKey(e.code, e.value != 0);
             } else if (e.type == EV_ABS) {
                 if (e.code == ABS_HAT0X || e.code == ABS_HAT0Y) {
@@ -157,7 +160,15 @@ void GamepadInput::readPad(Pad& p) {
                         psButtons_ = (psButtons_ & ~(neg | pos)) | (e.value < 0 ? neg : 0) | (e.value > 0 ? pos : 0);
                         if (psButtons_ != before) emitPad();
                     }
-                    if (duplicate(p, e.code, e.value < 0 ? -1 : e.value > 0 ? 1 : 0)) continue;
+                    const bool dup = duplicate(p, e.code, e.value < 0 ? -1 : e.value > 0 ? 1 : 0);
+                    {   // this controller's D-pad
+                        using namespace remoteplay_bits;
+                        const quint32 neg = e.code == ABS_HAT0X ? kLeft : kUp, pos = e.code == ABS_HAT0X ? kRight : kDown;
+                        p.ps = (p.ps & ~(neg | pos)) | (e.value < 0 ? neg : 0) | (e.value > 0 ? pos : 0);
+                        if (p.player < 0 && e.value != 0 && !dup) padKey(p, -1, true, false);
+                        emitPlayer(p);
+                    }
+                    if (dup) continue;
                     const bool x = e.code == ABS_HAT0X;
                     const bool neg = e.value < 0, pos = e.value > 0;
                     const int a = x ? 2 : 0;   // up/down = 0/1, left/right = 2/3
@@ -172,12 +183,16 @@ void GamepadInput::readPad(Pad& p) {
                         const double range = p.absMax[i] - p.absMin[i];
                         axis_[i] = range > 0 ? std::clamp((e.value - p.absMin[i]) / range, 0.0, 1.0) : 0;
                     }
+                    p.ax[i] = axis_[i];
+                    emitPlayer(p);
                     emitAnalog();
                 } else if (e.code == ABS_X || e.code == ABS_Y) {
                     const int ax = e.code == ABS_Y;
                     const double mid = (p.absMin[ax] + p.absMax[ax]) / 2.0, half = (p.absMax[ax] - p.absMin[ax]) / 2.0;
                     const double v = half > 0 ? (e.value - mid) / half : 0;
                     axis_[ax] = std::clamp(v, -1.0, 1.0);
+                    p.ax[ax] = axis_[ax];
+                    emitPlayer(p);
                     emitAnalog();
                     const int a = ax ? 0 : 2;
                     const bool neg = v < -0.6, pos = v > 0.6;
@@ -225,6 +240,54 @@ void GamepadInput::onKey(int code, bool down) {
     if (!comboHeld()) {
         comboFired_ = false;
         applyGrab();   // a grab or release that waited for the combination to be let go
+    }
+}
+
+// one controller's own state (players). code -1: only claim a player place (a D-pad press)
+void GamepadInput::padKey(Pad& p, int code, bool down, bool dup) {
+    using namespace remoteplay_bits;
+    quint32 bit = 0;
+    switch (code) {
+    case BTN_SOUTH: bit = kCross; break;
+    case BTN_EAST: bit = kCircle; break;
+    case BTN_WEST: bit = kSquare; break;
+    case BTN_NORTH: bit = kTriangle; break;
+    case BTN_TL: bit = kL1; break;
+    case BTN_TR: bit = kR1; break;
+    case BTN_THUMBL: bit = kL3; break;
+    case BTN_THUMBR: bit = kR3; break;
+    case BTN_SELECT: bit = kShare; break;
+    case BTN_START: bit = kOptions; break;
+    case BTN_DPAD_UP: bit = kUp; break;
+    case BTN_DPAD_DOWN: bit = kDown; break;
+    case BTN_DPAD_LEFT: bit = kLeft; break;
+    case BTN_DPAD_RIGHT: bit = kRight; break;
+    case BTN_TL2: p.trig[0] = down; break;
+    case BTN_TR2: p.trig[1] = down; break;
+    case -1: break;
+    default: return;
+    }
+    if (bit) p.ps = down ? (p.ps | bit) : (p.ps & ~bit);
+    // the first press of a controller that has no place yet gives it the next free one (Steam Input's copy is a
+    // duplicate and never gets one)
+    if (p.player < 0 && down && !dup && !p.touchpad) {
+        bool used[4]{};
+        for (const Pad* q : pads_) if (q->player >= 0 && q->player < 4) used[q->player] = true;
+        for (int i = 0; i < 4; ++i) if (!used[i]) { p.player = i; break; }
+    }
+    emitPlayer(p);
+}
+
+void GamepadInput::emitPlayer(const Pad& p) {
+    if (wantGrab_ || p.player < 0) return;
+    const double l2 = std::max(p.ax[4], p.trig[0] ? 1.0 : 0.0), r2 = std::max(p.ax[5], p.trig[1] ? 1.0 : 0.0);
+    emit playerState(p.player, p.ps, p.ax[0], p.ax[1], p.ax[2], p.ax[3], l2, r2);
+}
+
+void GamepadInput::resetPlayers() {
+    for (Pad* p : pads_) {
+        if (p->player >= 0) emit playerState(p->player, 0, 0, 0, 0, 0, 0, 0);
+        p->player = -1;
     }
 }
 
@@ -316,6 +379,7 @@ void GamepadInput::setGrabbed(bool g) {
     if (!g) { heldDir_.clear(); repeat_.stop(); }
     if (g) emit analog(0, 0, 0, 0, 0, 0, false);   // the demo stops swimming while the menu is open
     if (g) emit padState(0, 0, 0, 0, 0, 0, 0);       // and Remote Play gets an idle controller
+    if (g) for (const Pad* p : pads_) if (p->player >= 0) emit playerState(p->player, 0, 0, 0, 0, 0, 0, 0);
     else emitPad();
     applyGrab();
     emit grabbedChanged();

@@ -25,6 +25,9 @@ struct Game {
     std::string saveDir;     // battery saves (.srm)
     std::string stateDir;    // save states
     bool stickAsDpad = true; // the left stick also works as the D-pad (systems without analog sticks)
+    bool resume = false;     // continue where the game was quit (its automatic state)
+    int runAhead = 0;        // frames run ahead (0-2): the game's own input delay taken away
+    bool rewind = false;     // keep the last seconds, to step back through them
 };
 void setGame(const Game& g);
 Game game();
@@ -32,6 +35,7 @@ Game game();
 // ---- input (any thread). Buttons: bits of RETRO_DEVICE_ID_JOYPAD_* (B = bit 0 ... R3 = bit 15).
 // The controllers (all of them as player 1) and the keyboard are kept apart and combined.
 void setPad(uint32_t buttons, double lx, double ly, double rx, double ry);
+void setPad(int port, uint32_t buttons, double lx, double ly, double rx, double ry);   // players 1-4 (port 0-3)
 void setKeys(uint32_t buttons);
 // PlayStation layout bits (remoteplay::Button, from Gamepad.h's padState) to libretro buttons
 uint32_t fromPlayStation(uint32_t ps, double l2, double r2);
@@ -46,6 +50,12 @@ void saveState(int slot);
 void loadState(int slot);
 bool hasState(int slot);
 void reset();
+// run ahead (0-2 frames) and rewind, also while the game runs; rewinding while held
+void setRunAhead(int frames);
+void setRewind(bool on);
+void setRewinding(bool held);
+// the automatic state written when the game is quit ("Continue")
+std::string autoStatePath(const std::string& stateDir, const std::string& rom);
 // games on several discs (.m3u): how many, which one is in (0 = the first), change to the next
 int discCount();
 int discIndex();

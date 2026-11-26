@@ -606,7 +606,11 @@ QVariantMap GameLibrary::itemFor(const Entry& e) const {
                        {"sub", QString(s ? s->name : "") + (e.region.isEmpty() ? QString()
                                 : " · " + (e.region == "usa" ? QStringLiteral("USA") : e.region.left(1).toUpper() + e.region.mid(1)))},
                        {"image", isPicture(cover) ? QUrl::fromLocalFile(cover).toString() : QString()},
-                       {"kind", "game"}, {"system", e.system}};
+                       {"kind", "game"}, {"system", e.system},
+                       // quit before: "Continue" from where it was
+                       {"canResume", QFile::exists(QString::fromStdString(retro::autoStatePath(
+                            (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/games/states/" + e.system).toStdString(),
+                            e.path.toStdString())))}};
 }
 
 QVariantList GameLibrary::items() const {
@@ -687,7 +691,7 @@ QString GameLibrary::coreFor(const QString& systemId, QString& error, bool downl
     return {};
 }
 
-void GameLibrary::play(const QString& path) {
+void GameLibrary::play(const QString& path, bool resume) {
     QString sys, title;
     {
         std::lock_guard l(m_);
@@ -702,16 +706,16 @@ void GameLibrary::play(const QString& path) {
     QSettings().setValue("games/recent", recent);
     QString err;
     const QString core = coreFor(sys, err, false);
-    if (!core.isEmpty()) { emit launch(core, path, title, sys); emit changed(); return; }
+    if (!core.isEmpty()) { emit launch(core, path, title, sys, resume); emit changed(); return; }
     // fetched in the background, then started
     if (working_) return;
     setBusy("gamesFetchingCore", {}, 0);
-    work([this, sys, path, title] {
+    work([this, sys, path, title, resume] {
         QString e;
         const QString c = coreFor(sys, e, true);
-        QMetaObject::invokeMethod(this, [this, c, e, path, title, sys] {
+        QMetaObject::invokeMethod(this, [this, c, e, path, title, sys, resume] {
             if (c.isEmpty()) { emit message(e, QString::fromLatin1(gameSystem(sys)->cores).section(',', 0, 0), true); return; }
-            emit launch(c, path, title, sys);
+            emit launch(c, path, title, sys, resume);
             emit changed();
         }, Qt::QueuedConnection);
     });

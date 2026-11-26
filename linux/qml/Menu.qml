@@ -134,6 +134,20 @@ Rectangle {
         Btn { visible: player.retroActive; text: tr("gameSave"); onClicked: player.retroSaveState() }
         Btn { visible: player.retroActive; text: tr("gameLoad"); onClicked: player.retroLoadState() }
         Btn { visible: player.retroActive; text: tr("gameReset"); onClicked: player.retroReset() }
+        // run-ahead (the game's own input delay taken away) and rewind, kept for this system
+        Item { visible: player.retroActive; width: parent.width; height: 1 }
+        Text { visible: player.retroActive; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("runAhead"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.retroActive ? [0, 1, 2] : []
+            delegate: Btn { required property int modelData; text: modelData === 0 ? tr("subsOff") : modelData === 1 ? tr("frame1") : modelData + " " + tr("frames")
+                opacity: player.retroRunAhead === modelData ? 1 : 0.6; onClicked: player.retroRunAhead = modelData }
+        }
+        Btn { visible: player.retroActive; text: tr("rewind") + (player.retroRewind ? " ✓" : ""); opacity: player.retroRewind ? 1 : 0.6
+            onClicked: player.retroRewind = !player.retroRewind }
+        Text { visible: player.retroActive; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("runAheadHint") + " " + (player.retroRewindOnL2 ? tr("rewindHintL2") : tr("rewindHintKey")) }
+        Item { visible: player.retroActive; width: parent.width; height: 1 }
         Btn { visible: player.retroActive && player.retroDiscs > 1; primary: true
             text: tr("gameDisc").replace("%1", player.retroDisc % player.retroDiscs + 1).replace("%2", player.retroDiscs)
             onClicked: player.retroNextDisc() }

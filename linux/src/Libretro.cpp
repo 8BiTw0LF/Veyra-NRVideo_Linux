@@ -85,8 +85,11 @@ struct Core {
 std::mutex gameM;
 Game current;
 
-std::atomic<uint32_t> padButtons{0}, keyButtons{0};
-std::atomic<int16_t> axes[4];                 // left x, left y, right x, right y
+std::atomic<uint32_t> padButtons[4]{}, keyButtons{0};    // players 1-4; the keyboard is player 1
+std::atomic<int16_t> axes[4][4]{};                         // per player: left x, left y, right x, right y
+std::atomic<int> runAheadWanted{0};
+std::atomic<bool> rewindWanted{false}, rewindHeld{false};
+bool suppressVideo = false, suppressAudio = false;        // core thread: frames run only for run-ahead
 std::atomic<bool> stickDpad{true};
 std::mutex rumbleM;
 std::function<void(int, int)> rumbleCb;
@@ -228,7 +231,7 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
     case RETRO_ENVIRONMENT_SET_HW_RENDER: case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
         return false;   // software cores only
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
-    case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS: *static_cast<unsigned*>(data) = 1; return true;
+    case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS: *static_cast<unsigned*>(data) = 4; return true;
     case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES:
         *static_cast<uint64_t*>(data) = (1 << RETRO_DEVICE_JOYPAD) | (1 << RETRO_DEVICE_ANALOG); return true;
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE: static_cast<retro_log_callback*>(data)->log = logCb; return true;
@@ -303,7 +306,7 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
 // the picture: converted to RGBA, rotated, the pixels scaled up by a whole number and stretched to the aspect ratio
 void RETRO_CALLCONV videoRefresh(const void* data, unsigned w, unsigned h, size_t pitch) {
     Runner* r = runner;
-    if (!r || !data || w == 0 || h == 0) return;   // a repeated picture (CAN_DUPE): the last one stays
+    if (!r || !data || w == 0 || h == 0 || suppressVideo) return;   // a repeated picture (CAN_DUPE): the last one stays
     const bool turned = rotation == 1 || rotation == 3;
     const int dw0 = int(turned ? h : w), dh0 = int(turned ? w : h);
     float aspect = geometry.aspect_ratio > 0 ? geometry.aspect_ratio : float(w) / float(h);
@@ -371,7 +374,7 @@ void RETRO_CALLCONV videoRefresh(const void* data, unsigned w, unsigned h, size_
 
 void pushSound(const int16_t* d, size_t frames) {
     Runner* r = runner;
-    if (!r) return;
+    if (!r || suppressAudio) return;
     std::lock_guard l(r->audioM);
     r->sound.insert(r->sound.end(), d, d + frames * 2);
     const size_t cap = size_t(r->srcRate * 0.5) * 2;   // more than half a second queued: the oldest goes
@@ -383,10 +386,10 @@ size_t RETRO_CALLCONV audioBatch(const int16_t* data, size_t frames) { pushSound
 void RETRO_CALLCONV inputPoll() {}
 
 int16_t RETRO_CALLCONV inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
-    if (port != 0) return 0;
-    uint32_t b = padButtons.load() | keyButtons.load();
+    if (port > 3) return 0;
+    uint32_t b = padButtons[port].load() | (port == 0 ? keyButtons.load() : 0u);
     if (stickDpad.load()) {   // the left stick as the D-pad
-        const int lx = axes[0].load(), ly = axes[1].load();
+        const int lx = axes[port][0].load(), ly = axes[port][1].load();
         if (lx < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_LEFT;
         if (lx > 16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_RIGHT;
         if (ly < -16000) b |= 1u << RETRO_DEVICE_ID_JOYPAD_UP;
@@ -399,7 +402,7 @@ int16_t RETRO_CALLCONV inputState(unsigned port, unsigned device, unsigned index
     if (device == RETRO_DEVICE_ANALOG) {
         if (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON)
             return id < 16 && ((b >> id) & 1) ? 0x7fff : 0;
-        if (index <= RETRO_DEVICE_INDEX_ANALOG_RIGHT && id <= RETRO_DEVICE_ID_ANALOG_Y) return axes[index * 2 + id].load();
+        if (index <= RETRO_DEVICE_INDEX_ANALOG_RIGHT && id <= RETRO_DEVICE_ID_ANALOG_Y) return axes[port][index * 2 + id].load();
     }
     return 0;
 }
@@ -511,7 +514,7 @@ void coreThread(Runner* r, Game g) {
         fail("The emulator could not start the game (a missing BIOS file? See the BIOS folder)");
         return;
     }
-    core.setControllerPortDevice(0, RETRO_DEVICE_JOYPAD);
+    for (unsigned port = 0; port < 4; ++port) core.setControllerPortDevice(port, RETRO_DEVICE_JOYPAD);
     retro_system_av_info av{};
     core.getAvInfo(&av);
     geometry = av.geometry;
@@ -552,6 +555,76 @@ void coreThread(Runner* r, Game g) {
         r->loadState = 1;
         r->loadCv.notify_all();
     }
+    // states: "Continue" (the automatic state of the last quit), run-ahead and rewind all go through retro_serialize
+    const std::string autoState = autoStatePath(g.stateDir, g.rom);
+    std::vector<uint8_t> state;
+    auto serialize = [&](std::vector<uint8_t>& out) {
+        const size_t n = core.serializeSize();
+        if (!n) return false;
+        out.resize(n);
+        return core.serialize(out.data(), n);
+    };
+    bool resumePending = g.resume;
+    auto tryResume = [&] {
+        std::vector<uint8_t> d;
+        if (!readFile(autoState, d) || d.empty()) { resumePending = false; return; }
+        if (core.unserialize(d.data(), d.size())) { resumePending = false; say("Continued where you left off"); }
+    };
+    if (resumePending) tryResume();   // (some emulators only take a state after the first frame: tried again then)
+    runAheadWanted = g.runAhead;
+    rewindWanted = g.rewind;
+    std::deque<std::vector<uint8_t>> rewindBuf;
+    uint64_t frameNo = 0;
+    bool runAheadBroken = false;
+    auto frame = [&] {
+        ++frameNo;
+        // rewind: one kept state back per frame while held (shown, without its sound)
+        if (rewindHeld.load() && rewindWanted.load()) {
+            if (rewindBuf.empty()) return;
+            const auto& st = rewindBuf.back();
+            core.unserialize(st.data(), st.size());
+            rewindBuf.pop_back();
+            suppressAudio = true;
+            core.run();
+            suppressAudio = false;
+            return;
+        }
+        if (rewindWanted.load()) {
+            // about 20 s, at most 256 MB: a big state (PlayStation) is kept every few frames
+            const size_t n = core.serializeSize();
+            const int every = n > (1u << 20) ? 3 : 1;
+            const size_t keep = n ? std::min<size_t>(size_t(fpsNow * 20) / every, (256u << 20) / n) : 0;
+            if (keep && frameNo % every == 0) {
+                std::vector<uint8_t> st;
+                if (rewindBuf.size() >= keep) { st = std::move(rewindBuf.front()); rewindBuf.pop_front(); }
+                if (serialize(st)) rewindBuf.push_back(std::move(st));
+            }
+        } else if (!rewindBuf.empty()) {
+            rewindBuf.clear();
+        }
+        const int ahead = runAheadBroken ? 0 : runAheadWanted.load();
+        if (ahead <= 0) { core.run(); return; }
+        // run-ahead: the real frame (its sound kept, its picture not), a state, the frames ahead (only the last one's
+        // picture shown, no sound), and back to the state. The picture is then what the game shows `ahead` frames
+        // after the input, so its own delay is gone.
+        suppressVideo = true;
+        core.run();
+        suppressVideo = false;
+        if (!serialize(state)) {
+            runAheadBroken = true;
+            say("Run-ahead does not work with this emulator");
+            return;
+        }
+        suppressAudio = true;
+        for (int i = 0; i < ahead; ++i) {
+            suppressVideo = i + 1 < ahead;
+            core.run();
+        }
+        suppressVideo = false;
+        suppressAudio = false;
+        core.unserialize(state.data(), state.size());
+    };
+
     auto next = clk::now();
     auto lastSaveCheck = clk::now();
     while (!r->quit.load() && !shutdownAsked) {
@@ -560,7 +633,8 @@ void coreThread(Runner* r, Game g) {
         { std::lock_guard l(r->cmdM); cmds.swap(r->cmds); }
         for (auto& c : cmds) c();
         if (r->paused.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
-        core.run();
+        frame();
+        if (resumePending && frameNo >= 1) tryResume(), resumePending = false;
         if (diskCount) { disksNow = int(diskCount()); if (diskGetIndex) diskNow = int(diskGetIndex()); }
         if (diskInsertIn > 0 && --diskInsertIn == 0 && diskEject) diskEject(false);   // the new disc is in: tray closed
         const auto period = std::chrono::duration_cast<clk::duration>(std::chrono::duration<double>(1.0 / fpsNow));
@@ -571,6 +645,11 @@ void coreThread(Runner* r, Game g) {
         if (now - lastSaveCheck > std::chrono::seconds(10)) { saveBattery(); lastSaveCheck = now; }
     }
     saveBattery();
+    // the automatic state for "Continue" (not when the game shut itself down)
+    if (!shutdownAsked && frameNo > 30) {
+        std::vector<uint8_t> st;
+        if (serialize(st)) writeFile(autoState, st.data(), st.size());
+    }
     r->running = false;
     core.unloadGame();
     core.deinit();
@@ -612,10 +691,18 @@ std::string statePathFor(int slot) {
 void setGame(const Game& g) { std::lock_guard l(gameM); current = g; stickDpad = g.stickAsDpad; }
 Game game() { std::lock_guard l(gameM); return current; }
 
-void setPad(uint32_t buttons, double lx, double ly, double rx, double ry) {
-    padButtons = buttons;
+void setPad(int port, uint32_t buttons, double lx, double ly, double rx, double ry) {
+    if (port < 0 || port > 3) return;
+    padButtons[port] = buttons;
     auto ax = [](double v) { return int16_t(std::clamp(std::lround(v * 32767.0), -32768L, 32767L)); };
-    axes[0] = ax(lx); axes[1] = ax(ly); axes[2] = ax(rx); axes[3] = ax(ry);
+    axes[port][0] = ax(lx); axes[port][1] = ax(ly); axes[port][2] = ax(rx); axes[port][3] = ax(ry);
+}
+void setPad(uint32_t buttons, double lx, double ly, double rx, double ry) { setPad(0, buttons, lx, ly, rx, ry); }
+void setRunAhead(int frames) { runAheadWanted = std::clamp(frames, 0, 2); }
+void setRewind(bool on) { rewindWanted = on; }
+void setRewinding(bool held) { rewindHeld = held; }
+std::string autoStatePath(const std::string& stateDir, const std::string& rom) {
+    return (fs::path(stateDir) / (baseName(rom) + ".auto.state")).string();
 }
 void setKeys(uint32_t buttons) { keyButtons = buttons; }
 

@@ -20,7 +20,7 @@ Item {
         detail.item = null
         addDlg.visible = false
         visible = true
-        if (isMedia) media.refresh()
+        if (isMedia) media.refresh(); else games.refresh()
 
     }
     function close() { visible = false; detail.item = null; addDlg.visible = false; if (isMedia) media.cancelLogin(); closed() }
@@ -376,8 +376,12 @@ Item {
                             onClicked: { const i = detail.index; detail.item = null; lib.startPlay(i, true) }
                         }
                         // games
-                        Btn { visible: !lib.isMedia; primary: true; icon: "icons/play.svg"; text: lib.tr("gamesPlay")
-                            onClicked: { const k = detail.item.key; detail.item = null; lib.startGame(k) } }
+                        // quit before: Continue (from where it was) first, Start over next to it
+                        Btn { visible: !lib.isMedia && detail.item && detail.item.canResume; primary: true; icon: "icons/play.svg"; text: lib.tr("gamesContinue")
+                            onClicked: { const k = detail.item.key; detail.item = null; lib.startGame(k, true) } }
+                        Btn { visible: !lib.isMedia; primary: !(detail.item && detail.item.canResume); icon: "icons/play.svg"
+                            text: lib.tr(detail.item && detail.item.canResume ? "gamesStartOver" : "gamesPlay")
+                            onClicked: { const k = detail.item.key; detail.item = null; lib.startGame(k, false) } }
                         Btn { visible: !lib.isMedia; icon: "icons/image.svg"; text: lib.tr("gamesOwnCover")
                             onClicked: games.setCover(detail.item.key) }
                         Btn { text: lib.tr("cancel"); onClicked: detail.item = null }
@@ -395,7 +399,7 @@ Item {
     // playing: the page steps aside; Main.qml brings it back when the video or game is closed
     signal started()
     function startPlay(i, fromStart) { media.play(i, fromStart); if (player.hasMedia) { visible = false; started() } }
-    function startGame(path) { games.play(path) }
+    function startGame(path, resume) { games.play(path, resume) }
     Connections {
         target: player
         function onMediaChanged() { if (lib.visible && player.hasMedia) { lib.visible = false; detail.item = null; lib.started() } }

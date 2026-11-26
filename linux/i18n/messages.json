@@ -150,7 +150,9 @@
   "Could not load the emulator core: ": "Kunne ikke indlæse emulatoren: ",
   "The game was closed": "Spillet blev lukket",
   "Starting the game…": "Starter spillet…",
-  "Disc changed": "Disken er skiftet"
+  "Disc changed": "Disken er skiftet",
+  "Continued where you left off": "Fortsætter hvor du slap",
+  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulator"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -397,7 +399,9 @@
   "Could not load the emulator core: ": "Der Emulator konnte nicht geladen werden: ",
   "The game was closed": "Das Spiel wurde beendet",
   "Starting the game…": "Das Spiel wird gestartet…",
-  "Disc changed": "Disc gewechselt"
+  "Disc changed": "Disc gewechselt",
+  "Continued where you left off": "Weiter, wo du aufgehört hast",
+  "Run-ahead does not work with this emulator": "Run-Ahead funktioniert mit diesem Emulator nicht"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -644,7 +648,9 @@
   "Could not load the emulator core: ": "No se pudo cargar el emulador: ",
   "The game was closed": "El juego se cerró",
   "Starting the game…": "Iniciando el juego…",
-  "Disc changed": "Disco cambiado"
+  "Disc changed": "Disco cambiado",
+  "Continued where you left off": "Continúa donde lo dejaste",
+  "Run-ahead does not work with this emulator": "Run-ahead no funciona con este emulador"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -891,7 +897,9 @@
   "Could not load the emulator core: ": "Impossible de charger l'émulateur : ",
   "The game was closed": "Le jeu a été fermé",
   "Starting the game…": "Lancement du jeu…",
-  "Disc changed": "Disque changé"
+  "Disc changed": "Disque changé",
+  "Continued where you left off": "Reprise là où vous vous étiez arrêté",
+  "Run-ahead does not work with this emulator": "Le run-ahead ne fonctionne pas avec cet émulateur"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1138,7 +1146,9 @@
   "Could not load the emulator core: ": "Kunne ikke laste inn emulatoren: ",
   "The game was closed": "Spillet ble lukket",
   "Starting the game…": "Starter spillet…",
-  "Disc changed": "Platen er byttet"
+  "Disc changed": "Platen er byttet",
+  "Continued where you left off": "Fortsetter der du slapp",
+  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulatoren"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1385,7 +1395,9 @@
   "Could not load the emulator core: ": "Не удалось загрузить эмулятор: ",
   "The game was closed": "Игра закрыта",
   "Starting the game…": "Запуск игры…",
-  "Disc changed": "Диск сменён"
+  "Disc changed": "Диск сменён",
+  "Continued where you left off": "Продолжение с того места, где вы остановились",
+  "Run-ahead does not work with this emulator": "Run-ahead не работает с этим эмулятором"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1632,6 +1644,8 @@
   "Could not load the emulator core: ": "Kunde inte läsa in emulatorn: ",
   "The game was closed": "Spelet stängdes",
   "Starting the game…": "Startar spelet…",
-  "Disc changed": "Skivan är bytt"
+  "Disc changed": "Skivan är bytt",
+  "Continued where you left off": "Fortsätter där du slutade",
+  "Run-ahead does not work with this emulator": "Run-ahead fungerar inte med den här emulatorn"
  }
 }

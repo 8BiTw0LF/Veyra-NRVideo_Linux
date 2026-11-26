@@ -59,6 +59,10 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
     Q_PROPERTY(bool retroActive READ retroActive NOTIFY mediaChanged)   // a game from the Games page runs
     Q_PROPERTY(int retroDiscs READ retroDiscs NOTIFY retroDiscChanged)  // discs of the game (0/1: one)
+    // run-ahead (0-2 frames) and rewind for the running game's system
+    Q_PROPERTY(int retroRunAhead READ retroRunAhead WRITE setRetroRunAhead NOTIFY retroOptionsChanged)
+    Q_PROPERTY(bool retroRewind READ retroRewind WRITE setRetroRewind NOTIFY retroOptionsChanged)
+    Q_PROPERTY(bool retroRewindOnL2 READ retroRewindOnL2 NOTIFY retroOptionsChanged)
     Q_PROPERTY(int retroDisc READ retroDisc NOTIFY retroDiscChanged)    // the one in the tray (1 = the first)
     // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
     // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
@@ -240,6 +244,11 @@ public:
     bool demoActive() const { return demoActive_ && engine_.isOpen(); }
     bool retroActive() const { return retroActive_ && engine_.isOpen(); }
     int retroDiscs() const { return retroDiscs_; }
+    int retroRunAhead() const;
+    void setRetroRunAhead(int frames);
+    bool retroRewind() const;
+    void setRetroRewind(bool on);
+    bool retroRewindOnL2() const { return retroRewindKey_; }
     int retroDisc() const { return retroDisc_; }
     QVariantList subtitleTracks() const;
     QVariantList audioTracks() const;
@@ -608,7 +617,9 @@ public slots:
     void openDialog();
     void closeMedia();                             // back to the start screen (or the page it came from)
     // a game in an emulator core (GameLibrary.h, Libretro.h)
-    void openGame(const QString& core, const QString& rom, const QString& title, const QString& systemId, const QString& biosDir);
+    void openGame(const QString& core, const QString& rom, const QString& title, const QString& systemId, const QString& biosDir,
+                  bool resume = false);
+    void retroRewindHold(bool held);              // the keyboard's rewind key (held)
     void retroSaveState();
     void retroLoadState();
     void retroReset();
@@ -667,12 +678,15 @@ public slots:
     Q_INVOKABLE void psRemoveHost(const QString& address);   // wakes the console if needed, then starts Remote Play
     // the controller, PlayStation layout (Gamepad -> RemotePlay); idle while the menu is open
     void psPad(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
+    void psPlayer(int player, quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
 
 signals:
     void closing();                     // the video is about to be closed or replaced (its position is still there)
     void subtitlesChanged();
     void inputPrefsChanged();
     void retroDiscChanged();
+    void retroOptionsChanged();
+    void playersReset();                // a game starts: the controllers' next presses decide the players
     void subtitleChanged();
     void updateChanged();
     void psChanged();
@@ -729,6 +743,8 @@ private:
     quint32 retroKeys_ = 0;
     bool touchEnabled_ = QSettings().value("ui/touch", true).toBool();
     int retroDiscs_ = 0, retroDisc_ = 0;
+    QString retroSystem_;
+    bool retroRewindKey_ = false;
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;

@@ -50,6 +50,12 @@ signals:
     // while the menu is closed: the whole controller in PlayStation layout (for Remote Play): buttons as
     // remoteplay::Button bits, sticks -1..1, triggers 0..1. All zero when the menu opens.
     void padState(quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
+    // the same per controller, for games with several players: a controller becomes player 1, 2, 3 or 4 by its
+    // first press (so Steam Input's copy of a controller, whose presses are dropped as duplicates, takes no place)
+    void playerState(int player, quint32 buttons, double lx, double ly, double rx, double ry, double l2, double r2);
+
+public slots:
+    void resetPlayers();   // a new game: the next presses decide the players again
 
 private:
     struct Pad {
@@ -63,7 +69,14 @@ private:
         bool touchpad = false;           // a DualSense / DualShock 4 touchpad: only its click is used
         int ffFd = -2;                   // for rumble (-2: not opened yet, -1: not possible)
         int ffId = -1;
+        // this controller alone (games with several players)
+        int player = -1;
+        quint32 ps = 0;
+        double ax[6]{};
+        bool trig[2]{};
     };
+    void padKey(Pad& p, int code, bool down, bool dup);
+    void emitPlayer(const Pad& p);
     void scan();
     void addPad(const QString& path, bool test);
     void removePad(const QString& path);

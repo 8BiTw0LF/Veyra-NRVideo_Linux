@@ -688,6 +688,7 @@ Window {
             return ""
         }
         Keys.onReleased: (e) => {
+            if (player.retroActive && !e.isAutoRepeat && e.key === Qt.Key_Backspace) { player.retroRewindHold(false); e.accepted = true; return }
             if (player.retroActive && !e.isAutoRepeat) { const rk = retroKeyName(e.key); if (rk !== "") { player.retroKey(rk, false); e.accepted = true; return } }
             const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true }
         }
@@ -711,6 +712,7 @@ Window {
                 else if (nav[e.key] !== undefined) { padNav.active = true; padNav.press(nav[e.key]); e.accepted = true }
                 return
             }
+            if (player.retroActive && !win.panelOpen && e.key === Qt.Key_Backspace) { if (!e.isAutoRepeat) player.retroRewindHold(true); e.accepted = true; return }
             if (player.retroActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                 const rk = retroKeyName(e.key)
                 if (rk !== "") { if (!e.isAutoRepeat) player.retroKey(rk, true); e.accepted = true; return }
