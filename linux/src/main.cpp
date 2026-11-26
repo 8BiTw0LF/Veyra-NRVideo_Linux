@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
     QCoreApplication::setOrganizationName("VeyAmux");
     // VeyAmux Debug runs next to VeyAmux with its own settings (~/.config/VeyAmux/VeyAmux-Debug.conf) and data folder
     QCoreApplication::setApplicationName(veyamux::diag::kDebugBuild ? "VeyAmux-Debug" : "VeyAmux");
-    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.1.1"));
+    QCoreApplication::setApplicationVersion(veyamux::diag::buildVersion("2.2"));
     {
         // the UI probe and the card watcher are helper processes: no log file of their own
         bool helper = false;

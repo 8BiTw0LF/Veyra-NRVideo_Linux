@@ -12,7 +12,7 @@
 <p align="center">
   Upscaling (NIS · SGSR · FSR&nbsp;3.1.6 · <b>FSR&nbsp;4</b> AI upscaling) · AMD Anti-Lag / NVIDIA Reflex · noise reduction · anti-flicker · FSR&nbsp;3.1.6 TAA · frame generation (Lossless Scaling or free FSR&nbsp;3.1.6) ·
   HDR · <b>PlayStation Remote Play</b> (PS5 / PS4) · <b>Media</b>: your folders, Jellyfin and Plex, with subtitles ·
-  <b>Games</b>: retro consoles from your own folder, with box art · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
+  <b>Games</b>: 30 retro consoles up to N64, Dreamcast and PSP, from your own folder, with box art and RetroAchievements · Retro TV (CRT) and pixel-perfect scaling · replay, recording and
   live streaming · window or screen as a source · built-in 3D demo · controller support · Steam Deck · one-click Steam
   shortcut with artwork · 8 languages
   <br>
@@ -21,10 +21,48 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="720" alt="VeyAmux's start screen: What do you want to play? with four cards (Capture card, PlayStation, Media, Games), the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
+  <img src="docs/images/start.png" width="720" alt="VeyAmux's start screen: What do you want to play? with four cards (Capture card, PlayStation, Games, Media), the demo buttons (720p and 1080p, 30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
+
+## New in 2.2
+
+- **More consoles:** **Nintendo 64**, **Dreamcast**, **PSP** and **Nintendo DS**. The emulators that draw with OpenGL
+  (N64, Dreamcast, PSP) get an OpenGL context from VeyAmux (GLX on the desktop's graphics card, EGL without X), and their
+  picture goes through all of VeyAmux's processing like any other game. PPSSPP's own files are fetched by themselves.
+- **RetroAchievements:** sign in once on the Games page (*RetroAchievements*), and achievements are checked in every
+  game RetroAchievements knows; an unlock shows at the top of the screen. Softcore: save states, rewind and run-ahead
+  stay on. Only a token is kept, never your password.
+- **Run-ahead, rewind and Continue:**
+  - **Run-ahead** (1 or 2 frames) removes the emulated console's own input delay.
+  - **Rewind** goes up to about 20 seconds back: hold **L2** on consoles without L2 (NES, SNES, Mega Drive, Game
+    Boy, ...) or **Backspace**.
+  - **Continue:** a game you quit is kept where you were. The Games page and the start screen offer *Continue* and
+    *Start over*.
+- **Up to 4 players:** each controller becomes its own player the first time it presses a button. Steam Input's copy
+  of a controller is recognised and never becomes an extra player.
+- **Settings per console:** run-ahead, rewind, the **emulator** (when there are several) and a **controller layout**
+  (*Controls* in the menu, each console button and the controller button it sits on, changed with the controller).
+  A profile saved while a game runs is used for every game of that console, so Retro TV can be on for the SNES
+  only.
+- **Crash-safe emulators:** a game runs in a process of its own, so an emulator that crashes ends the game with a
+  message, and VeyAmux carries on.
+- **Search** on the Games page (as you type, across every console) and on Jellyfin and Plex.
+- **Media:**
+  - *Skip intro* and *Skip credits* (Jellyfin's media segments, Plex's markers); A on the controller takes it.
+  - The **next episode** starts by itself after 10 seconds.
+  - **Quality:** the file as it is, or converted by the server to 20, 8 or 4 Mbit/s for a slow network or away from
+    home.
+  - Pictures on the seek bar while you drag.
+  - **Subtitle size** in four steps, and **5.1 sound** to a surround system or soundbar (*Sound*).
+- **Start screen:** *Continue playing* with your last games, and *System → Start in* opens VeyAmux straight on the
+  Games or Media page (handy from Steam's Game Mode).
+- **Large libraries** open at once: posters are only fetched for what is on screen, and the Media and Games pages only
+  make the cards you can see. 1500 films or 700 arcade games no longer freeze the mouse or the controller.
+- **Smaller things:** *Anti-flicker* is the first setting under *Picture*. The menu has *Back to the start screen* for
+  any source (also the demo, with the controller). The Steam artwork is new and lists what VeyAmux does. More BIOS
+  files are kept out of the game lists. VeyAmux Debug has its own taskbar entry.
 
 ## New in 2.1
 
@@ -192,7 +230,7 @@ needed for its own frame generation**, and everything else works without it:
 |---|:---:|:---:|
 | Capture cards, video files, windows and screens | ✅ | ✅ |
 | Media: your folders, Jellyfin, Plex (Plex outside the home network: Plex Pass / Remote Watch Pass), subtitles, sound tracks | ✅ | ✅ |
-| Games: retro consoles and arcade (emulators fetched from libretro, BIOS files your own) | ✅ | ✅ |
+| Games: 30 consoles up to N64, Dreamcast and PSP, and arcade (emulators fetched from libretro, BIOS files your own); RetroAchievements with your own account | ✅ | ✅ |
 | PlayStation Remote Play (PS5 / PS4 on the home network) | ✅ | ✅ |
 | Upscaling: NIS, SGSR, FSR 3.1.6, FSR 4 | ✅ | ✅ |
 | Noise reduction, anti-flicker, sharpness, anti-aliasing (FXAA, FSR 3.1.6 TAA), colour | ✅ | ✅ |
@@ -277,13 +315,13 @@ needed for its own frame generation**, and everything else works without it:
 - **Games** (start screen): pick your games folder once.
   - **Systems:** NES and Famicom Disk System, Super Nintendo, Game Boy, Game Boy Color, Game Boy Advance, Virtual
     Boy, Mega Drive / Genesis, Master System, Game Gear, SG-1000, Mega-CD, 32X, Saturn, PC Engine / TurboGrafx-16, PC
-    Engine CD, PlayStation, Atari 2600, Atari 7800, Atari Lynx, Neo Geo Pocket (Color), WonderSwan (Color) and arcade.
-    Systems that need 3D on the graphics card (N64, Dreamcast, PSP, DS) are not there yet.
+    Engine CD, PlayStation, Nintendo 64, Nintendo DS, Dreamcast, PSP, Atari 2600, Atari 7800, Atari Lynx, Neo Geo
+    Pocket (Color), WonderSwan (Color) and arcade. Nintendo DS games that need the touchscreen cannot be played yet.
   - **Emulators:** found or fetched by themselves (libretro cores; your own RetroArch's are used first). Some need
     BIOS files (PlayStation's is optional, Mega-CD, Saturn and PC Engine CD need theirs): put them in the folder
     *BIOS* opens, or anywhere in your games folder.
-  - **Playing:** the controller plays the game (all controllers as player 1, rumble included); **Select + Start** opens
-    the menu and pauses the game. The keyboard: arrows, **Z / X** (B / A), **A / S** (Y / X), **Q / W** (L / R),
+  - **Playing:** each controller is its own player (up to 4, rumble included); **Select + Start** opens the menu and
+    pauses the game. The menu also has run-ahead, rewind, the emulator, the controller layout and the disc. The keyboard: arrows, **Z / X** (B / A), **A / S** (Y / X), **Q / W** (L / R),
     **Enter** (Start), **Shift** (Select). Save and load a state with the buttons in the bottom bar, **F2 / F4** or
     the menu; battery saves are kept by themselves.
   - The picture comes with its own pixel aspect, enlarged by a whole number, so *Retro TV*, *pixel-perfect scaling*
@@ -554,7 +592,7 @@ hardware. It runs next to VeyAmux and does not touch it:
 **Home** back to the start screen or the page the film or game came from
 
 **Games:** arrows · **Z / X** B / A · **A / S** Y / X · **Q / W** L / R · **Enter** Start · **Shift** Select · **F2** save state
-· **F4** load state
+· **F4** load state · **Backspace** (held) rewind · **L2** (held, consoles without L2) rewind
 
 **Controller:** **Select + Start** (or hold **Guide**) menu · **D-pad / stick** move · **A** choose · **B** close ·
 **LB / RB** menu tabs
@@ -621,7 +659,8 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
   - [Abyssal Garden](https://github.com/Noniv/abyssal-garden) by Maksymilian Dendura (MIT): the demo scene, ported from
     JavaScript to C++
   - [wgpu-native](https://github.com/gfx-rs/wgpu-native) (MIT / Apache-2.0)
-  - The [libretro](https://www.libretro.com) API header (MIT) and libarchive (BSD). The emulators (libretro cores)
+  - The [libretro](https://www.libretro.com) API header (MIT), [rcheevos](https://github.com/RetroAchievements/rcheevos)
+    (RetroAchievements, MIT), Inter (SIL OFL 1.1, Steam artwork) and libarchive (BSD). The emulators (libretro cores)
     are **not** part of VeyAmux: they are your RetroArch's or fetched from libretro's build server, under their own
     licences. Box art comes from [libretro-thumbnails](https://github.com/libretro-thumbnails).
 
