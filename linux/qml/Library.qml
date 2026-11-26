@@ -236,6 +236,12 @@ Item {
 
     // ------------------------------------------------------------- the grid
     readonly property var items: isMedia ? media.items : games.items
+    // the cards' size: one per list (films and box art as posters, episodes and folders wide; a mixed list gets room
+    // for both)
+    readonly property bool anyWide: isMedia && items.some(function (i) { return i.shape === "wide" })
+    readonly property bool allWide: anyWide && items.every(function (i) { return i.shape === "wide" })
+    readonly property real cardW: (isMedia ? (anyWide ? 280 : 172) : 178) * k + 16 * k
+    readonly property real cardH: (isMedia ? (allWide ? 158 : 258) : 236) * k + 70 * k
     // Media: the posters of the cards on screen (and a little beyond) are fetched, once the grid has settled; the rest
     // wait until they are scrolled to
     Timer {
@@ -243,83 +249,87 @@ Item {
         onTriggered: {
             if (!lib.isMedia || !lib.visible) return
             const top = grid.contentY - 400, bottom = grid.contentY + grid.height + 400
-            for (let i = flow.children.length - 1; i >= 0; --i) {
-                const c = flow.children[i]
+            const cs = grid.contentItem.children
+            for (let i = cs.length - 1; i >= 0; --i) {
+                const c = cs[i]
                 if (c.modelData && c.y + c.height > top && c.y < bottom) media.want(c.modelData.key)
             }
         }
     }
-    Connections { target: grid; function onContentYChanged() { wantTimer.restart() } function onHeightChanged() { wantTimer.restart() } }
-    Connections { target: flow; function onHeightChanged() { wantTimer.restart() } }
+    Connections { target: grid; function onContentYChanged() { wantTimer.restart() } function onHeightChanged() { wantTimer.restart() }
+                  function onContentHeightChanged() { wantTimer.restart() } }
     Connections { target: media; function onItemsChanged() { wantTimer.restart() } }
-    Flickable {
+    // only the cards on screen (and a screen beyond) are made: a library of thousands of films or 600 arcade games
+    // opens at once, and the mouse and controller keep working
+    GridView {
         id: grid
         anchors { left: side.right; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 18 * lib.k; rightMargin: 18 * lib.k; topMargin: 14 * lib.k }
-        contentHeight: flow.height + 30 * lib.k; clip: true
+        clip: true
         boundsBehavior: Flickable.StopAtBounds
-        Flow {
-            id: flow
-            width: grid.width
-            spacing: 16 * lib.k
-            Repeater {
-                model: lib.items
-                delegate: Rectangle {
-                    id: card
-                    required property var modelData
-                    required property int index
-                    readonly property bool wide: modelData.shape === "wide"
-                    readonly property real picW: (lib.isMedia ? (wide ? 280 : 172) : 178) * lib.k
-                    readonly property real picH: (lib.isMedia ? (wide ? 158 : 258) : 236) * lib.k
-                    width: picW + 16 * lib.k; height: picH + 70 * lib.k
-                    radius: 14 * Theme.round
-                    color: cm.containsMouse ? Theme.surfaceHover : Theme.surface
-                    border.width: Math.max(1, Theme.edge); border.color: cm.containsMouse ? Theme.accentLine : Theme.border
-                    Behavior on color { ColorAnimation { duration: 120 } }
+        cellWidth: lib.cardW + 16 * lib.k
+        cellHeight: lib.cardH + 16 * lib.k
+        cacheBuffer: Math.round(lib.cardH * 2)
+        model: lib.items
+        footer: Item { width: 1; height: 30 * lib.k }
+        delegate: Item {
+            id: cell
+            required property var modelData
+            required property int index
+            width: grid.cellWidth; height: grid.cellHeight
+            Rectangle {
+                id: card
+                readonly property bool wide: cell.modelData.shape === "wide"
+                readonly property real picW: (lib.isMedia ? (wide ? 280 : 172) : 178) * lib.k
+                readonly property real picH: (lib.isMedia ? (wide ? 158 : 258) : 236) * lib.k
+                width: picW + 16 * lib.k; height: picH + 70 * lib.k
+                radius: 14 * Theme.round
+                color: cm.containsMouse ? Theme.surfaceHover : Theme.surface
+                border.width: Math.max(1, Theme.edge); border.color: cm.containsMouse ? Theme.accentLine : Theme.border
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Rectangle {
+                    id: pic
+                    x: 8 * lib.k; y: 8 * lib.k; width: card.picW; height: card.picH; radius: 9 * Theme.round
+                    color: Theme.surfaceDeep; clip: true
+                    Image {
+                        id: img
+                        anchors.fill: parent
+                        source: (lib.isMedia && media.imageVersion >= 0 ? media.image(cell.modelData.key) : "") || cell.modelData.image || ""
+                        fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+                        asynchronous: true; cache: true
+                        sourceSize: Qt.size(card.picW * 1.5, card.picH * 1.5)
+                    }
+                    // no picture: the kind's icon
                     Rectangle {
-                        id: pic
-                        x: 8 * lib.k; y: 8 * lib.k; width: card.picW; height: card.picH; radius: 9 * Theme.round
-                        color: Theme.surfaceDeep; clip: true
-                        Image {
-                            id: img
-                            anchors.fill: parent
-                            source: (lib.isMedia && media.imageVersion >= 0 ? media.image(card.modelData.key) : "") || card.modelData.image || ""
-                            fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-                            asynchronous: true; cache: true
-                            sourceSize: Qt.size(card.picW * 1.5, card.picH * 1.5)
-                        }
-                        // no picture: the kind's icon
-                        Rectangle {
-                            visible: img.status !== Image.Ready
-                            anchors.centerIn: parent; width: 64 * lib.k; height: width; radius: width / 2 * Theme.round
-                            gradient: Theme.sunset
-                            Image { anchors.centerIn: parent; width: 30 * lib.k; height: width; sourceSize: Qt.size(64, 64)
-                                source: card.modelData.kind === "action" ? "icons/plus.svg" : card.modelData.kind === "folder" ? (card.modelData.title === "mediaResume" || card.modelData.title === "mediaRecent" ? "icons/restore.svg" : card.modelData.title === "mediaGenres" ? "icons/image.svg" : "icons/folder.svg")
-                                      : card.modelData.kind === "game" ? "icons/joystick.svg" : "icons/play.svg" }
-                        }
-                        // watched / how far
-                        Rectangle {
-                            visible: (card.modelData.progress || 0) > 0.01 && !card.modelData.played
-                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                            height: 5 * lib.k; color: "#99000000"
-                            Rectangle { width: parent.width * Math.min(1, card.modelData.progress || 0); height: parent.height; color: Theme.accent }
-                        }
-                        Rectangle {
-                            visible: !!card.modelData.played
-                            anchors { right: parent.right; top: parent.top; margins: 6 * lib.k }
-                            width: 26 * lib.k; height: width; radius: width / 2; color: Theme.accent
-                            Image { anchors.centerIn: parent; source: "icons/check.svg"; width: 15 * lib.k; height: width; sourceSize: Qt.size(32, 32) }
-                        }
+                        visible: img.status !== Image.Ready
+                        anchors.centerIn: parent; width: 64 * lib.k; height: width; radius: width / 2 * Theme.round
+                        gradient: Theme.sunset
+                        Image { anchors.centerIn: parent; width: 30 * lib.k; height: width; sourceSize: Qt.size(64, 64)
+                            source: cell.modelData.kind === "action" ? "icons/plus.svg" : cell.modelData.kind === "folder" ? (cell.modelData.title === "mediaResume" || cell.modelData.title === "mediaRecent" ? "icons/restore.svg" : cell.modelData.title === "mediaGenres" ? "icons/image.svg" : "icons/folder.svg")
+                                  : cell.modelData.kind === "game" ? "icons/joystick.svg" : "icons/play.svg" }
                     }
-                    Column {
-                        anchors { left: parent.left; right: parent.right; top: pic.bottom; leftMargin: 10 * lib.k; rightMargin: 10 * lib.k; topMargin: 8 * lib.k }
-                        spacing: 2 * lib.k
-                        Text { width: parent.width; elide: Text.ElideRight; font.family: Theme.font; color: Theme.heading
-                            font.pixelSize: 14 * lib.k; font.weight: Font.DemiBold; text: lib.itemTitle(card.modelData) }
-                        Text { width: parent.width; elide: Text.ElideRight; font.family: Theme.font; color: Theme.muted
-                            font.pixelSize: 12 * lib.k; text: card.modelData.sub || "" }
+                    // watched / how far
+                    Rectangle {
+                        visible: (cell.modelData.progress || 0) > 0.01 && !cell.modelData.played
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        height: 5 * lib.k; color: "#99000000"
+                        Rectangle { width: parent.width * Math.min(1, cell.modelData.progress || 0); height: parent.height; color: Theme.accent }
                     }
-                    MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lib.activate(card.modelData, card.index) }
+                    Rectangle {
+                        visible: !!cell.modelData.played
+                        anchors { right: parent.right; top: parent.top; margins: 6 * lib.k }
+                        width: 26 * lib.k; height: width; radius: width / 2; color: Theme.accent
+                        Image { anchors.centerIn: parent; source: "icons/check.svg"; width: 15 * lib.k; height: width; sourceSize: Qt.size(32, 32) }
+                    }
                 }
+                Column {
+                    anchors { left: parent.left; right: parent.right; top: pic.bottom; leftMargin: 10 * lib.k; rightMargin: 10 * lib.k; topMargin: 8 * lib.k }
+                    spacing: 2 * lib.k
+                    Text { width: parent.width; elide: Text.ElideRight; font.family: Theme.font; color: Theme.heading
+                        font.pixelSize: 14 * lib.k; font.weight: Font.DemiBold; text: lib.itemTitle(cell.modelData) }
+                    Text { width: parent.width; elide: Text.ElideRight; font.family: Theme.font; color: Theme.muted
+                        font.pixelSize: 12 * lib.k; text: cell.modelData.sub || "" }
+                }
+                MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lib.activate(cell.modelData, cell.index) }
             }
         }
     }

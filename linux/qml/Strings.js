@@ -8,6 +8,8 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "gamesFetchingAssets": "Fetching the files %1 needs",
+        "gamesAssetsFailed": "Could not fetch the files %1 needs (fonts and pictures). Check the network and try again.",
         "gameControls": "Controls",
         "gameControlsReset": "Usual layout",
         "gameControlsHint": "Each console button and the controller button it is on. Press one to move it to the next controller button. Kept for this console.",
@@ -410,6 +412,8 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "gamesFetchingAssets": "Henter de filer, %1 skal bruge",
+        "gamesAssetsFailed": "Kunne ikke hente de filer, %1 skal bruge (skrifttyper og billeder). Tjek netværket og prøv igen.",
         "gameControls": "Knapper",
         "gameControlsReset": "Standardplacering",
         "gameControlsHint": "Hver konsolknap og den knap på controlleren, den ligger på. Tryk på en for at flytte den til næste knap på controlleren. Gemmes for denne konsol.",
@@ -812,6 +816,8 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "gamesFetchingAssets": "Lade die Dateien, die %1 braucht",
+        "gamesAssetsFailed": "Die Dateien, die %1 braucht (Schriften und Bilder), konnten nicht geladen werden. Prüfe das Netzwerk und versuche es erneut.",
         "gameControls": "Tastenbelegung",
         "gameControlsReset": "Standardbelegung",
         "gameControlsHint": "Jede Konsolentaste und die Controller-Taste, auf der sie liegt. Drücke eine, um sie auf die nächste Controller-Taste zu legen. Wird für diese Konsole gespeichert.",
@@ -1190,6 +1196,8 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "gamesFetchingAssets": "Descargando los archivos que necesita %1",
+        "gamesAssetsFailed": "No se pudieron descargar los archivos que necesita %1 (fuentes e imágenes). Revisa la red e inténtalo de nuevo.",
         "gameControls": "Controles",
         "gameControlsReset": "Disposición habitual",
         "gameControlsHint": "Cada botón de la consola y el botón del mando donde está. Pulsa uno para pasarlo al siguiente botón del mando. Se guarda para esta consola.",
@@ -1568,6 +1576,8 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "gamesFetchingAssets": "Téléchargement des fichiers nécessaires à %1",
+        "gamesAssetsFailed": "Impossible de télécharger les fichiers nécessaires à %1 (polices et images). Vérifie le réseau et réessaie.",
         "gameControls": "Commandes",
         "gameControlsReset": "Disposition habituelle",
         "gameControlsHint": "Chaque bouton de la console et le bouton de la manette où il se trouve. Appuie sur un bouton pour le placer sur le bouton suivant de la manette. Conservé pour cette console.",
@@ -1946,6 +1956,8 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "gamesFetchingAssets": "Hämtar filerna som %1 behöver",
+        "gamesAssetsFailed": "Kunde inte hämta filerna som %1 behöver (typsnitt och bilder). Kontrollera nätverket och försök igen.",
         "gameControls": "Knappar",
         "gameControlsReset": "Standardlayout",
         "gameControlsHint": "Varje konsolknapp och knappen på handkontrollen den ligger på. Tryck på en för att flytta den till nästa knapp. Sparas för den här konsolen.",
@@ -2324,6 +2336,8 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "gamesFetchingAssets": "Henter filene %1 trenger",
+        "gamesAssetsFailed": "Kunne ikke hente filene %1 trenger (skrifttyper og bilder). Sjekk nettverket og prøv igjen.",
         "gameControls": "Knapper",
         "gameControlsReset": "Standardoppsett",
         "gameControlsHint": "Hver konsollknapp og knappen på kontrolleren den ligger på. Trykk på en for å flytte den til neste knapp. Lagres for denne konsollen.",
@@ -2702,6 +2716,8 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "gamesFetchingAssets": "Загрузка файлов, нужных %1",
+        "gamesAssetsFailed": "Не удалось загрузить файлы, нужные %1 (шрифты и изображения). Проверьте сеть и попробуйте снова.",
         "gameControls": "Управление",
         "gameControlsReset": "Обычная раскладка",
         "gameControlsHint": "Каждая кнопка консоли и кнопка контроллера, на которой она находится. Нажмите, чтобы перенести её на следующую кнопку. Сохраняется для этой консоли.",

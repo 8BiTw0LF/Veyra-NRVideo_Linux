@@ -65,6 +65,7 @@ public:
     QVariantList systems() const;
     QString current() const { return current_; }
     QVariantList items() const;
+    QVariantList itemsNow() const;
     QVariantList recentGames() const;
     QString busy() const { std::lock_guard l(m_); return busy_; }
     QString busyArg() const { std::lock_guard l(m_); return busyArg_; }
@@ -88,6 +89,8 @@ public:
 
     // for the start of a game: the core to use (found or fetched), "" with the reason in error
     QString coreFor(const QString& systemId, QString& error, bool download);
+    // files an emulator needs beside the BIOS (PPSSPP's fonts and pictures): there, or fetched (download) from libretro
+    bool coreAssets(const QString& systemId, QString& error, bool download);
     QString coverPath(const QString& systemId, const QString& romPath) const;
 
 signals:
@@ -124,6 +127,9 @@ private:
     std::atomic<bool> quit_{false};
     std::atomic<bool> working_{false};
     int coverVersion_ = 0;
+    // items() for the current system, made once per change (each card looks at its cover and states on disk)
+    mutable QVariantList itemsCache_;
+    mutable bool itemsValid_ = false;
     bool raBusy_ = false;
     QNetworkAccessManager* net_ = nullptr;
 };

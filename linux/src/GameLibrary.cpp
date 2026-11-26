@@ -267,6 +267,9 @@ QString matchThumbnail(const QString& stem, const QStringList& names) {
 // ------------------------------------------------------------------ GameLibrary
 
 GameLibrary::GameLibrary(QObject* parent) : QObject(parent) {
+    // (connected first, so the list is made anew before the page asks for it)
+    connect(this, &GameLibrary::changed, this, [this] { itemsValid_ = false; });
+    connect(this, &GameLibrary::coversChanged, this, [this] { itemsValid_ = false; });
     folder_ = QSettings().value("games/folder").toString();
     load();
     current_ = QSettings().value("games/system").toString();
@@ -356,6 +359,7 @@ void GameLibrary::load() {
     entries_.clear();
     for (const auto& v : o.value("games").toArray()) {
         const QJsonObject g = v.toObject();
+        if (isBiosFile(g.value("path").toString(), folder_)) continue;   // (a list kept from before a BIOS name was known)
         entries_.push_back({g.value("path").toString(), g.value("system").toString(), g.value("title").toString(), g.value("region").toString(),
                             g.value("thumb").toString()});
     }
@@ -432,7 +436,12 @@ bool GameLibrary::isBiosFile(const QString& path, const QString& root) {
     static const QRegularExpression names(
         R"re(^(syscard\d*[uj]?|gecard|gexpress|sgb\d?(\b.*)?|super game boy.*|game ?genie.*|gamegenie.*|disksys|lynxboot|scph\d+.*|ps1_rom|)re"
         R"re(mpr-\d+.*|sega_101|saturn_bios|kick\d.*|firmware.*|dmg_boot|cgb_boot|gba_bios|gb_bios|gbc_bios|sgb_bios|.*_bios|)re"
-        R"re(.*\(bios\).*|bios_cd_[euj]|bios[_ ][euj]|bios_md|bios_ms|bios_gg|segacd_.*bios.*|mpr-17933|sega cd bios.*)$)re");
+        R"re(.*\(bios\).*|bios_cd_[euj]|bios[_ ][euj]|bios_md|bios_ms|bios_gg|segacd_.*bios.*|mpr-17933|sega cd bios.*|)re"
+        // Dreamcast / NAOMI / Atomiswave (Flycast), the 64DD, PSP, and FinalBurn Neo's / MAME's BIOS sets
+        R"re(dc_boot|dc_flash|dc_nvmem|naomi\d?|naomigd|naomi2|awbios|airlbios|f355bios|f355dlx|hod2bios|segasp|hikaru|triforce|)re"
+        R"re(ipl|64dd_ipl.*|64ddipl.*|ppge_atlas|neogeo|neocdz|pgm|skns|isgsm|decocass|cchip|nmk004|ym2608|qsound|bubsys|midssio|)re"
+        R"re(namcoc\d+|stvbios|cpzn[12]|tps|taitofx1|hng64|konamigx|kn46|megaplay|megatech|playch10|nss|coleco|msx|spec128|)re"
+        R"re(spectrum|fdsbios|channelf|sms_bios|gg_bios|segacd)$)re");
     if (names.match(stem).hasMatch()) return true;
     // a folder of BIOS files inside the games folder
     for (const auto& part : QDir(root).relativeFilePath(QFileInfo(path).absolutePath()).toLower().split('/'))
@@ -640,6 +649,13 @@ QVariantList GameLibrary::recentGames() const {
 }
 
 QVariantList GameLibrary::items() const {
+    if (itemsValid_) return itemsCache_;
+    itemsCache_ = itemsNow();
+    itemsValid_ = true;
+    return itemsCache_;
+}
+
+QVariantList GameLibrary::itemsNow() const {
     QVariantList out;
     if (current_ == "recent") {
         const QStringList recent = QSettings().value("games/recent").toStringList();
@@ -737,19 +753,60 @@ void GameLibrary::play(const QString& path, bool resume) {
     QSettings().setValue("games/recent", recent);
     QString err;
     const QString core = coreFor(sys, err, false);
-    if (!core.isEmpty()) { emit launch(core, path, title, sys, resume); emit changed(); return; }
+    if (!core.isEmpty() && coreAssets(sys, err, false)) { emit launch(core, path, title, sys, resume); emit changed(); return; }
     // fetched in the background, then started
     if (working_) return;
     setBusy("gamesFetchingCore", {}, 0);
     work([this, sys, path, title, resume] {
         QString e;
-        const QString c = coreFor(sys, e, true);
+        QString c = coreFor(sys, e, true);
+        if (!c.isEmpty() && !coreAssets(sys, e, true)) c.clear();
         QMetaObject::invokeMethod(this, [this, c, e, path, title, sys, resume] {
-            if (c.isEmpty()) { emit message(e, QString::fromLatin1(gameSystem(sys)->cores).section(',', 0, 0), true); return; }
+            if (c.isEmpty()) {
+                if (e == "gamesAssetsFailed") emit message(e, "PPSSPP", true);
+                else emit message(e, QString::fromLatin1(gameSystem(sys)->cores).section(',', 0, 0), true);
+                return;
+            }
             emit launch(c, path, title, sys, resume);
             emit changed();
         }, Qt::QueuedConnection);
     });
+}
+
+// PPSSPP crashes at start without its assets (fonts, ppge_atlas.zim) in <BIOS folder>/PPSSPP; RetroArch's "core system
+// files" are fetched from the same place
+bool GameLibrary::coreAssets(const QString& systemId, QString& error, bool download) {
+    if (systemId != "psp") return true;
+    const QString bios = biosFolder();
+    if (QFile::exists(bios + "/PPSSPP/ppge_atlas.zim")) return true;
+    if (!download) return false;
+    setBusy("gamesFetchingAssets", "PPSSPP", 0);
+    const QString zip = dataDir("cores") + "/PPSSPP.download.zip";
+    QString err;
+    if (!httpsDownload("https://buildbot.libretro.com/assets/system/PPSSPP.zip", zip, 256ll << 20,
+                       [this](int p) { setBusy("gamesFetchingAssets", "PPSSPP", p); }, err)) {
+        QFile::remove(zip);
+        qWarning("Games: could not fetch PPSSPP's files: %s", qPrintable(err));
+        error = "gamesAssetsFailed";
+        return false;
+    }
+    int written = 0;
+    for (const auto& en : retro::zipList(zip.toStdString())) {
+        QString name = QString::fromStdString(en.name);
+        if (name.endsWith('/') || name.contains("..")) continue;
+        if (!name.startsWith("PPSSPP/")) name = "PPSSPP/" + name;   // (the files at the archive's top)
+        std::vector<uint8_t> d;
+        std::string e;
+        if (!retro::zipRead(zip.toStdString(), en.name, d, e)) continue;
+        const QString dest = bios + "/" + name;
+        QDir().mkpath(QFileInfo(dest).absolutePath());
+        QFile f(dest);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { f.write(reinterpret_cast<const char*>(d.data()), qint64(d.size())); ++written; }
+    }
+    QFile::remove(zip);
+    qInfo("Games: PPSSPP's files (%d) put in %s/PPSSPP", written, qPrintable(bios));
+    if (!QFile::exists(bios + "/PPSSPP/ppge_atlas.zim")) { error = "gamesAssetsFailed"; return false; }
+    return true;
 }
 
 // ------------------------------------------------------------------ box art
