@@ -78,6 +78,9 @@ public:
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void refresh() { emit changed(); }   // the page shown again (Continue may have come)
     Q_INVOKABLE void select(const QString& systemId);
+    // search every system's games by title (all words); "" or clearSearch() goes back to the system shown before
+    Q_INVOKABLE void search(const QString& text);
+    Q_INVOKABLE bool clearSearch();
     Q_INVOKABLE void play(const QString& path, bool resume = false);   // resume: from the state written when it was quit
     Q_INVOKABLE void downloadCovers();          // box art for every game that has none
     Q_INVOKABLE void setCover(const QString& path);   // a picture of the user's own
@@ -119,6 +122,7 @@ private:
     QVariantMap itemFor(const Entry& e) const;
 
     QString folder_, current_;
+    QString searchText_, beforeSearch_;
     std::vector<Entry> entries_;
     mutable std::mutex m_;
     QString busy_, busyArg_;

@@ -134,7 +134,7 @@ Rectangle {
         id: nowBar
         x: 20; anchors.top: header.bottom; anchors.topMargin: visible ? 8 : 0
         width: parent.width - 40; spacing: 8
-        visible: player.retroActive || media.playingFromLibrary || player.subtitleTracks.length > 0 || player.audioTracks.length > 1
+        visible: player.hasMedia || player.retroActive || media.playingFromLibrary || player.subtitleTracks.length > 0 || player.audioTracks.length > 1
         height: visible ? implicitHeight : 0
         Btn { visible: player.retroActive; text: tr("gameSave"); onClicked: player.retroSaveState() }
         Btn { visible: player.retroActive; text: tr("gameLoad"); onClicked: player.retroLoadState() }
@@ -218,8 +218,11 @@ Rectangle {
         }
         Text { visible: media.streaming; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
             text: tr("streamQualityHint") }
-        Item { visible: player.retroActive || media.playingFromLibrary; width: parent.width; height: 1 }
-        Btn { visible: player.retroActive || media.playingFromLibrary; primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
+        // closing what plays (with the controller too): a game, a film from the library, or a capture card, the
+        // demo (Abyssal Garden) or a file - back to the start screen
+        Item { visible: player.hasMedia || player.retroActive || media.playingFromLibrary; width: parent.width; height: 1 }
+        Btn { visible: player.hasMedia || player.retroActive || media.playingFromLibrary; primary: true
+            text: tr(player.retroActive ? "gameQuit" : media.playingFromLibrary ? "mediaStop" : "closeSource")
             onClicked: { menu.closeRequested(); if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
     }
 

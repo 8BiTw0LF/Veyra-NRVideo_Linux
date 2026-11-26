@@ -8,6 +8,7 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "closeSource": "Back to the start screen",
         "gamesFetchingAssets": "Fetching the files %1 needs",
         "gamesAssetsFailed": "Could not fetch the files %1 needs (fonts and pictures). Check the network and try again.",
         "gameControls": "Controls",
@@ -412,6 +413,7 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "closeSource": "Tilbage til startskærmen",
         "gamesFetchingAssets": "Henter de filer, %1 skal bruge",
         "gamesAssetsFailed": "Kunne ikke hente de filer, %1 skal bruge (skrifttyper og billeder). Tjek netværket og prøv igen.",
         "gameControls": "Knapper",
@@ -816,6 +818,7 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "closeSource": "Zurück zum Startbildschirm",
         "gamesFetchingAssets": "Lade die Dateien, die %1 braucht",
         "gamesAssetsFailed": "Die Dateien, die %1 braucht (Schriften und Bilder), konnten nicht geladen werden. Prüfe das Netzwerk und versuche es erneut.",
         "gameControls": "Tastenbelegung",
@@ -1196,6 +1199,7 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "closeSource": "Volver a la pantalla de inicio",
         "gamesFetchingAssets": "Descargando los archivos que necesita %1",
         "gamesAssetsFailed": "No se pudieron descargar los archivos que necesita %1 (fuentes e imágenes). Revisa la red e inténtalo de nuevo.",
         "gameControls": "Controles",
@@ -1576,6 +1580,7 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "closeSource": "Retour à l'écran d'accueil",
         "gamesFetchingAssets": "Téléchargement des fichiers nécessaires à %1",
         "gamesAssetsFailed": "Impossible de télécharger les fichiers nécessaires à %1 (polices et images). Vérifie le réseau et réessaie.",
         "gameControls": "Commandes",
@@ -1956,6 +1961,7 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "closeSource": "Tillbaka till startskärmen",
         "gamesFetchingAssets": "Hämtar filerna som %1 behöver",
         "gamesAssetsFailed": "Kunde inte hämta filerna som %1 behöver (typsnitt och bilder). Kontrollera nätverket och försök igen.",
         "gameControls": "Knappar",
@@ -2336,6 +2342,7 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "closeSource": "Tilbake til startskjermen",
         "gamesFetchingAssets": "Henter filene %1 trenger",
         "gamesAssetsFailed": "Kunne ikke hente filene %1 trenger (skrifttyper og bilder). Sjekk nettverket og prøv igjen.",
         "gameControls": "Knapper",
@@ -2716,6 +2723,7 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "closeSource": "На стартовый экран",
         "gamesFetchingAssets": "Загрузка файлов, нужных %1",
         "gamesAssetsFailed": "Не удалось загрузить файлы, нужные %1 (шрифты и изображения). Проверьте сеть и попробуйте снова.",
         "gameControls": "Управление",

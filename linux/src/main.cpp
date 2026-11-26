@@ -660,6 +660,17 @@ int main(int argc, char** argv) {
             qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
                   qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
         });
+    // (VEYAMUX_TEST_DEMO=1: the demo scene at 720p 30 fps after 0.5 s)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_DEMO")) QTimer::singleShot(500, [&player] { player.openDemo(30, 720); });
+    // (VEYAMUX_TEST_GAME_SEARCH=<text>: search the games after 2 s and say how many were found)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_GAME_SEARCH"))
+        QTimer::singleShot(2000, [&games] {
+            games.search(qEnvironmentVariable("VEYAMUX_TEST_GAME_SEARCH"));
+            const QVariantList it = games.items();
+            qInfo("TEST game search: %lld found, first %s", qlonglong(it.size()), it.isEmpty() ? "-" : qPrintable(it.first().toMap().value("title").toString()));
+            games.clearSearch();
+            qInfo("TEST game search cleared: %s, %lld games", qPrintable(games.current()), qlonglong(games.items().size()));
+        });
     // (VEYAMUX_TEST_LAG=1: the longest the UI thread was busy, every 2 s - the controller waits that long)
     if (qEnvironmentVariableIsSet("VEYAMUX_TEST_LAG")) {
         auto* lagT = new QTimer(&app);

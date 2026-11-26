@@ -29,6 +29,7 @@ Item {
         if (addDlg.visible) { addDlg.visible = false; media.cancelLogin(); return }
         if (detail.item) { detail.item = null; return }
         if (isMedia && media.back()) return
+        if (!isMedia && games.clearSearch()) { searchIn.text = ""; gameSearchTimer.stop(); return }
         close()
     }
     // LB / RB: the next source / system
@@ -156,7 +157,7 @@ Item {
             // Media: search the server (films, series, episodes); Enter searches, the list comes as a folder (B goes back)
             Rectangle {
                 id: searchBox
-                visible: lib.isMedia && media.canSearch
+                visible: lib.isMedia ? media.canSearch : true
                 width: 240 * lib.k; height: 38 * lib.k; radius: 10 * Theme.round
                 color: Theme.surfaceDeep; border.width: Math.max(1, Theme.edge); border.color: searchIn.activeFocus ? Theme.accentLine : Theme.border
                 Image { id: searchIcon; source: "icons/search.svg"; width: 16 * lib.k; height: width; sourceSize: Qt.size(32, 32); opacity: 0.7
@@ -166,7 +167,10 @@ Item {
                     anchors { left: searchIcon.right; right: parent.right; leftMargin: 8 * lib.k; rightMargin: 10 * lib.k; verticalCenter: parent.verticalCenter }
                     font.family: Theme.font; font.pixelSize: 14 * lib.k; color: Theme.heading; clip: true
                     selectByMouse: true
-                    onAccepted: { media.search(text); focus = false }
+                    // Media: Enter asks the server; Games: the list follows the typing (a short pause first)
+                    onAccepted: { if (lib.isMedia) media.search(text); else games.search(text); focus = false }
+                    onTextChanged: if (!lib.isMedia) gameSearchTimer.restart()
+                    Timer { id: gameSearchTimer; interval: 250; onTriggered: games.search(searchIn.text) }
                     Keys.onEscapePressed: { text = ""; focus = false }
                 }
                 Text { anchors.fill: searchIn; verticalAlignment: Text.AlignVCenter; visible: searchIn.text === "" && !searchIn.activeFocus

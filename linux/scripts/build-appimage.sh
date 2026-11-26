@@ -25,7 +25,17 @@ fi
 cmake -G Ninja -S "$ROOT" -B "$BUILD" "${CFG[@]}" -DCMAKE_INSTALL_PREFIX=/usr -DVEYAMUX_DXC_ROOT="$T/dxc"
 cmake --build "$BUILD"
 rm -rf "$APPDIR"; DESTDIR="$APPDIR" cmake --install "$BUILD"
-[ "$FLAVOR" = debug ] && sed -i 's/^Name=VeyAmux$/Name=VeyAmux Debug/' "$APPDIR/usr/share/applications/veyamux.desktop"
+DESKTOP="$APPDIR/usr/share/applications/veyamux.desktop"
+if [ "$FLAVOR" = debug ]; then
+  # VeyAmux Debug is its own app on the desktop: its own .desktop file whose StartupWMClass is its window's app id
+  # (veyamux-debug, main.cpp). With the same file as VeyAmux (StartupWMClass=veyamux) a taskbar pin of VeyAmux
+  # could open VeyAmux Debug, and Debug's own windows matched no entry.
+  mv "$DESKTOP" "$APPDIR/usr/share/applications/veyamux-debug.desktop"
+  DESKTOP="$APPDIR/usr/share/applications/veyamux-debug.desktop"
+  sed -i -e 's/^Name=VeyAmux$/Name=VeyAmux Debug/' -e 's/^StartupWMClass=veyamux$/StartupWMClass=veyamux-debug/' "$DESKTOP"
+  rm -f "$APPDIR"/usr/share/metainfo/veyamux.metainfo.xml   # (VeyAmux's, which names veyamux.desktop)
+  grep -q '^StartupWMClass=veyamux-debug$' "$DESKTOP" && grep -q '^Name=VeyAmux Debug$' "$DESKTOP"
+fi
 
 QMAKE="$(command -v qmake6 || echo /usr/lib/qt6/bin/qmake6)"; export QMAKE
 export QML_SOURCES_PATHS="$ROOT/qml"
@@ -35,7 +45,7 @@ export PATH="$T/appimage:$PATH"
 
 # Pass 1: collect libraries + Qt plugins (no packaging yet).
 "$T/appimage/linuxdeploy-x86_64.AppImage" --appdir "$APPDIR" --plugin qt \
-  -d "$APPDIR/usr/share/applications/veyamux.desktop" -i "$APPDIR/usr/share/icons/hicolor/scalable/apps/veyamux.svg"
+  -d "$DESKTOP" -i "$APPDIR/usr/share/icons/hicolor/scalable/apps/veyamux.svg"
 
 # The Vulkan loader and every GPU driver must come from the HOST (RADV/ANV/NVIDIA ICDs live there).
 find "$APPDIR" \( -name 'libvulkan.so*' -o -name 'libGL.so*' -o -name 'libEGL.so*' -o -name 'libGLX*.so*' -o -name 'libOpenGL.so*' \

@@ -657,6 +657,19 @@ QVariantList GameLibrary::items() const {
 
 QVariantList GameLibrary::itemsNow() const {
     QVariantList out;
+    if (current_ == "search") {
+        const QStringList words = searchText_.split(' ', Qt::SkipEmptyParts);
+        std::vector<const Entry*> hits;
+        std::lock_guard l(m_);
+        for (const auto& e : entries_) {
+            bool all = true;
+            for (const auto& w : words) if (!e.title.contains(w, Qt::CaseInsensitive)) { all = false; break; }
+            if (all) hits.push_back(&e);
+        }
+        std::sort(hits.begin(), hits.end(), [](const Entry* a, const Entry* b) { return a->title.compare(b->title, Qt::CaseInsensitive) < 0; });
+        for (const Entry* e : hits) { out << itemFor(*e); if (out.size() >= 500) break; }
+        return out;
+    }
     if (current_ == "recent") {
         const QStringList recent = QSettings().value("games/recent").toStringList();
         std::lock_guard l(m_);
@@ -669,7 +682,25 @@ QVariantList GameLibrary::itemsNow() const {
     return out;
 }
 
+void GameLibrary::search(const QString& raw) {
+    const QString text = raw.simplified();
+    if (text.isEmpty()) { clearSearch(); return; }
+    if (current_ != "search") beforeSearch_ = current_;
+    searchText_ = text;
+    current_ = "search";
+    emit changed();
+}
+
+bool GameLibrary::clearSearch() {
+    if (current_ != "search") return false;
+    current_ = beforeSearch_;
+    searchText_.clear();
+    emit changed();
+    return true;
+}
+
 void GameLibrary::select(const QString& systemId) {
+    searchText_.clear();
     current_ = systemId;
     QSettings().setValue("games/system", systemId);
     emit changed();
