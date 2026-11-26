@@ -906,9 +906,18 @@ void MediaEngine::audioLoop() {
     bool paFailed = false;
     Leveler fileLeveler;
     int fileSinkGen = sinkGen_.load();
+    int outCh = 2;   // 2, or 6 (5.1: FL FR FC LFE RL RR) for a surround film with surround on
     auto openPa = [&] {
         if (pa || paFailed) return;
-        pa_sample_spec ss{PA_SAMPLE_S16LE, kRate, 2};
+        pa_sample_spec ss{PA_SAMPLE_S16LE, kRate, uint8_t(outCh)};
+        pa_channel_map map;
+        pa_channel_map_init_stereo(&map);
+        if (outCh == 6) {
+            map.channels = 6;
+            const pa_channel_position_t pos[6] = {PA_CHANNEL_POSITION_FRONT_LEFT, PA_CHANNEL_POSITION_FRONT_RIGHT, PA_CHANNEL_POSITION_FRONT_CENTER,
+                                                  PA_CHANNEL_POSITION_LFE, PA_CHANNEL_POSITION_REAR_LEFT, PA_CHANNEL_POSITION_REAR_RIGHT};
+            for (int i = 0; i < 6; ++i) map.map[i] = pos[i];
+        }
         pa_buffer_attr attr;
         attr.maxlength = uint32_t(-1);
         attr.tlength = uint32_t(pa_usec_to_bytes(60000, &ss));
@@ -917,8 +926,8 @@ void MediaEngine::audioLoop() {
         attr.fragsize = uint32_t(-1);
         int err = 0;
         const std::string sk = sinkName();
-        pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sk.empty() ? nullptr : sk.c_str(), "playback", &ss, nullptr, &attr, &err);
-        if (!pa && !sk.empty()) pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "playback", &ss, nullptr, &attr, &err);
+        pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, sk.empty() ? nullptr : sk.c_str(), "playback", &ss, &map, &attr, &err);
+        if (!pa && !sk.empty()) pa = pa_simple_new(nullptr, "VeyAmux", PA_STREAM_PLAYBACK, nullptr, "playback", &ss, &map, &attr, &err);
         if (!pa) {
             paFailed = true;
             if (cb_.onGpuMessage) cb_.onGpuMessage(std::string("Audio unavailable: ") + pa_strerror(err));
@@ -942,6 +951,17 @@ void MediaEngine::audioLoop() {
             const double pts = bt == AV_NOPTS_VALUE ? lastEnd : double(bt) * aTimeBase_ - startTime_;
             lastEnd = pts + dur;
             if (serial != serial_.load() || pts + dur < seekTarget_.load()) { av_frame_unref(f); continue; }
+            // 5.1 out for a film with 5.1 or more, when surround is on (the sound server mixes it down for stereo devices)
+            const int wantCh = surround_.load() && f->ch_layout.nb_channels >= 6 ? 6 : 2;
+            if (wantCh != outCh) {
+                outCh = wantCh;
+                av_channel_layout_uninit(&outLayout);
+                if (outCh == 6) outLayout = AV_CHANNEL_LAYOUT_5POINT1_BACK;
+                else av_channel_layout_default(&outLayout, 2);
+                if (pa) { pa_simple_free(pa); pa = nullptr; }
+                paFailed = false;
+                curFmt = -1;
+            }
             if (f->format != curFmt || f->sample_rate != curRate || f->ch_layout.nb_channels != curCh || !swr) {
                 swr_free(&swr);
                 swr_alloc_set_opts2(&swr, &outLayout, AV_SAMPLE_FMT_S16, kRate, &f->ch_layout, AVSampleFormat(f->format),
@@ -950,7 +970,7 @@ void MediaEngine::audioLoop() {
                 curFmt = f->format; curRate = f->sample_rate; curCh = f->ch_layout.nb_channels;
             }
             const int maxOut = swr_get_out_samples(swr, f->nb_samples);
-            buf.resize(size_t(std::max(maxOut, 1)) * 2);
+            buf.resize(size_t(std::max(maxOut, 1)) * size_t(outCh));
             uint8_t* o[1] = {reinterpret_cast<uint8_t*>(buf.data())};
             const int n = swr_convert(swr, o, maxOut, const_cast<const uint8_t**>(f->extended_data), f->nb_samples);
             av_frame_unref(f);
@@ -963,18 +983,30 @@ void MediaEngine::audioLoop() {
             }
             if (quit_ || serial != serial_.load()) continue;
 
-            std::vector<int16_t> tap;
-            if (cb_.onAudio) tap.assign(buf.begin(), buf.begin() + n * 2);
-            if (normalize_.load()) fileLeveler.process(buf.data(), n, kRate);
+            std::vector<int16_t> tap;   // (stereo: the meter and recordings)
+            if (cb_.onAudio) {
+                if (outCh == 2) {
+                    tap.assign(buf.begin(), buf.begin() + n * 2);
+                } else {
+                    tap.resize(size_t(n) * 2);
+                    for (int i = 0; i < n; ++i) {
+                        const int16_t* s6 = &buf[size_t(i) * 6];
+                        const double c = s6[2] * 0.707;
+                        tap[size_t(i) * 2] = int16_t(std::clamp(std::lround((s6[0] + c + s6[4] * 0.707) * 0.6), -32768L, 32767L));
+                        tap[size_t(i) * 2 + 1] = int16_t(std::clamp(std::lround((s6[1] + c + s6[5] * 0.707) * 0.6), -32768L, 32767L));
+                    }
+                }
+            }
+            if (normalize_.load() && outCh == 2) fileLeveler.process(buf.data(), n, kRate);
             if (fileSinkGen != sinkGen_.load() && pa) { fileSinkGen = sinkGen_.load(); pa_simple_free(pa); pa = nullptr; }   // output device changed
             const float vol = muted_.load() ? 0.0f : volume_.load();
             if (vol != 1.0f)
-                for (int i = 0; i < n * 2; ++i)
+                for (int i = 0; i < n * outCh; ++i)
                     buf[size_t(i)] = int16_t(std::clamp(int(std::lround(buf[size_t(i)] * vol)), -32768, 32767));
             openPa();
             if (pa) {
                 int err = 0;
-                if (pa_simple_write(pa, buf.data(), size_t(n) * 4, &err) < 0) { pa_simple_free(pa); pa = nullptr; paFailed = true; continue; }
+                if (pa_simple_write(pa, buf.data(), size_t(n) * size_t(outCh) * 2, &err) < 0) { pa_simple_free(pa); pa = nullptr; paFailed = true; continue; }
                 const double lat = double(pa_simple_get_latency(pa, &err)) / 1e6;
                 if (serial == serial_.load() && playing_.load()) clock_.set(lastEnd - lat);
                 if (!tap.empty())   // the block ends 'lat' from now

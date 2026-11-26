@@ -4,7 +4,7 @@
 // the core's frame rate. Its picture is handed to VeyAmux like a capture card's (RGBA, the pixels scaled up by a whole
 // number with the core's aspect ratio, so every feature works on it: upscaling, Retro TV, frame generation,
 // recording); its sound goes out through the capture audio path ("@retro"); the controllers come from Gamepad.h.
-// Only cores that draw in software are used (no OpenGL / Vulkan cores).
+// Cores that draw with OpenGL get a context without a window (RetroGl.h); Vulkan cores are not used.
 //
 // The game to run is set with setGame() before the source is opened, like Remote Play's stream config.
 #pragma once
@@ -28,6 +28,9 @@ struct Game {
     bool resume = false;     // continue where the game was quit (its automatic state)
     int runAhead = 0;        // frames run ahead (0-2): the game's own input delay taken away
     bool rewind = false;     // keep the last seconds, to step back through them
+    // RetroAchievements (Achievements.h): the signed-in account and the console's number there (0: none)
+    std::string raUser, raToken;
+    int raConsole = 0;
 };
 void setGame(const Game& g);
 Game game();

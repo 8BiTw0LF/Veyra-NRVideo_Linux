@@ -51,7 +51,7 @@ MediaLibrary::MediaLibrary(PlayerBridge* player, QObject* parent) : QObject(pare
     levels_ = {{QString(), "root", QString(), QString()}};
     imagesChanged_.setSingleShot(true);
     imagesChanged_.setInterval(150);
-    connect(&imagesChanged_, &QTimer::timeout, this, [this] { emit imagesChanged(); });
+    connect(&imagesChanged_, &QTimer::timeout, this, [this] { ++imageVersion_; emit imagesChanged(); });
     loginPoll_.setInterval(2000);
     // where the video is, every 10 s (the server's "continue watching"; local files: the settings)
     progress_.setInterval(10000);
@@ -181,6 +181,7 @@ void MediaLibrary::setItems(QVariantList items, int gen) {
 void MediaLibrary::list() {
     ++gen_;
     imageQueue_.clear();
+    imageWaiting_.clear();
     items_.clear();
     images_.clear();
     emit itemsChanged();
@@ -299,12 +300,25 @@ void MediaLibrary::loadImage(int gen, const QString& key, const Source& s, const
         imagesChanged_.start();
         return;
     }
-    imageQueue_.append({gen, key, s, path, file});
+    imageWaiting_.insert(key, {gen, key, s, path, file});
+    // the first screenful is wanted at once (the page asks too, once laid out, but this saves the wait)
+    if (imageWaiting_.size() + images_.size() <= 40) want(key);
+}
+
+void MediaLibrary::want(const QString& key) {
+    auto it = imageWaiting_.find(key);
+    if (it == imageWaiting_.end()) return;
+    imageQueue_.prepend(*it);   // the newest on screen first: scrolling fast does not wait for what was passed
+    if (imageQueue_.size() > 120) {   // scrolled past long ago: waits again until it is on screen
+        const ImageJob old = imageQueue_.takeLast();
+        imageWaiting_.insert(old.key, old);
+    }
+    imageWaiting_.erase(it);
     pumpImages();
 }
 
 void MediaLibrary::pumpImages() {
-    while (imagesRunning_ < 4 && !imageQueue_.isEmpty()) {
+    while (imagesRunning_ < 6 && !imageQueue_.isEmpty()) {
         const ImageJob j = imageQueue_.takeFirst();
         if (j.gen != gen_) continue;
         ++imagesRunning_;
@@ -356,7 +370,8 @@ QVariantMap jellyfinItem(const QJsonObject& o) {
                        {"shape", type == "Episode" || type == "Video" || type == "CollectionFolder" || type == "UserView" ? "wide" : "poster"},
                        {"resume", resume}, {"duration", runtime}, {"progress", runtime > 0 ? std::min(1.0, resume / runtime) : 0.0},
                        {"played", ud.value("Played").toBool()}, {"overview", o.value("Overview").toString()},
-                       {"imageTag", o.value("ImageTags").toObject().value("Primary").toString()}};
+                       {"imageTag", o.value("ImageTags").toObject().value("Primary").toString()},
+                       {"episode", type == "Episode"}, {"series", o.value("SeriesId").toString()}};
 }
 } // namespace
 
@@ -427,6 +442,10 @@ void MediaLibrary::listJellyfin(const Source& s, const Level& l) {
             }
             failed(st);
         });
+    } else if (l.kind == "search") {
+        get(s, "/Items?userId=" + uid + "&searchTerm=" + QString::fromUtf8(QUrl::toPercentEncoding(l.id)) +
+                   "&IncludeItemTypes=Movie,Series,Episode&Recursive=true&Limit=100&" + fields,
+            [fill, failed](int st, const QByteArray& b) { if (st == 200) fill(b, {}); else failed(st); });
     } else if (l.kind == "jf-series") {
         get(s, "/Shows/" + l.id + "/Seasons?userId=" + uid + "&" + fields, [fill, failed](int st, const QByteArray& b) { if (st == 200) fill(b, {}); else failed(st); });
     } else if (l.kind == "jf-lib") {
@@ -661,13 +680,15 @@ QVariantMap plexItem(const QJsonObject& o) {
         const QJsonArray parts = media.first().toObject().value("Part").toArray();
         if (!parts.isEmpty()) part = parts.first().toObject().value("key").toString();
     }
+    const QString parentRating = o.value("parentRatingKey").toString();
     const QString thumb = o.value("thumb").toString();
     return QVariantMap{{"key", section ? "/library/sections/" + o.value("key").toString() : o.value("key").toString()},
                        {"rating", o.value("ratingKey").toString()}, {"title", o.value("title").toString()}, {"sub", sub},
                        {"kind", video ? "video" : "folder"}, {"level", section ? "plex-section" : "plex"}, {"part", part},
                        {"shape", type == "episode" || type == "clip" || section ? "wide" : "poster"},
                        {"resume", resume}, {"duration", dur}, {"progress", dur > 0 ? std::min(1.0, resume / dur) : 0.0},
-                       {"played", o.value("viewCount").toInt() > 0}, {"overview", o.value("summary").toString()}, {"thumb", thumb}};
+                       {"played", o.value("viewCount").toInt() > 0}, {"overview", o.value("summary").toString()}, {"thumb", thumb},
+                       {"episode", type == "episode"}, {"parentRating", parentRating}};
 }
 } // namespace
 
@@ -715,6 +736,18 @@ void MediaLibrary::listPlex(const Source& s, const Level& l) {
                 root["MediaContainer"] = mc;
                 fill(QJsonDocument(root).toJson(QJsonDocument::Compact), head);
             });
+        } else if (l.kind == "search") {
+            // the hubs of the answer (films, series, episodes, ...) in one list
+            get(s, "/hubs/search?limit=40&query=" + QString::fromUtf8(QUrl::toPercentEncoding(l.id)), [fill, failed](int st, const QByteArray& b) {
+                if (st != 200) { failed(st); return; }
+                QJsonArray all;
+                for (const auto& h : QJsonDocument::fromJson(b).object().value("MediaContainer").toObject().value("Hub").toArray()) {
+                    const QString t = h.toObject().value("type").toString();
+                    if (t != "movie" && t != "show" && t != "episode") continue;
+                    for (const auto& m : h.toObject().value("Metadata").toArray()) all.append(m);
+                }
+                fill(QJsonDocument(QJsonObject{{"MediaContainer", QJsonObject{{"Metadata", all}}}}).toJson(QJsonDocument::Compact), {});
+            });
         } else if (l.kind == "plex-section") {
             setItems(categoryFolders("plex", "plex-genres", l.id, QString()), gen);
         } else if (l.kind == "plex-genres") {
@@ -749,21 +782,23 @@ void MediaLibrary::play(int index, bool fromStart) {
 void MediaLibrary::startPlayback(const Source& s, const QVariantMap& it, bool fromStart) {
     if (!playing_.source.isEmpty() && player_->hasMedia()) report("stopped");
     playing_ = {};
+    emit segmentsChanged();
+    emit thumbsChanged();
     const double resume = fromStart ? 0.0 : it.value("resume").toDouble();
     bool ok = false;
+    QString session;
     if (s.kind == "local") {
         ok = player_->openPath(it.value("key").toString());
         playing_.item = it.value("key").toString();
     } else if (s.kind == "jellyfin") {
         playing_.item = it.value("key").toString();
-        ok = player_->openStream(s.url + "/Videos/" + playing_.item + "/stream?static=true",
-                                 "Authorization: " + jellyfinAuth(s.token) + "\r\n", it.value("title").toString());
+        ok = player_->openStream(streamUrl(s, it, session), "Authorization: " + jellyfinAuth(s.token) + "\r\n", it.value("title").toString());
     } else if (s.kind == "plex") {
-        const QString part = it.value("part").toString();
-        if (part.isEmpty()) { emit message("mediaCannotPlay", QString(), true); return; }
+        if (it.value("part").toString().isEmpty()) { emit message("mediaCannotPlay", QString(), true); return; }
         playing_.item = it.value("rating").toString();
-        ok = player_->openStream(plexUri_.value(s.id) + part,
-                                 "X-Plex-Token: " + s.token + "\r\nX-Plex-Client-Identifier: " + deviceId() + "\r\nX-Plex-Product: VeyAmux\r\n",
+        ok = player_->openStream(streamUrl(s, it, session),
+                                 "X-Plex-Token: " + s.token + "\r\nX-Plex-Client-Identifier: " + deviceId() + "\r\nX-Plex-Product: VeyAmux\r\n"
+                                 "X-Plex-Platform: Chrome\r\nX-Plex-Device: Linux\r\n",
                                  it.value("title").toString());
     }
     if (!ok) { playing_ = {}; emit playbackChanged(); return; }
@@ -771,8 +806,19 @@ void MediaLibrary::startPlayback(const Source& s, const QVariantMap& it, bool fr
     playing_.kind = s.kind;
     playing_.duration = it.value("duration").toDouble();
     playing_.started = true;
+    playing_.it = it;
+    playing_.session = session;
+    // the next episode: the one after it in the list it was started from (else asked from the server, fetchExtras)
+    if (it.value("episode").toBool()) {
+        bool after = false;
+        for (const auto& v : items_) {
+            const QVariantMap m = v.toMap();
+            if (after && m.value("kind") == "video" && m.value("episode").toBool()) { playing_.next = m; break; }
+            if (m.value("key") == it.value("key")) after = true;
+        }
+    }
     if (resume > 5) player_->seek(resume);
-    if (s.kind != "local") fetchSubtitles(s, playing_.item);
+    if (s.kind != "local") { fetchSubtitles(s, playing_.item); fetchExtras(s, it); }
     report("start");
     progress_.start();
     emit playbackChanged();
@@ -855,13 +901,208 @@ void MediaLibrary::report(const QString& state) {
         if (finished && end)
             get(s, "/:/scrobble?identifier=com.plexapp.plugins.library&key=" + playing_.item, [](int, const QByteArray&) {});
     }
+    if (end && s.kind == "plex" && !playing_.session.isEmpty())
+        get(s, "/video/:/transcode/universal/stop?session=" + playing_.session, [](int, const QByteArray&) {});
     if (end) {
         progress_.stop();
         playing_ = {};
+        emit segmentsChanged();
+        emit thumbsChanged();
         emit playbackChanged();
         // the page shows the new positions when it comes back
         QTimer::singleShot(800, this, [this] { list(); });
     }
+}
+
+// ------------------------------------------------------------------ search, next episode, quality, seek bar pictures
+
+bool MediaLibrary::canSearch() const {
+    const QString k = source(current_).kind;
+    return k == "jellyfin" || k == "plex";
+}
+
+void MediaLibrary::search(const QString& raw) {
+    const QString text = raw.trimmed();
+    if (text.isEmpty() || !canSearch()) return;
+    if (levels_.size() > 1 && levels_.last().kind == "search") levels_.removeLast();   // a new search replaces the last
+    levels_.append({QStringLiteral("“%1”").arg(text), "search", text, QString()});
+    emit viewChanged();
+    list();
+}
+
+void MediaLibrary::playNext() {
+    if (playing_.next.isEmpty() || playing_.source.isEmpty()) return;
+    const QVariantMap n = playing_.next;
+    startPlayback(source(playing_.source), n, true);
+}
+
+int MediaLibrary::quality() const { return QSettings().value("media/quality", 0).toInt(); }
+
+// a new quality: the video goes on from where it is, in the new quality
+void MediaLibrary::setQuality(int mbps) {
+    if (mbps == quality()) return;
+    QSettings().setValue("media/quality", mbps);
+    emit qualityChanged();
+    if (!streaming() || !player_->hasMedia()) return;
+    QVariantMap it = playing_.it;
+    it["resume"] = player_->position();
+    startPlayback(source(playing_.source), it, false);
+}
+
+// the file as it is, or (a quality chosen) converted by the server to H.264 at that rate, as HLS. The sign-in goes in
+// the request headers only (FFmpeg's HLS reader sends them for every part too), never in the address.
+QString MediaLibrary::streamUrl(const Source& s, const QVariantMap& it, QString& session) const {
+    const int q = quality();
+    if (s.kind == "jellyfin") {
+        const QString id = it.value("key").toString();
+        if (q <= 0) return s.url + "/Videos/" + id + "/stream?static=true";
+        session = QUuid::createUuid().toString(QUuid::Id128);
+        return s.url + QStringLiteral("/Videos/%1/master.m3u8?MediaSourceId=%1&DeviceId=%2&PlaySessionId=%3&VideoCodec=h264"
+                                      "&AudioCodec=aac,ac3,eac3&MaxAudioChannels=6&TranscodingMaxAudioChannels=6&VideoBitrate=%4"
+                                      "&AudioBitrate=384000&SegmentContainer=ts&BreakOnNonKeyFrames=true&SubtitleMethod=External")
+                           .arg(id, deviceId(), session).arg(qint64(q) * 1000000);
+    }
+    const QString base = plexUri_.value(s.id);
+    if (q <= 0) return base + it.value("part").toString();
+    session = QUuid::createUuid().toString(QUuid::Id128);
+    const QString res = q >= 12 ? "1920x1080" : q >= 6 ? "1280x720" : "854x480";
+    return base + QStringLiteral("/video/:/transcode/universal/start.m3u8?path=%1&mediaIndex=0&partIndex=0&protocol=hls&fastSeek=1"
+                                 "&directPlay=0&directStream=1&directStreamAudio=1&videoQuality=90&maxVideoBitrate=%2&videoResolution=%3"
+                                 "&subtitles=none&location=lan&session=%4&X-Plex-Session-Identifier=%4&X-Plex-Client-Identifier=%5"
+                                 "&X-Plex-Product=VeyAmux&X-Plex-Platform=Chrome")
+                      .arg(QString::fromUtf8(QUrl::toPercentEncoding("/library/metadata/" + it.value("rating").toString())))
+                      .arg(q * 1000).arg(res, session, deviceId());
+}
+
+void MediaLibrary::fetchExtras(const Source& s, const QVariantMap& it) {
+    const QString item = playing_.item;
+    auto addSegment = [this](const QString& kind, double a, double b) {
+        if (b <= a) return;
+        playing_.segments << QVariantMap{{"kind", kind}, {"start", a}, {"end", b}};
+        emit segmentsChanged();
+    };
+    auto setNext = [this, item](const QVariantMap& n) {
+        if (playing_.item != item || !playing_.next.isEmpty() || n.isEmpty()) return;
+        playing_.next = n;
+        emit segmentsChanged();
+    };
+    if (s.kind == "jellyfin") {
+        // intro and credits (Jellyfin 10.10's media segments: from its own intro detection or a plugin)
+        get(s, "/MediaSegments/" + item + "?includeSegmentTypes=Intro&includeSegmentTypes=Outro", [this, item, addSegment](int st, const QByteArray& b) {
+            if (st != 200 || playing_.item != item) return;
+            for (const auto& v : QJsonDocument::fromJson(b).object().value("Items").toArray()) {
+                const QJsonObject o = v.toObject();
+                addSegment(o.value("Type").toString() == "Intro" ? "intro" : "credits", o.value("StartTicks").toDouble() / 1e7,
+                           o.value("EndTicks").toDouble() / 1e7);
+            }
+        });
+        // seek bar pictures (trickplay tiles), the size nearest 320 wide
+        get(s, "/Items/" + item + "?userId=" + s.user + "&Fields=Trickplay", [this, item](int st, const QByteArray& b) {
+            if (st != 200 || playing_.item != item) return;
+            const QJsonObject tp = QJsonDocument::fromJson(b).object().value("Trickplay").toObject();
+            if (tp.isEmpty()) return;
+            const QString msId = tp.keys().first();
+            const QJsonObject sizes = tp.value(msId).toObject();
+            QString best;
+            for (const QString& w : sizes.keys())
+                if (best.isEmpty() || std::abs(w.toInt() - 320) < std::abs(best.toInt() - 320)) best = w;
+            const QJsonObject t = sizes.value(best).toObject();
+            playing_.trickWidth = best.toInt();
+            playing_.trickW = t.value("Width").toInt(); playing_.trickH = t.value("Height").toInt();
+            playing_.tileW = std::max(1, t.value("TileWidth").toInt()); playing_.tileH = std::max(1, t.value("TileHeight").toInt());
+            playing_.trickIntervalMs = std::max(1, t.value("Interval").toInt());
+            playing_.trickCount = t.value("ThumbnailCount").toInt();
+            playing_.it["trickSource"] = msId;
+            emit thumbsChanged();
+        });
+        // the next episode, when the list it came from has none after it
+        const QString series = it.value("series").toString();
+        if (playing_.next.isEmpty() && it.value("episode").toBool() && !series.isEmpty())
+            get(s, "/Shows/" + series + "/Episodes?userId=" + s.user + "&StartItemId=" + item + "&Limit=2&Fields=Overview",
+                [setNext](int st, const QByteArray& b) {
+                    if (st != 200) return;
+                    const QJsonArray a = QJsonDocument::fromJson(b).object().value("Items").toArray();
+                    if (a.size() >= 2) setNext(jellyfinItem(a.at(1).toObject()));
+                });
+    } else if (s.kind == "plex") {
+        get(s, "/library/metadata/" + item + "?includeMarkers=1", [this, s, item, addSegment](int st, const QByteArray& b) {
+            if (st != 200 || playing_.item != item) return;
+            const QJsonArray md = QJsonDocument::fromJson(b).object().value("MediaContainer").toObject().value("Metadata").toArray();
+            if (md.isEmpty()) return;
+            const QJsonObject m = md.first().toObject();
+            for (const auto& v : m.value("Marker").toArray()) {
+                const QJsonObject o = v.toObject();
+                const QString t = o.value("type").toString();
+                if (t == "intro" || t == "credits")
+                    addSegment(t, o.value("startTimeOffset").toDouble() / 1000.0, o.value("endTimeOffset").toDouble() / 1000.0);
+            }
+            // seek bar pictures: the part's index file (BIF: the pictures one after the other, and where each begins)
+            const QJsonArray media = m.value("Media").toArray();
+            if (media.isEmpty()) return;
+            const QJsonArray parts = media.first().toObject().value("Part").toArray();
+            if (parts.isEmpty() || parts.first().toObject().value("indexes").toString() != "sd") return;
+            const QString partId = QString::number(parts.first().toObject().value("id").toVariant().toLongLong());
+            get(s, "/library/parts/" + partId + "/indexes/sd", [this, item](int st2, const QByteArray& bif) {
+                if (st2 != 200 || playing_.item != item || bif.size() < 64 || !bif.startsWith("\x89" "BIF")) return;
+                auto u32 = [&bif](int at) { return quint32(uchar(bif[at])) | quint32(uchar(bif[at + 1])) << 8 | quint32(uchar(bif[at + 2])) << 16 | quint32(uchar(bif[at + 3])) << 24; };
+                const quint32 count = u32(12), interval = u32(16);
+                if (count == 0 || 64 + qint64(count + 1) * 8 > bif.size()) return;
+                std::vector<quint32> off;
+                for (quint32 i = 0; i <= count; ++i) off.push_back(u32(int(64 + i * 8 + 4)));
+                playing_.bif = bif;
+                playing_.bifOffsets = std::move(off);
+                playing_.trickIntervalMs = interval ? int(interval) : 1000;
+                playing_.trickCount = int(count);
+                emit thumbsChanged();
+            }, 60000);
+        });
+        // the next episode in the season, when the list it came from has none after it
+        const QString season = it.value("parentRating").toString();
+        if (playing_.next.isEmpty() && it.value("episode").toBool() && !season.isEmpty())
+            get(s, "/library/metadata/" + season + "/children", [setNext, item](int st, const QByteArray& b) {
+                if (st != 200) return;
+                const QJsonArray a = QJsonDocument::fromJson(b).object().value("MediaContainer").toObject().value("Metadata").toArray();
+                for (int i = 0; i + 1 < a.size(); ++i)
+                    if (a.at(i).toObject().value("ratingKey").toString() == item) { setNext(plexItem(a.at(i + 1).toObject())); return; }
+            });
+    }
+}
+
+QVariantMap MediaLibrary::thumbAt(double seconds) {
+    if (playing_.trickCount <= 0) return {};
+    const int i = std::clamp(int(seconds * 1000.0 / playing_.trickIntervalMs), 0, playing_.trickCount - 1);
+    const Source s = source(playing_.source);
+    const QString base = artDir(s.id) + "/trick-" + hashOf(playing_.item);
+    if (!playing_.bifOffsets.empty()) {   // Plex: one picture per entry
+        const QString file = base + "-" + QString::number(i) + ".jpg";
+        if (!QFile::exists(file)) {
+            const quint32 a = playing_.bifOffsets[size_t(i)], b = playing_.bifOffsets[size_t(i) + 1];
+            if (b <= a || qint64(b) > playing_.bif.size()) return {};
+            QFile f(file);
+            if (!f.open(QIODevice::WriteOnly)) return {};
+            f.write(playing_.bif.constData() + a, qint64(b - a));
+        }
+        return {{"url", QUrl::fromLocalFile(file).toString()}, {"x", 0}, {"y", 0}, {"w", 0}, {"h", 0}};
+    }
+    // Jellyfin: tiles of tileW x tileH pictures, fetched when first needed
+    const int per = playing_.tileW * playing_.tileH, tile = i / per, within = i % per;
+    const QString file = base + "-" + QString::number(playing_.trickWidth) + "-" + QString::number(tile) + ".jpg";
+    if (!QFile::exists(file)) {
+        if (playing_.trickFetching.contains(file)) return {};
+        playing_.trickFetching.insert(file);
+        const QString item = playing_.item;
+        get(s, QStringLiteral("/Videos/%1/Trickplay/%2/%3.jpg?MediaSourceId=%4").arg(item).arg(playing_.trickWidth).arg(tile)
+                   .arg(playing_.it.value("trickSource").toString()),
+            [this, file, item](int st, const QByteArray& b) {
+                if (st != 200 || b.isEmpty() || playing_.item != item) return;
+                QFile f(file);
+                if (f.open(QIODevice::WriteOnly)) { f.write(b); f.close(); }
+                emit thumbsChanged();
+            });
+        return {};
+    }
+    return {{"url", QUrl::fromLocalFile(file).toString()}, {"x", (within % playing_.tileW) * playing_.trickW},
+            {"y", (within / playing_.tileW) * playing_.trickH}, {"w", playing_.trickW}, {"h", playing_.trickH}};
 }
 
 } // namespace veyamux

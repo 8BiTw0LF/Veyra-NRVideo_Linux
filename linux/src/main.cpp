@@ -33,10 +33,13 @@
 #include <QStandardPaths>
 #include <QFile>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QSettings>
 #include <QVulkanInstance>
 #include <QScreen>
 #include <memory>
+#include <filesystem>
+#include "RetroRemote.h"
 #include <QObject>
 #include <thread>
 #include <chrono>
@@ -121,6 +124,8 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
 }
 
 int main(int argc, char** argv) {
+    // a game's emulator, started by VeyAmux in a process of its own (RetroRemote.h): no window, no Qt
+    if (argc >= 2 && std::strcmp(argv[1], "--retro-host") == 0) return veyamux::retro::hostMain();
     if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) qputenv("QSG_RENDER_LOOP", "threaded");
     // Grey (not sub-pixel/LCD) text antialiasing: sub-pixel text gets coloured fringes when the window is scaled by the
     // compositor, drawn through a layer (HDR output) or captured.
@@ -153,6 +158,16 @@ int main(int argc, char** argv) {
                 qputenv(k.toLatin1().constData(), q.value(k).toString().toLatin1());
                 qInfo("Debug switch: %s=%s", qPrintable(k), qPrintable(q.value(k).toString()));
             }
+    }
+    // games run in a child process, so an emulator that crashes does not take VeyAmux with it
+    // (VEYAMUX_RETRO_INPROC=1: in this process, as before 2.1.2)
+    if (!qEnvironmentVariableIsSet("VEYAMUX_RETRO_INPROC")) {
+        std::error_code ec;
+        const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+        if (!ec) {
+            veyamux::retro::useHostProcess(exe.string());
+            veyamux::retro::setHostLog([](const std::string& line) { qInfo("%s", line.c_str()); });
+        }
     }
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
@@ -440,6 +455,11 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
     // Test hook: open the Media or Games page at start (VEYAMUX_TEST_PAGE=media | games, for screenshots)
     engine.rootContext()->setContextProperty("testPage", qEnvironmentVariable("VEYAMUX_TEST_PAGE"));
+    // (VEYAMUX_TEST_MENU=<ms>: the menu opens then, with a game's controller layout shown - for screenshots)
+    engine.rootContext()->setContextProperty("testMenu", qEnvironmentVariableIntValue("VEYAMUX_TEST_MENU"));
+    // the page to open on (System -> Start in), unless a capture card, a file or a dialog was asked for
+    engine.rootContext()->setContextProperty("startPageNow", capturePath.isEmpty() && openFile.isEmpty() && grabPath.isEmpty()
+                                                                 ? player.startPage() : QString());
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
     // Test hook: the capture dialog's signal test with sample results (VEYAMUX_TEST_SIGNALTEST=1, for screenshots)
@@ -592,7 +612,7 @@ int main(int argc, char** argv) {
             for (const auto& v : media.items()) {
                 const auto m = v.toMap();
                 qInfo("TEST   %s | %s | %s | %s", qPrintable(m.value("kind").toString()), qPrintable(m.value("title").toString()),
-                      qPrintable(m.value("sub").toString()), qPrintable(media.images().value(m.value("key").toString()).toString().section('/', -1)));
+                      qPrintable(m.value("sub").toString()), qPrintable(media.image(m.value("key").toString()).section('/', -1)));
             }
         };
         const QString url = tm.section(':', 1);
@@ -610,13 +630,24 @@ int main(int argc, char** argv) {
         QTimer::singleShot(2500, [&media, dump] { dump("root"); media.openItem(1); });
         QTimer::singleShot(3500, [&media, dump] { dump("library"); media.openItem(3); });
         QTimer::singleShot(5000, [&media, dump] { dump("genres"); media.openItem(0); });
-        QTimer::singleShot(6500, [&media, dump] { dump("genre"); media.play(0, false); });
-        QTimer::singleShot(9000, [&media, &player] {
+        // (VEYAMUX_TEST_MEDIA_STAY=<s>: stay on the list that long first, as someone looking through it)
+        const int stay = qEnvironmentVariableIntValue("VEYAMUX_TEST_MEDIA_STAY") * 1000;
+        QTimer::singleShot(6500 + stay, [&media, dump] { dump("genre"); media.play(0, false); });
+        QTimer::singleShot(8300 + stay, [&media] { media.thumbAt(1.5); });   // (fetched now, there at 9 s)
+        QTimer::singleShot(9000 + stay, [&media, &player] {
             qInfo("TEST playing: hasMedia %d position %.2f fromLibrary %d title %s", player.hasMedia(), player.position(),
                   media.playingFromLibrary(), qPrintable(player.title()));
+            const QVariantMap th = media.thumbAt(1.5);
+            qInfo("TEST extras: %lld segments, next \"%s\", seek bar pictures %d, thumbAt(1.5) %s", qlonglong(media.segments().size()),
+                  qPrintable(media.nextTitle()), media.hasThumbs(), qPrintable(th.value("url").toString().section('/', -1)));
             media.stopPlayback();
         });
-        QTimer::singleShot(10500, [dump] { dump("after"); QCoreApplication::quit(); });
+        QTimer::singleShot(10500 + stay, [&media, dump] { dump("after"); media.search("Test"); });
+        QTimer::singleShot(12000 + stay, [&media, dump] {
+            qInfo("TEST thumbAt again: %s", qPrintable(media.thumbAt(1.5).value("url").toString().section('/', -1)));
+            dump("search");
+            QCoreApplication::quit();
+        });
     }
     // Test hook: start a game from the Games page (VEYAMUX_TEST_GAME=<the game's file>)
     if (const QString tg = qEnvironmentVariable("VEYAMUX_TEST_GAME"); !tg.isEmpty())
@@ -629,6 +660,18 @@ int main(int argc, char** argv) {
             qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
                   qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
         });
+    // (VEYAMUX_TEST_LAG=1: the longest the UI thread was busy, every 2 s - the controller waits that long)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_LAG")) {
+        auto* lagT = new QTimer(&app);
+        auto last = std::make_shared<QElapsedTimer>(), win = std::make_shared<QElapsedTimer>();
+        auto worst = std::make_shared<qint64>(0);
+        last->start(); win->start();
+        QObject::connect(lagT, &QTimer::timeout, [last, win, worst] {
+            *worst = std::max(*worst, last->restart() - 20);
+            if (win->elapsed() >= 2000) { qInfo("TEST lag: %lld ms", qlonglong(*worst)); *worst = 0; win->restart(); }
+        });
+        lagT->start(20);
+    }
     // (VEYAMUX_TEST_ARTWORK=<folder>: write the Steam library artwork there and quit)
     if (const QString ta = qEnvironmentVariable("VEYAMUX_TEST_ARTWORK"); !ta.isEmpty()) {
         const auto art = veyamux::steam::artwork();
@@ -645,7 +688,9 @@ int main(int argc, char** argv) {
         // (VEYAMUX_GRAB_SIZE=1920x1080: the window's size for the picture, for the README's screenshots)
         if (const QString gs = qEnvironmentVariable("VEYAMUX_GRAB_SIZE"); gs.contains('x'))
             win->resize(gs.section('x', 0, 0).toInt(), gs.section('x', 1).toInt());
-        QTimer::singleShot(9000, [&] {
+        // (VEYAMUX_GRAB_AT=<ms>: when the picture is taken, 9 s if not set)
+        const int grabAt = qEnvironmentVariableIsSet("VEYAMUX_GRAB_AT") ? qEnvironmentVariableIntValue("VEYAMUX_GRAB_AT") : 9000;
+        QTimer::singleShot(grabAt, [&] {
             win->grabWindow().save(grabPath);
             QCoreApplication::quit();
         });

@@ -1,6 +1,9 @@
 // VeyAmux for Linux: a minimal libretro frontend. See Libretro.h.
 #include "Libretro.h"
 #include "CaptureSource.h"   // RawFrame
+#include "RetroRemote.h"     // the same, in a child process (VeyAmux), forwarded from the functions below
+#include "Achievements.h"
+#include "RetroGl.h"
 
 #include "../third_party/libretro/libretro.h"
 
@@ -160,7 +163,16 @@ retro_get_image_index_t diskGetIndex = nullptr;
 retro_set_image_index_t diskSetIndex = nullptr;
 retro_get_num_images_t diskCount = nullptr;
 int diskInsertIn = 0;            // frames until the tray closes again after a change
-std::atomic<int> disksNow{0}, diskNow{0};                // one source row as RGBA
+std::atomic<int> disksNow{0}, diskNow{0};
+// OpenGL cores (SET_HW_RENDER, RetroGl.h): what the core asked for, and its picture read back
+bool hwWanted = false;
+retro_hw_render_callback hwCb{};
+std::vector<uint8_t> hwPixels;
+uintptr_t RETRO_CALLCONV hwFramebuffer() { return gl::framebuffer(); }
+retro_proc_address_t RETRO_CALLCONV hwProc(const char* name) { return reinterpret_cast<retro_proc_address_t>(gl::procAddress(name)); }
+// the core's memory map (SET_MEMORY_MAPS), kept for RetroAchievements
+std::vector<retro_memory_descriptor> memDescs;
+retro_memory_map memMap{};                // one source row as RGBA
 std::vector<int> xmap, ymap;
 
 // ------------------------------------------------------------------ core callbacks
@@ -220,12 +232,32 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
         return true;
     }
     case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
-    case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO: case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
+    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS: {   // where the console's memory lies (RetroAchievements reads it)
+        const auto* mm = static_cast<const retro_memory_map*>(data);
+        if (!mm) return true;
+        memDescs.assign(mm->descriptors, mm->descriptors + mm->num_descriptors);
+        memMap.descriptors = memDescs.data();
+        memMap.num_descriptors = unsigned(memDescs.size());
+        return true;
+    }
+    case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME: case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS: case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
     case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE: case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
         return true;
     case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION: *static_cast<unsigned*>(data) = 1; return true;
+    // OpenGL: the core draws into VeyAmux's framebuffer (the context is made once the game is loaded)
+    case RETRO_ENVIRONMENT_SET_HW_RENDER: {
+        auto* cb = static_cast<retro_hw_render_callback*>(data);
+        if (!cb || !gl::supported(*cb)) return false;
+        cb->get_current_framebuffer = hwFramebuffer;
+        cb->get_proc_address = hwProc;
+        hwCb = *cb;
+        hwWanted = true;
+        return true;
+    }
+    case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER: *static_cast<unsigned*>(data) = RETRO_HW_CONTEXT_OPENGL_CORE; return true;
+    case RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT: return true;
     case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: {
         const auto* d = static_cast<const retro_disk_control_callback*>(data);
         if (!d) { diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; return true; }   // no discs (a cartridge)
@@ -238,8 +270,6 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
         diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
         return true;
     }
-    case RETRO_ENVIRONMENT_SET_HW_RENDER: case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
-        return false;   // software cores only
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
     case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS: *static_cast<unsigned*>(data) = 4; return true;
     case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES:
@@ -317,6 +347,14 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
 void RETRO_CALLCONV videoRefresh(const void* data, unsigned w, unsigned h, size_t pitch) {
     Runner* r = runner;
     if (!r || !data || w == 0 || h == 0 || suppressVideo) return;   // a repeated picture (CAN_DUPE): the last one stays
+    // an OpenGL core's picture: read back from its framebuffer, then on as an XRGB8888 one
+    retro_pixel_format pixFmt = veyamux::retro::pixFmt;
+    if (data == RETRO_HW_FRAME_BUFFER_VALID) {
+        if (!gl::read(int(w), int(h), hwCb.bottom_left_origin, hwPixels)) return;
+        data = hwPixels.data();
+        pitch = size_t(w) * 4;
+        pixFmt = RETRO_PIXEL_FORMAT_XRGB8888;
+    }
     const bool turned = rotation == 1 || rotation == 3;
     const int dw0 = int(turned ? h : w), dh0 = int(turned ? w : h);
     float aspect = geometry.aspect_ratio > 0 ? geometry.aspect_ratio : float(w) / float(h);
@@ -467,6 +505,10 @@ void coreThread(Runner* r, Game g) {
     rotation = 0;
     geometry = {};
     options.clear();
+    memDescs.clear();
+    memMap = {};
+    hwWanted = false;
+    hwCb = {};
     shutdownAsked = false;
     diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; diskInsertIn = 0;
     disksNow = 0; diskNow = 0;
@@ -529,6 +571,18 @@ void coreThread(Runner* r, Game g) {
     core.getAvInfo(&av);
     geometry = av.geometry;
     fpsNow = av.timing.fps > 1 ? av.timing.fps : 60;
+    if (hwWanted) {
+        // the OpenGL context and the framebuffer, as large as the core's largest picture, then the core sets up its own
+        std::string ge;
+        const int mw = int(std::max({av.geometry.max_width, av.geometry.base_width, 640u}));
+        const int mh = int(std::max({av.geometry.max_height, av.geometry.base_height, 480u}));
+        if (!gl::create(hwCb, mw, mh, ge)) {
+            core.unloadGame(); core.deinit(); core.unload();
+            fail("This emulator needs OpenGL: " + ge);
+            return;
+        }
+        if (hwCb.context_reset) hwCb.context_reset();
+    }
     {
         std::lock_guard l(r->audioM);
         r->srcRate = av.timing.sample_rate > 1000 ? av.timing.sample_rate : 48000;
@@ -559,6 +613,20 @@ void coreThread(Runner* r, Game g) {
     };
     std::fprintf(stderr, "Games: %s runs %s (%.3f fps, %.0f Hz sound, %ux%u)\n", coreName.c_str(), g.rom.c_str(),
                  fpsNow, av.timing.sample_rate, av.geometry.base_width, av.geometry.base_height);
+    // RetroAchievements: identified by the game file (or its bytes when it came out of an archive)
+    if (!g.raToken.empty() && g.raConsole > 0) {
+        cheevos::Start cs;
+        cs.user = g.raUser;
+        cs.token = g.raToken;
+        cs.console = uint32_t(g.raConsole);
+        if (isArchive(g.rom) && !romData.empty()) { cs.data = romData.data(); cs.size = romData.size(); }
+        else cs.path = romPath;
+        cs.memoryMap = memMap.num_descriptors ? &memMap : nullptr;
+        cs.memoryData = [&core](unsigned id) { return core.getMemoryData(id); };
+        cs.memorySize = [&core](unsigned id) { return core.getMemorySize(id); };
+        cs.say = [](const std::string& m) { say(m); };
+        cheevos::start(cs);
+    }
     r->running = true;
     {
         std::lock_guard l(r->loadM);
@@ -577,6 +645,10 @@ void coreThread(Runner* r, Game g) {
     bool resumePending = g.resume;
     auto tryResume = [&] {
         std::vector<uint8_t> d;
+        // (written by another emulator - one chosen for the system since - it cannot be read: the game starts over)
+        std::vector<uint8_t> who;
+        const std::string coreName = std::filesystem::path(g.core).filename().string();
+        if (readFile(autoState + ".core", who) && std::string(who.begin(), who.end()) != coreName) { resumePending = false; return; }
         if (!readFile(autoState, d) || d.empty()) { resumePending = false; return; }
         if (core.unserialize(d.data(), d.size())) { resumePending = false; say("Continued where you left off"); }
     };
@@ -585,7 +657,7 @@ void coreThread(Runner* r, Game g) {
     rewindWanted = g.rewind;
     std::deque<std::vector<uint8_t>> rewindBuf;
     uint64_t frameNo = 0;
-    bool runAheadBroken = false;
+    bool runAheadBroken = hwWanted;   // (OpenGL cores: no run-ahead - their states are heavy and the GPU work doubles)
     auto frame = [&] {
         ++frameNo;
         latchInput();
@@ -614,13 +686,14 @@ void coreThread(Runner* r, Game g) {
             rewindBuf.clear();
         }
         const int ahead = runAheadBroken ? 0 : runAheadWanted.load();
-        if (ahead <= 0) { core.run(); return; }
+        if (ahead <= 0) { core.run(); cheevos::frame(); return; }
         // run-ahead: the real frame (its sound kept, its picture not), a state, the frames ahead (only the last one's
         // picture shown, no sound), and back to the state. The picture is then what the game shows `ahead` frames
         // after the input, so its own delay is gone.
         suppressVideo = true;
         core.run();
         suppressVideo = false;
+        cheevos::frame();   // (the real frame's memory, before the frames ahead)
         if (!serialize(state)) {
             runAheadBroken = true;
             say("Run-ahead does not work with this emulator");
@@ -643,7 +716,7 @@ void coreThread(Runner* r, Game g) {
         std::vector<std::function<void()>> cmds;
         { std::lock_guard l(r->cmdM); cmds.swap(r->cmds); }
         for (auto& c : cmds) c();
-        if (r->paused.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
+        if (r->paused.load()) { cheevos::idle(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
         frame();
         if (resumePending && frameNo >= 1) tryResume(), resumePending = false;
         if (diskCount) { disksNow = int(diskCount()); if (diskGetIndex) diskNow = int(diskGetIndex()); }
@@ -659,12 +732,19 @@ void coreThread(Runner* r, Game g) {
     // the automatic state for "Continue" (not when the game shut itself down)
     if (!shutdownAsked && frameNo > 30) {
         std::vector<uint8_t> st;
-        if (serialize(st)) writeFile(autoState, st.data(), st.size());
+        if (serialize(st)) {
+            writeFile(autoState, st.data(), st.size());
+            const std::string coreName = std::filesystem::path(g.core).filename().string();
+            writeFile(autoState + ".core", coreName.data(), coreName.size());
+        }
     }
     r->running = false;
+    cheevos::stop();
+    if (hwWanted && hwCb.context_destroy) hwCb.context_destroy();
     core.unloadGame();
     core.deinit();
     core.unload();
+    if (hwWanted) gl::destroy();
     if (!tmpFile.empty()) { std::error_code ec; fs::remove(tmpFile, ec); }
     // commands that came too late
     std::lock_guard l(r->cmdM);
@@ -699,23 +779,29 @@ std::string statePathFor(int slot) {
 
 // ------------------------------------------------------------------ public
 
-void setGame(const Game& g) { std::lock_guard l(gameM); current = g; stickDpad = g.stickAsDpad; }
+void setGame(const Game& g) {
+    if (remote::on()) remote::setGame(g);
+    std::lock_guard l(gameM);
+    current = g;
+    stickDpad = g.stickAsDpad;
+}
 Game game() { std::lock_guard l(gameM); return current; }
 
 void setPad(int port, uint32_t buttons, double lx, double ly, double rx, double ry) {
     if (port < 0 || port > 3) return;
-    padButtons[port] = buttons;
     auto ax = [](double v) { return int16_t(std::clamp(std::lround(v * 32767.0), -32768L, 32767L)); };
+    if (remote::on()) { const int16_t a[4] = {ax(lx), ax(ly), ax(rx), ax(ry)}; remote::setPad(port, buttons, a); return; }
+    padButtons[port] = buttons;
     axes[port][0] = ax(lx); axes[port][1] = ax(ly); axes[port][2] = ax(rx); axes[port][3] = ax(ry);
 }
 void setPad(uint32_t buttons, double lx, double ly, double rx, double ry) { setPad(0, buttons, lx, ly, rx, ry); }
-void setRunAhead(int frames) { runAheadWanted = std::clamp(frames, 0, 2); }
-void setRewind(bool on) { rewindWanted = on; }
-void setRewinding(bool held) { rewindHeld = held; }
+void setRunAhead(int frames) { if (remote::on()) remote::setRunAhead(std::clamp(frames, 0, 2)); else runAheadWanted = std::clamp(frames, 0, 2); }
+void setRewind(bool on) { if (remote::on()) remote::setRewind(on); else rewindWanted = on; }
+void setRewinding(bool held) { if (remote::on()) remote::setRewinding(held); else rewindHeld = held; }
 std::string autoStatePath(const std::string& stateDir, const std::string& rom) {
     return (fs::path(stateDir) / (baseName(rom) + ".auto.state")).string();
 }
-void setKeys(uint32_t buttons) { keyButtons = buttons; }
+void setKeys(uint32_t buttons) { if (remote::on()) remote::setKeys(buttons); else keyButtons = buttons; }
 
 uint32_t fromPlayStation(uint32_t ps, double l2, double r2) {
     // remoteplay::Button: Cross 0, Circle 1, Square 2, Triangle 3, Left 4, Right 5, Up 6, Down 7, L1 8, R1 9, L3 10,
@@ -732,9 +818,14 @@ uint32_t fromPlayStation(uint32_t ps, double l2, double r2) {
     return b;
 }
 
-void setRumbleCallback(std::function<void(int, int)> cb) { std::lock_guard l(rumbleM); rumbleCb = std::move(cb); }
+void setRumbleCallback(std::function<void(int, int)> cb) {
+    if (remote::on()) { remote::setRumbleCallback(std::move(cb)); return; }
+    std::lock_guard l(rumbleM);
+    rumbleCb = std::move(cb);
+}
 
 void audio(int16_t* out, int frames) {
+    if (remote::on()) { remote::audio(out, frames); return; }
     auto r = get();
     if (!r) { std::memset(out, 0, size_t(frames) * 4); std::this_thread::sleep_for(std::chrono::milliseconds(frames / 48)); return; }
     // paced by the playback stream: wait until the core has made enough sound for this block, then resample. The
@@ -774,9 +865,10 @@ void audio(int16_t* out, int frames) {
     r->resamplePos = pos - double(used);
 }
 
-bool running() { auto r = get(); return r && r->running.load(); }
+bool running() { if (remote::on()) return remote::running(); auto r = get(); return r && r->running.load(); }
 
 void saveState(int slot) {
+    if (remote::on()) { remote::command("save " + std::to_string(slot)); return; }
     const std::string path = statePathFor(slot);
     post([path] {
         auto size = reinterpret_cast<size_t (*)()>(coreSym("retro_serialize_size"));
@@ -785,29 +877,33 @@ void saveState(int slot) {
         if (!n || !ser) { say("This emulator cannot save states"); return; }
         std::vector<uint8_t> d(n);
         if (!ser(d.data(), n) || !writeFile(path, d.data(), n)) { say("Could not save the state"); return; }
+        cheevos::saveProgress(path);
         say("State saved");
     });
 }
 
 void loadState(int slot) {
+    if (remote::on()) { remote::command("load " + std::to_string(slot)); return; }
     const std::string path = statePathFor(slot);
     post([path] {
         auto unser = reinterpret_cast<bool (*)(const void*, size_t)>(coreSym("retro_unserialize"));
         std::vector<uint8_t> d;
         if (!readFile(path, d) || d.empty()) { say("No saved state yet"); return; }
         if (!unser || !unser(d.data(), d.size())) { say("Could not load the state"); return; }
+        cheevos::loadProgress(path);
         say("State loaded");
     });
 }
 
 bool hasState(int slot) { std::error_code ec; return fs::exists(statePathFor(slot), ec); }
 
-int discCount() { return disksNow.load(); }
-int discIndex() { return diskNow.load(); }
+int discCount() { return remote::on() ? remote::discCount() : disksNow.load(); }
+int discIndex() { return remote::on() ? remote::discIndex() : diskNow.load(); }
 
 // the next disc: the tray opens, the disc is changed, and a second later it closes (the game sees the lid open and
 // shut, as on the console)
 void nextDisc() {
+    if (remote::on()) { remote::command("disc"); return; }
     post([] {
         if (!diskCount || !diskSetIndex || !diskEject || diskCount() < 2) return;
         const unsigned n = diskCount(), i = diskGetIndex ? diskGetIndex() : 0;
@@ -820,14 +916,30 @@ void nextDisc() {
 }
 
 void reset() {
-    post([] { if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f(); });
+    if (remote::on()) { remote::command("reset"); return; }
+    post([] {
+        if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f();
+        cheevos::reset();
+    });
 }
 
-void setPaused(bool p) { if (auto r = get()) r->paused = p; }
+void setPaused(bool p) { if (remote::on()) remote::setPaused(p); else if (auto r = get()) r->paused = p; }
 
-std::string takeMessage() { std::lock_guard l(msgM); std::string m; m.swap(message); return m; }
+std::string takeMessage() {
+    if (remote::on()) return remote::takeMessage();
+    std::lock_guard l(msgM);
+    std::string m;
+    m.swap(message);
+    return m;
+}
 
 Info info() {
+    if (remote::on()) {
+        const auto o = remote::info();
+        Info i;
+        i.core = o.core; i.fps = o.fps; i.sampleRate = o.sampleRate; i.w = o.w; i.h = o.h; i.aspect = o.aspect;
+        return i;
+    }
     auto r = get();
     if (!r) return {};
     std::lock_guard i(r->infoM);
@@ -857,6 +969,13 @@ Stream::~Stream() { close(); }
 
 bool Stream::open(std::string& error) {
     close();
+    if (remote::on()) {
+        if (game().core.empty()) { error = "No game chosen"; return false; }
+        if (!remote::open(error)) return false;
+        open_ = true;
+        seen_ = 0;
+        return true;
+    }
     Game g = game();
     if (g.core.empty() || g.rom.empty()) { error = "No game chosen"; return false; }
     {
@@ -894,6 +1013,7 @@ bool Stream::open(std::string& error) {
 void Stream::close() {
     if (!open_) return;
     open_ = false;
+    if (remote::on()) { remote::close(); return; }
     auto r = get();
     if (!r) return;
     r->quit = true;
@@ -910,6 +1030,11 @@ void Stream::close() {
 }
 
 Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    if (remote::on()) {
+        if (!open_) { error = "The game is not running"; return Result::Error; }
+        const auto res = remote::readLatest(out, seen_, timeoutMs, error);
+        return res == remote::Read::Frame ? Result::Frame : res == remote::Read::Timeout ? Result::Timeout : Result::Error;
+    }
     auto r = get();
     if (!open_ || !r) { error = "The game is not running"; return Result::Error; }
     std::unique_lock l(r->frameM);
@@ -932,12 +1057,14 @@ Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& err
 double Stream::fps() const { return info().fps; }
 int Stream::width() const {
     // the first picture decides; before it, the core's base size scaled the same way
+    if (remote::on()) return remote::width();
     auto r = get();
     if (!r) return 0;
     std::lock_guard f(r->frameM);
     return r->fw > 0 ? r->fw : 1280;
 }
 int Stream::height() const {
+    if (remote::on()) return remote::height();
     auto r = get();
     if (!r) return 0;
     std::lock_guard f(r->frameM);

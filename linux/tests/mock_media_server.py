@@ -5,6 +5,8 @@ import json, os, sys, re
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 VIDEO = sys.argv[1]; POSTER = sys.argv[2]
+# MOCK_MANY=<n>: Plex's film library has n films more, and each poster takes 50 ms (a large library on a slow server)
+MANY = int(os.environ.get("MOCK_MANY", "0"))
 TOKEN = "jf-secret-token"; PLEX = "plex-secret-token"
 log = sys.stderr
 def item(i, name, typ, **kw):
@@ -58,7 +60,13 @@ class H(BaseHTTPRequestHandler):
         if p == "/Genres": return self.send(200, {"Items": [{"Name": "Action", "Id": "g1"}, {"Name": "Drama", "Id": "g2"}]})
         if p == "/UserViews": return self.send(200, {"Items": JF["views"]})
         if p == "/UserItems/Resume": return self.send(200, {"Items": JF["lib1"]})
+        if p == "/Items" and "searchTerm" in q: return self.send(200, {"Items": JF["lib1"] + JF["lib2"]})
         if p == "/Items": return self.send(200, {"Items": JF.get(q["ParentId"][0], [])})
+        if p == "/MediaSegments/m1": return self.send(200, {"Items": [{"Type": "Intro", "StartTicks": 0, "EndTicks": 20000000}]})
+        if re.match(r"/Videos/m1/Trickplay/320/0\.jpg", p): return self.file(POSTER, "image/jpeg")
+        m = re.match(r"/Items/(\w+)$", p)
+        if m: return self.send(200, {"Id": m.group(1), "MediaSources": [], "Trickplay": {"m1": {"320": {"Width": 320, "Height": 180,
+                                     "TileWidth": 10, "TileHeight": 10, "ThumbnailCount": 3, "Interval": 1000}}}})
         m = re.match(r"/Shows/(\w+)/Seasons", p)
         if m: return self.send(200, {"Items": JF["seasons_" + m.group(1)]})
         if re.match(r"/Items/\w+/Images/Primary", p): return self.file(POSTER, "image/png")
@@ -72,10 +80,26 @@ class H(BaseHTTPRequestHandler):
         if p == "/library/sections/1/genre":
             return self.send(200, {"MediaContainer": {"Directory": [{"key": "5", "title": "Action", "fastKey": "/library/sections/1/all?genre=5"}]}})
         if p in ("/library/sections/1/all", "/library/sections/1/recentlyAdded", "/library/sections/1/unwatched"):
+            extra = [{"ratingKey": str(1000 + n), "key": f"/library/metadata/{1000 + n}", "type": "movie", "title": f"Film {n}", "year": 2000 + n % 25,
+                      "duration": 6000000, "thumb": f"/library/metadata/{1000 + n}/thumb/1"} for n in range(MANY)]
             return self.send(200, {"MediaContainer": {"Metadata": [{"ratingKey": "77", "key": "/library/metadata/77", "type": "movie", "title": "Plex Movie",
-                "year": 2023, "duration": 3000, "viewOffset": 1500, "thumb": "/library/metadata/77/thumb/1", "Media": [{"Part": [{"key": "/library/parts/9/file.mp4"}]}]}]}})
+                "year": 2023, "duration": 3000, "viewOffset": 1500, "thumb": "/library/metadata/77/thumb/1", "Media": [{"Part": [{"key": "/library/parts/9/file.mp4"}]}]}] + extra}})
+        if p == "/library/metadata/77":
+            return self.send(200, {"MediaContainer": {"Metadata": [{"ratingKey": "77", "type": "movie", "title": "Plex Movie",
+                "Marker": [{"type": "intro", "startTimeOffset": 0, "endTimeOffset": 2000}, {"type": "credits", "startTimeOffset": 15000, "endTimeOffset": 20000}],
+                "Media": [{"Part": [{"id": 9, "key": "/library/parts/9/file.mp4", "indexes": "sd", "Stream": []}]}]}]}})
+        if p == "/library/parts/9/indexes/sd":   # a BIF file: 3 pictures, one per second
+            import struct
+            pic = open(POSTER, "rb").read(); n = 3; head = bytearray(b"\x89BIF\r\n\x1a\n") + struct.pack("<III", 0, n, 1000) + bytes(44)
+            first = 64 + (n + 1) * 8; idx = b"".join(struct.pack("<II", i, first + i * len(pic)) for i in range(n)) + struct.pack("<II", 0xffffffff, first + n * len(pic))
+            return self.send(200, bytes(head) + idx + pic * n, "application/octet-stream")
+        if p == "/hubs/search":
+            return self.send(200, {"MediaContainer": {"Hub": [{"type": "movie", "Metadata": [{"ratingKey": "77", "key": "/library/metadata/77", "type": "movie", "title": "Plex Movie"}]},
+                                                              {"type": "artist", "Metadata": [{"ratingKey": "5", "type": "artist", "title": "Not this"}]}]}})
         if p == "/library/onDeck": return self.send(200, {"MediaContainer": {"Metadata": []}})
-        if p == "/photo/:/transcode": return self.file(POSTER, "image/png")
+        if p == "/photo/:/transcode":
+            if MANY: __import__("time").sleep(0.05)
+            return self.file(POSTER, "image/png")
         if p == "/library/parts/9/file.mp4": return self.file(VIDEO, "video/mp4")
         if p in ("/:/timeline", "/:/scrobble"): return self.send(200)
         return self.send(404)

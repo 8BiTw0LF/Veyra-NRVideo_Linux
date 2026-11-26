@@ -152,7 +152,17 @@
   "Starting the game…": "Starter spillet…",
   "Disc changed": "Disken er skiftet",
   "Continued where you left off": "Fortsætter hvor du slap",
-  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulator"
+  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulator",
+  "The emulator crashed while starting the game": "Emulatoren gik ned, da spillet startede",
+  "The emulator crashed": "Emulatoren gik ned",
+  "The emulator did not start the game": "Emulatoren startede ikke spillet",
+  "Could not start the emulator: ": "Kunne ikke starte emulatoren: ",
+  "Could not start the emulator": "Kunne ikke starte emulatoren",
+  "Achievement unlocked: ": "Achievement låst op: ",
+  "All achievements in this game unlocked": "Alle achievements i dette spil er låst op",
+  "Achievements unlocked so far: ": "Achievements låst op indtil nu: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-login mislykkedes: log ind igen på Spil-siden",
+  "This emulator needs OpenGL: ": "Denne emulator kræver OpenGL: "
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -401,7 +411,17 @@
   "Starting the game…": "Das Spiel wird gestartet…",
   "Disc changed": "Disc gewechselt",
   "Continued where you left off": "Weiter, wo du aufgehört hast",
-  "Run-ahead does not work with this emulator": "Run-Ahead funktioniert mit diesem Emulator nicht"
+  "Run-ahead does not work with this emulator": "Run-Ahead funktioniert mit diesem Emulator nicht",
+  "The emulator crashed while starting the game": "Der Emulator ist beim Starten des Spiels abgestürzt",
+  "The emulator crashed": "Der Emulator ist abgestürzt",
+  "The emulator did not start the game": "Der Emulator hat das Spiel nicht gestartet",
+  "Could not start the emulator: ": "Der Emulator konnte nicht gestartet werden: ",
+  "Could not start the emulator": "Der Emulator konnte nicht gestartet werden",
+  "Achievement unlocked: ": "Erfolg freigeschaltet: ",
+  "All achievements in this game unlocked": "Alle Erfolge in diesem Spiel freigeschaltet",
+  "Achievements unlocked so far: ": "Bisher freigeschaltete Erfolge: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-Anmeldung fehlgeschlagen: melde dich auf der Spiele-Seite neu an",
+  "This emulator needs OpenGL: ": "Dieser Emulator braucht OpenGL: "
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -650,7 +670,17 @@
   "Starting the game…": "Iniciando el juego…",
   "Disc changed": "Disco cambiado",
   "Continued where you left off": "Continúa donde lo dejaste",
-  "Run-ahead does not work with this emulator": "Run-ahead no funciona con este emulador"
+  "Run-ahead does not work with this emulator": "Run-ahead no funciona con este emulador",
+  "The emulator crashed while starting the game": "El emulador falló al iniciar el juego",
+  "The emulator crashed": "El emulador falló",
+  "The emulator did not start the game": "El emulador no inició el juego",
+  "Could not start the emulator: ": "No se pudo iniciar el emulador: ",
+  "Could not start the emulator": "No se pudo iniciar el emulador",
+  "Achievement unlocked: ": "Logro desbloqueado: ",
+  "All achievements in this game unlocked": "Todos los logros de este juego desbloqueados",
+  "Achievements unlocked so far: ": "Logros desbloqueados hasta ahora: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Error de sesión en RetroAchievements: vuelve a iniciar sesión en la página Juegos",
+  "This emulator needs OpenGL: ": "Este emulador necesita OpenGL: "
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -899,7 +929,17 @@
   "Starting the game…": "Lancement du jeu…",
   "Disc changed": "Disque changé",
   "Continued where you left off": "Reprise là où vous vous étiez arrêté",
-  "Run-ahead does not work with this emulator": "Le run-ahead ne fonctionne pas avec cet émulateur"
+  "Run-ahead does not work with this emulator": "Le run-ahead ne fonctionne pas avec cet émulateur",
+  "The emulator crashed while starting the game": "L'émulateur a planté au lancement du jeu",
+  "The emulator crashed": "L'émulateur a planté",
+  "The emulator did not start the game": "L'émulateur n'a pas lancé le jeu",
+  "Could not start the emulator: ": "Impossible de lancer l'émulateur : ",
+  "Could not start the emulator": "Impossible de lancer l'émulateur",
+  "Achievement unlocked: ": "Succès débloqué : ",
+  "All achievements in this game unlocked": "Tous les succès de ce jeu sont débloqués",
+  "Achievements unlocked so far: ": "Succès débloqués jusqu'ici : ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Échec de connexion RetroAchievements : reconnecte-toi sur la page Jeux",
+  "This emulator needs OpenGL: ": "Cet émulateur a besoin d'OpenGL : "
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1148,7 +1188,17 @@
   "Starting the game…": "Starter spillet…",
   "Disc changed": "Platen er byttet",
   "Continued where you left off": "Fortsetter der du slapp",
-  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulatoren"
+  "Run-ahead does not work with this emulator": "Run-ahead virker ikke med denne emulatoren",
+  "The emulator crashed while starting the game": "Emulatoren krasjet da spillet startet",
+  "The emulator crashed": "Emulatoren krasjet",
+  "The emulator did not start the game": "Emulatoren startet ikke spillet",
+  "Could not start the emulator: ": "Kunne ikke starte emulatoren: ",
+  "Could not start the emulator": "Kunne ikke starte emulatoren",
+  "Achievement unlocked: ": "Achievement låst opp: ",
+  "All achievements in this game unlocked": "Alle achievements i dette spillet er låst opp",
+  "Achievements unlocked so far: ": "Achievements låst opp så langt: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Innlogging på RetroAchievements mislyktes: logg inn igjen på Spill-siden",
+  "This emulator needs OpenGL: ": "Denne emulatoren trenger OpenGL: "
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1397,7 +1447,17 @@
   "Starting the game…": "Запуск игры…",
   "Disc changed": "Диск сменён",
   "Continued where you left off": "Продолжение с того места, где вы остановились",
-  "Run-ahead does not work with this emulator": "Run-ahead не работает с этим эмулятором"
+  "Run-ahead does not work with this emulator": "Run-ahead не работает с этим эмулятором",
+  "The emulator crashed while starting the game": "Эмулятор аварийно завершился при запуске игры",
+  "The emulator crashed": "Эмулятор аварийно завершился",
+  "The emulator did not start the game": "Эмулятор не запустил игру",
+  "Could not start the emulator: ": "Не удалось запустить эмулятор: ",
+  "Could not start the emulator": "Не удалось запустить эмулятор",
+  "Achievement unlocked: ": "Достижение получено: ",
+  "All achievements in this game unlocked": "Все достижения в этой игре получены",
+  "Achievements unlocked so far: ": "Получено достижений: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Не удалось войти в RetroAchievements: войдите снова на странице «Игры»",
+  "This emulator needs OpenGL: ": "Этому эмулятору нужен OpenGL: "
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1646,6 +1706,16 @@
   "Starting the game…": "Startar spelet…",
   "Disc changed": "Skivan är bytt",
   "Continued where you left off": "Fortsätter där du slutade",
-  "Run-ahead does not work with this emulator": "Run-ahead fungerar inte med den här emulatorn"
+  "Run-ahead does not work with this emulator": "Run-ahead fungerar inte med den här emulatorn",
+  "The emulator crashed while starting the game": "Emulatorn kraschade när spelet startade",
+  "The emulator crashed": "Emulatorn kraschade",
+  "The emulator did not start the game": "Emulatorn startade inte spelet",
+  "Could not start the emulator: ": "Kunde inte starta emulatorn: ",
+  "Could not start the emulator": "Kunde inte starta emulatorn",
+  "Achievement unlocked: ": "Achievement upplåst: ",
+  "All achievements in this game unlocked": "Alla achievements i det här spelet är upplåsta",
+  "Achievements unlocked so far: ": "Achievements upplåsta hittills: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Inloggningen på RetroAchievements misslyckades: logga in igen på sidan Spel",
+  "This emulator needs OpenGL: ": "Den här emulatorn behöver OpenGL: "
  }
 }

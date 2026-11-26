@@ -19,6 +19,11 @@ Rectangle {
     function switchTab(step) { tab = (tab + step + tabs.length) % tabs.length; flickArea.contentY = 0 }
 
     property int tab: 0
+    property bool mapOpen: false             // the game's controller layout rows are shown
+    function physName(p) {
+        const n = {0: "A / ✕", 1: "B / ○", 2: "X / □", 3: "Y / △", 8: "LB / L1", 9: "RB / R1", 16: "LT / L2", 17: "RT / R2", 12: "Menu / Options", 13: "View / Share"}
+        return n[p] !== undefined ? n[p] : tr("gameControlsNone")
+    }
     // --tab=N opens the menu on tab N (screenshots, tests)
     Component.onCompleted: { for (const a of Qt.application.arguments) if (a.startsWith("--tab=")) tab = parseInt(a.substring(6)) }
     readonly property var tabs: [
@@ -147,6 +152,29 @@ Rectangle {
             onClicked: player.retroRewind = !player.retroRewind }
         Text { visible: player.retroActive; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
             text: tr("runAheadHint") + " " + (player.retroRewindOnL2 ? tr("rewindHintL2") : tr("rewindHintKey")) }
+        // the emulator for this system (from the next start), when it has more than one
+        Item { visible: player.retroActive && player.retroCores.length > 1; width: parent.width; height: 1 }
+        Text { visible: player.retroActive && player.retroCores.length > 1; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("gameEmulator"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.retroActive && player.retroCores.length > 1 ? player.retroCores : []
+            delegate: Btn { required property string modelData; text: modelData.replace(/_/g, " ")
+                opacity: player.retroCore === modelData ? 1 : 0.6; onClicked: player.retroCore = modelData }
+        }
+        Text { visible: player.retroActive && player.retroCores.length > 1 && player.retroCore !== player.retroCoreRunning
+            width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("gameEmulatorNext") }
+        // the controller layout for this system: a press moves the console button to the next controller button
+        Item { visible: player.retroActive; width: parent.width; height: 1 }
+        Btn { visible: player.retroActive; text: tr("gameControls") + (menu.mapOpen ? " ▴" : " ▾"); onClicked: menu.mapOpen = !menu.mapOpen }
+        Repeater {
+            model: player.retroActive && menu.mapOpen ? player.retroMap : []
+            delegate: Btn { required property var modelData; required property int index
+                text: modelData.button + "  ←  " + menu.physName(modelData.phys); onClicked: player.cycleRetroMap(index) }
+        }
+        Btn { visible: player.retroActive && menu.mapOpen; text: tr("gameControlsReset"); onClicked: player.resetRetroMap() }
+        Text { visible: player.retroActive && menu.mapOpen; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("gameControlsHint") }
         Item { visible: player.retroActive; width: parent.width; height: 1 }
         Btn { visible: player.retroActive && player.retroDiscs > 1; primary: true
             text: tr("gameDisc").replace("%1", player.retroDisc % player.retroDiscs + 1).replace("%2", player.retroDiscs)
@@ -170,6 +198,27 @@ Rectangle {
             delegate: Btn { required property var modelData; text: modelData.name; opacity: player.subtitleTrack === modelData.id ? 1 : 0.6
                 onClicked: player.subtitleTrack = modelData.id }
         }
+        // the size of text subtitles
+        Item { visible: player.subtitleTracks.length > 0; width: parent.width; height: 1 }
+        Text { visible: player.subtitleTracks.length > 0; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("subtitleSize"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.subtitleTracks.length > 0 ? tr("subtitleSizes") : []
+            delegate: Btn { required property string modelData; required property int index; text: modelData
+                opacity: player.subtitleSize === index ? 1 : 0.6; onClicked: player.subtitleSize = index }
+        }
+        // Jellyfin / Plex: the file as it is, or converted by the server to less data (a slow network, away from home)
+        Item { visible: media.streaming; width: parent.width; height: 1 }
+        Text { visible: media.streaming; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("streamQuality"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: media.streaming ? [0, 20, 8, 4] : []
+            delegate: Btn { required property int modelData; text: modelData === 0 ? tr("qualityOriginal") : modelData + " Mbit/s"
+                opacity: media.quality === modelData ? 1 : 0.6; onClicked: media.quality = modelData }
+        }
+        Text { visible: media.streaming; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("streamQualityHint") }
+        Item { visible: player.retroActive || media.playingFromLibrary; width: parent.width; height: 1 }
         Btn { visible: player.retroActive || media.playingFromLibrary; primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
             onClicked: { menu.closeRequested(); if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
     }
@@ -491,6 +540,8 @@ Rectangle {
                     Param { label: tr("audioDelay"); from: -300; to: 300; decimals: 0; neutral: 0; value: player.audioDelay; onMoved: (v) => player.audioDelay = Math.round(v / 10) * 10 }
                     Hint { text: tr("audioDelayHint") }
                     SwitchRow { text: tr("normalize"); checked: player.normalize; onToggled: (v) => player.normalize = v }
+                    SwitchRow { text: tr("surround"); checked: player.surround; onToggled: (v) => player.surround = v }
+                    Hint { text: tr("surroundHint") }
                 }
 
                 // ======================================== Record & stream
@@ -597,6 +648,10 @@ Rectangle {
                                 text: gamepad.controllers.length > 0 ? "● " + tr("padOn").replace("%1", gamepad.controllers.join(", ")) : tr("padNone") }
                         }
                         Hint { text: tr("padHint") }
+                        // the page VeyAmux opens on (from Steam's Game Mode: straight to the games or films)
+                        Title { text: tr("startPageTitle") }
+                        Segmented { width: parent.width; model: tr("startPages"); current: ["", "games", "media"].indexOf(player.startPage)
+                            onPicked: (i) => player.startPage = ["", "games", "media"][i] }
                         // a click or tap on the picture, and the touchscreen
                         Title { text: tr("clickTitle") }
                         Segmented { width: parent.width; model: tr("clickModes"); current: player.clickAction; onPicked: (i) => player.clickAction = i }

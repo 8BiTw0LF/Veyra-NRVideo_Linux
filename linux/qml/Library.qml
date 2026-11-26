@@ -152,7 +152,28 @@ Item {
         Row {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             spacing: 8 * lib.k
-            // Media
+            // Media: search the server (films, series, episodes); Enter searches, the list comes as a folder (B goes back)
+            Rectangle {
+                id: searchBox
+                visible: lib.isMedia && media.canSearch
+                width: 240 * lib.k; height: 38 * lib.k; radius: 10 * Theme.round
+                color: Theme.surfaceDeep; border.width: Math.max(1, Theme.edge); border.color: searchIn.activeFocus ? Theme.accentLine : Theme.border
+                Image { id: searchIcon; source: "icons/search.svg"; width: 16 * lib.k; height: width; sourceSize: Qt.size(32, 32); opacity: 0.7
+                    anchors { left: parent.left; leftMargin: 10 * lib.k; verticalCenter: parent.verticalCenter } }
+                TextInput {
+                    id: searchIn
+                    anchors { left: searchIcon.right; right: parent.right; leftMargin: 8 * lib.k; rightMargin: 10 * lib.k; verticalCenter: parent.verticalCenter }
+                    font.family: Theme.font; font.pixelSize: 14 * lib.k; color: Theme.heading; clip: true
+                    selectByMouse: true
+                    onAccepted: { media.search(text); focus = false }
+                    Keys.onEscapePressed: { text = ""; focus = false }
+                }
+                Text { anchors.fill: searchIn; verticalAlignment: Text.AlignVCenter; visible: searchIn.text === "" && !searchIn.activeFocus
+                    font.family: Theme.font; font.pixelSize: 14 * lib.k; color: Theme.dim; text: lib.tr("mediaSearch") }
+                // (a click, or A on the controller: the field takes the keys; Steam's own keyboard is Steam + X)
+                MouseArea { anchors.fill: parent; visible: !searchIn.activeFocus; cursorShape: Qt.IBeamCursor
+                    onClicked: { searchIn.forceActiveFocus(); Qt.inputMethod.show() } }
+            }
             Btn { visible: lib.isMedia; icon: "icons/folder.svg"; text: lib.tr("mediaOpenFile"); onClicked: player.openDialog() }
             Btn { visible: lib.isMedia; icon: "icons/plus.svg"; text: "Jellyfin"; onClicked: { addDlg.kind = "jellyfin"; addDlg.visible = true } }
             Btn { visible: lib.isMedia; icon: "icons/plus.svg"; text: "Plex"; onClicked: { addDlg.kind = "plex"; addDlg.visible = true; media.addPlex() } }
@@ -162,6 +183,8 @@ Item {
             Btn { visible: !lib.isMedia && games.folder !== ""; icon: "icons/refresh.svg"; text: lib.tr("gamesRescan"); enabled: games.busy === ""; onClicked: games.rescan() }
             Btn { visible: !lib.isMedia && games.systems.length > 0; icon: "icons/image.svg"; text: lib.tr("gamesCovers"); enabled: games.busy === ""; onClicked: games.downloadCovers() }
             Btn { visible: !lib.isMedia; icon: "icons/system.svg"; text: "BIOS"; onClicked: games.openBiosFolder() }
+            Btn { visible: !lib.isMedia; icon: "icons/trophy.svg"; text: games.raUser !== "" ? games.raUser : "RetroAchievements"
+                onClicked: { addDlg.kind = "ra"; addDlg.visible = true } }
         }
     }
 
@@ -213,6 +236,22 @@ Item {
 
     // ------------------------------------------------------------- the grid
     readonly property var items: isMedia ? media.items : games.items
+    // Media: the posters of the cards on screen (and a little beyond) are fetched, once the grid has settled; the rest
+    // wait until they are scrolled to
+    Timer {
+        id: wantTimer; interval: 120
+        onTriggered: {
+            if (!lib.isMedia || !lib.visible) return
+            const top = grid.contentY - 400, bottom = grid.contentY + grid.height + 400
+            for (let i = flow.children.length - 1; i >= 0; --i) {
+                const c = flow.children[i]
+                if (c.modelData && c.y + c.height > top && c.y < bottom) media.want(c.modelData.key)
+            }
+        }
+    }
+    Connections { target: grid; function onContentYChanged() { wantTimer.restart() } function onHeightChanged() { wantTimer.restart() } }
+    Connections { target: flow; function onHeightChanged() { wantTimer.restart() } }
+    Connections { target: media; function onItemsChanged() { wantTimer.restart() } }
     Flickable {
         id: grid
         anchors { left: side.right; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 18 * lib.k; rightMargin: 18 * lib.k; topMargin: 14 * lib.k }
@@ -243,7 +282,7 @@ Item {
                         Image {
                             id: img
                             anchors.fill: parent
-                            source: (lib.isMedia ? media.images[card.modelData.key] : undefined) || card.modelData.image || ""
+                            source: (lib.isMedia && media.imageVersion >= 0 ? media.image(card.modelData.key) : "") || card.modelData.image || ""
                             fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                             asynchronous: true; cache: true
                             sourceSize: Qt.size(card.picW * 1.5, card.picH * 1.5)
@@ -345,7 +384,7 @@ Item {
                     readonly property bool wide: detail.item && detail.item.shape === "wide"
                     width: (wide ? 300 : 200) * lib.k; height: (wide ? 169 : 290) * lib.k; radius: 10 * Theme.round
                     color: Theme.surface; clip: true
-                    Image { anchors.fill: parent; source: !detail.item ? "" : (lib.isMedia ? media.images[detail.item.key] : undefined) || detail.item.image || ""
+                    Image { anchors.fill: parent; source: !detail.item ? "" : (lib.isMedia && media.imageVersion >= 0 ? media.image(detail.item.key) : "") || detail.item.image || ""
                         fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit; asynchronous: true }
                 }
                 Column {
@@ -423,7 +462,25 @@ Item {
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 22 * lib.k }
                 spacing: 10 * lib.k
                 Text { font.family: Theme.headFont; color: Theme.heading; font.pixelSize: 20 * Theme.headScale * lib.k; font.weight: Font.DemiBold
-                    font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: addDlg.kind === "plex" ? "Plex" : "Jellyfin" }
+                    font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase
+                    text: addDlg.kind === "plex" ? "Plex" : addDlg.kind === "ra" ? "RetroAchievements" : "Jellyfin" }
+                // RetroAchievements: signed in (and signing out), or the user name and password
+                Column {
+                    visible: addDlg.kind === "ra"
+                    width: parent.width; spacing: 8 * lib.k
+                    Text { width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.muted; font.pixelSize: 13 * lib.k
+                        text: games.raUser !== "" ? lib.tr("raSignedInAs").replace("%1", games.raUser) : lib.tr("raHint") }
+                    Field { id: raUserIn; visible: games.raUser === ""; width: parent.width; placeholder: lib.tr("mediaUser") }
+                    Field { id: raPassIn; visible: games.raUser === ""; width: parent.width; placeholder: lib.tr("mediaPassword"); secret: true
+                        onAccepted: games.raSignIn(raUserIn.text, raPassIn.text) }
+                    Flow {
+                        width: parent.width; spacing: 8 * lib.k
+                        Btn { visible: games.raUser === ""; primary: true; text: lib.tr("mediaSignIn"); enabled: raUserIn.text !== "" && raPassIn.text !== "" && !games.raBusy
+                            onClicked: games.raSignIn(raUserIn.text, raPassIn.text) }
+                        Btn { visible: games.raUser !== ""; text: lib.tr("raSignOut"); onClicked: games.raSignOut() }
+                        Btn { text: lib.tr(games.raUser !== "" ? "close" : "cancel"); onClicked: lib.back() }
+                    }
+                }
                 // Jellyfin: the address, then a password or Quick Connect
                 Column {
                     visible: addDlg.kind === "jellyfin" && media.login.kind !== "quick"
@@ -443,7 +500,7 @@ Item {
                 }
                 // a code to confirm elsewhere: Jellyfin's Quick Connect, or Plex's PIN (the browser opened plex.tv)
                 Column {
-                    visible: media.login.kind === "quick" || addDlg.kind === "plex"
+                    visible: addDlg.kind !== "ra" && (media.login.kind === "quick" || addDlg.kind === "plex")
                     width: parent.width; spacing: 10 * lib.k
                     Text { width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.muted; font.pixelSize: 13 * lib.k
                         text: lib.tr(media.login.kind === "quick" ? "mediaQuickHint" : "mediaPlexHint") }
@@ -464,5 +521,6 @@ Item {
         }
         // signed in: the dialog closes by itself
         Connections { target: media; function onSourcesChanged() { if (addDlg.visible && media.login.kind === undefined) addDlg.visible = false } }
+        Connections { target: games; function onRaChanged() { if (addDlg.visible && addDlg.kind === "ra" && games.raUser !== "") { raPassIn.text = ""; addDlg.visible = false } } }
     }
 }

@@ -137,7 +137,17 @@ pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
 # ---- chiaki-ng (PlayStation Remote Play, AGPL-3.0) ----
 include(cmake/chiaki.cmake)
 
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/Subtitles.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+# RetroAchievements' library (MIT, third_party/rcheevos): achievements in games (Achievements.cpp)
+file(GLOB VEYAMUX_RCHEEVOS_SRC third_party/rcheevos/src/*.c third_party/rcheevos/src/rapi/*.c third_party/rcheevos/src/rcheevos/*.c
+     third_party/rcheevos/src/rhash/*.c)
+list(FILTER VEYAMUX_RCHEEVOS_SRC EXCLUDE REGEX "raintegration")
+add_library(veyamux_rcheevos STATIC ${VEYAMUX_RCHEEVOS_SRC})
+target_include_directories(veyamux_rcheevos PUBLIC third_party/rcheevos/include third_party/rcheevos/src third_party/libretro)
+target_compile_definitions(veyamux_rcheevos PUBLIC RC_CLIENT_SUPPORTS_HASH RC_DISABLE_LUA)
+set_target_properties(veyamux_rcheevos PROPERTIES POSITION_INDEPENDENT_CODE ON C_STANDARD 99)
+target_compile_options(veyamux_rcheevos PRIVATE -w)
+find_package(CURL REQUIRED)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/RetroRemote.cpp src/Achievements.cpp src/RetroGl.cpp src/Subtitles.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -145,7 +155,7 @@ target_include_directories(veyamux_media PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
 target_link_libraries(veyamux_media PRIVATE ${CMAKE_DL_LIBS})
 # zip / 7z / rar files (games, downloaded emulator cores)
 pkg_check_modules(LIBARCHIVE REQUIRED IMPORTED_TARGET libarchive)
-target_link_libraries(veyamux_media PRIVATE PkgConfig::LIBARCHIVE)
+target_link_libraries(veyamux_media PRIVATE PkgConfig::LIBARCHIVE veyamux_rcheevos CURL::libcurl)
 target_link_libraries(veyamux_media PUBLIC veyamux_core PkgConfig::FFMPEG PkgConfig::PULSE Threads::Threads veyamux_chiaki)
 find_package(Threads REQUIRED)
 add_executable(veyamux-ps-decode-test src/ps_decode_test.cpp)
@@ -201,7 +211,7 @@ qt_add_resources(veyamux "qml" PREFIX "/" FILES
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
   qml/icons/picture.svg qml/icons/display.svg qml/icons/record.svg qml/icons/system.svg qml/icons/gamepad.svg qml/icons/download.svg qml/icons/check.svg qml/icons/close.svg qml/icons/waves.svg qml/icons/bug.svg
-  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg qml/icons/subtitles.svg qml/icons/audiotrack.svg
+  qml/icons/home.svg qml/icons/back.svg qml/icons/save.svg qml/icons/restore.svg qml/icons/reset.svg qml/icons/tv.svg qml/icons/plus.svg qml/icons/refresh.svg qml/icons/image.svg qml/icons/trash.svg qml/icons/spinner.svg qml/icons/joystick.svg qml/icons/subtitles.svg qml/icons/audiotrack.svg qml/icons/search.svg qml/icons/trophy.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
   qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf qml/fonts/Inter-Black.ttf qml/fonts/Inter-SemiBold.ttf
   i18n/messages.json)

@@ -63,6 +63,15 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int retroRunAhead READ retroRunAhead WRITE setRetroRunAhead NOTIFY retroOptionsChanged)
     Q_PROPERTY(bool retroRewind READ retroRewind WRITE setRetroRewind NOTIFY retroOptionsChanged)
     Q_PROPERTY(bool retroRewindOnL2 READ retroRewindOnL2 NOTIFY retroOptionsChanged)
+    // the emulators this system can use (best first) and the one chosen for it (used from the next start)
+    Q_PROPERTY(QStringList retroCores READ retroCores NOTIFY retroOptionsChanged)
+    Q_PROPERTY(QString retroCore READ retroCore WRITE setRetroCore NOTIFY retroOptionsChanged)
+    Q_PROPERTY(QString retroCoreRunning READ retroCoreRunning NOTIFY retroOptionsChanged)
+    // the console's buttons and the controller button each one is on, kept per system:
+    // [{button: "B", phys: 0}] (phys: Cross 0, Circle 1, Square 2, Triangle 3, L1 8, R1 9, Options 12, Share 13, L2 16, R2 17, -1 none)
+    Q_PROPERTY(QVariantList retroMap READ retroMap NOTIFY retroOptionsChanged)
+    // the page VeyAmux opens on: "" (the start screen), "games" or "media"
+    Q_PROPERTY(QString startPage READ startPage WRITE setStartPage NOTIFY startPageChanged)
     Q_PROPERTY(int retroDisc READ retroDisc NOTIFY retroDiscChanged)    // the one in the tray (1 = the first)
     // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
     // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
@@ -88,6 +97,8 @@ class PlayerBridge : public QObject {
     // Output device (sink name, "" = system default) and loudness levelling
     Q_PROPERTY(QString audioOutput READ audioOutput WRITE setAudioOutput NOTIFY audioChanged)
     Q_PROPERTY(bool normalize READ normalize WRITE setNormalize NOTIFY audioChanged)
+    Q_PROPERTY(bool surround READ surround WRITE setSurround NOTIFY audioChanged)        // 5.1 films as 5.1
+    Q_PROPERTY(int subtitleSize READ subtitleSize WRITE setSubtitleSize NOTIFY subtitleStyleChanged)   // 0 small .. 3 largest
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY audioChanged)
     // spectrum of the source's sound (before volume and mute): 24 bands 0..1, ~30 updates per second
     Q_PROPERTY(QVariantList audioBands READ audioBands NOTIFY audioMeterChanged)
@@ -249,6 +260,15 @@ public:
     bool retroRewind() const;
     void setRetroRewind(bool on);
     bool retroRewindOnL2() const { return retroRewindKey_; }
+    QStringList retroCores() const;
+    QString retroCore() const;
+    void setRetroCore(const QString& core);
+    QString retroCoreRunning() const { return retroCoreRunning_; }
+    QVariantList retroMap() const;
+    Q_INVOKABLE void cycleRetroMap(int row);       // the next controller button for that console button
+    Q_INVOKABLE void resetRetroMap();
+    QString startPage() const { return QSettings().value("ui/startPage").toString(); }
+    void setStartPage(const QString& p) { QSettings().setValue("ui/startPage", p); emit startPageChanged(); }
     int retroDisc() const { return retroDisc_; }
     QVariantList subtitleTracks() const;
     QVariantList audioTracks() const;
@@ -600,6 +620,10 @@ public slots:
     void setAudioOutput(const QString& s) { QSettings().setValue("audio/sink", s); engine_.setAudioSink(s.toStdString()); emit audioChanged(); }
     bool normalize() const { return QSettings().value("audio/normalize", false).toBool(); }
     void setNormalize(bool v) { QSettings().setValue("audio/normalize", v); engine_.setNormalize(v); emit audioChanged(); }
+    bool surround() const { return QSettings().value("audio/surround", false).toBool(); }
+    void setSurround(bool v) { QSettings().setValue("audio/surround", v); engine_.setSurround(v); emit audioChanged(); }
+    int subtitleSize() const { return std::clamp(QSettings().value("subs/size", 1).toInt(), 0, 3); }
+    void setSubtitleSize(int v) { QSettings().setValue("subs/size", std::clamp(v, 0, 3)); emit subtitleStyleChanged(); }
     QString guessAudioSource(const QString& cardName);
     QString lastCaptureDevice() const;
     QString lastCaptureName() const { return QSettings().value("cap/name").toString(); }   // the card's name, for "continue"
@@ -686,6 +710,8 @@ signals:
     void inputPrefsChanged();
     void retroDiscChanged();
     void retroOptionsChanged();
+    void subtitleStyleChanged();
+    void startPageChanged();
     void playersReset();                // a game starts: the controllers' next presses decide the players
     void subtitleChanged();
     void updateChanged();
@@ -745,7 +771,10 @@ private:
     int retroDiscs_ = 0, retroDisc_ = 0;
     QString retroSystem_;
     bool retroRewindKey_ = false;
-    bool retroRewinding_ = false;      // L2 held for rewind (with hysteresis)
+    std::vector<std::pair<int, int>> retroMap_;   // libretro button -> controller button, for this system (empty: the usual)
+    void loadRetroMap();
+    bool retroRewinding_ = false;
+    QString retroCoreRunning_;         // the emulator of the game running (its file name without _libretro.so)      // L2 held for rewind (with hysteresis)
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;

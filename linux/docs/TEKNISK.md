@@ -428,9 +428,24 @@ bygget af `cmake/chiaki.cmake` med system-OpenSSL, libcurl, json-c, miniupnpc, l
 `src/Libretro.{h,cpp}` er en lille libretro-frontend: kilde `retro:<system>` + lydkilde `@retro`, så billedet går
 gennem alt som et capture-kort. `src/GameLibrary.{h,cpp}` (kontekst-egenskaben `games`) scanner, sorterer, finder
 kerner og henter covers; `src/PlayerBridgeGames.cpp` starter spillet.
+- **Egen proces** (`src/RetroRemote.{h,cpp}`): spillet kører i `veyamux --retro-host` (samme program). Billede (3
+  slots), lyd (ring på 1 s, 48 kHz) og controllere går gennem delt hukommelse (memfd), kommandoer og beskeder gennem en
+  `SOCK_SEQPACKET`-socket, og barnets stderr ind i VeyAmux' log. Crasher kernen, slutter spillet med "The emulator
+  crashed" (backtrace i loggen); VeyAmux kører videre. `VEYAMUX_RETRO_INPROC=1`: i VeyAmux' egen proces som før.
 - **Kerne-tråd:** `retro_set_environment`, `retro_init`, derefter de øvrige callbacks (RetroArchs rækkefølge; Mesen
-  crasher ellers). Kørt i kernens fps; kun software-kerner (`SET_HW_RENDER` afvises). Kommandoer uden data afvises,
+  crasher ellers). Kørt i kernens fps. Input læses én gang pr. billede. Kommandoer uden data afvises,
   undtagen dem der betyder noget uden (GPGX's "ingen diskkontrol").
+- **OpenGL-kerner** (`src/RetroGl.{h,cpp}`; N64, Dreamcast, PSP): `SET_HW_RENDER` får en EGL-kontekst uden vindue
+  (Mesas surfaceless, ellers en GPU-device, ellers standard-display; libEGL indlæses først når en kerne beder om det),
+  en framebuffer på kernens største størrelse, og billedet læses tilbage med `glReadPixels` (vendt rigtigt) og går
+  samme vej som software-kernernes. Ingen run-ahead for dem. Vulkan-kerner bruges ikke.
+- **Run-ahead / spol tilbage / Fortsæt:** via `retro_serialize`; pr. system (`games/<system>/runAhead`, `/rewind`),
+  fra for CD- og 3D-systemer. Fortsæt-tilstanden husker sin emulator (`.auto.state.core`).
+- **RetroAchievements** (`src/Achievements.{h,cpp}`, rcheevos v12.5.0 i `third_party/rcheevos`): login på Spil-siden
+  (kun tokenet gemmes, `games/ra/token`), spillet identificeres med rcheevos' hash, hukommelsen tjekkes efter hvert
+  rigtige billede (kernens memory map), serverkald med libcurl i egne tråde. Softcore.
+- **Pr. konsol:** profil bundet til "signalet" `Games: <system>`, emulatorvalg (`games/<system>/core`),
+  knaplayout (`games/<system>/map`).
 - **Billede:** konverteret til RGBA, roteret, forstørret med et helt tal (højde op til 1080) og strakt til kernens
   aspect. **Lyd:** kø i kernens rate, resamplet til 48 kHz med en rate der følger køens fyld (±0,5 %).
 - **Kerner:** egen mappe (`~/.local/share/VeyAmux/VeyAmux/games/cores`), RetroArch (Flatpak, native, Steam), systemets;
@@ -441,7 +456,8 @@ kerner og henter covers; `src/PlayerBridgeGames.cpp` starter spillet.
 - **Covers:** `thumbnails.libretro.com/<system>/Named_Boxarts/<navn>.png`, ellers GitHub (`libretro-thumbnails`;
   symlinks følges); nærmeste navn fra serverens liste eller GitHubs git-træ (gemt en uge). Arkade: titler fra FBNeo's
   DAT (`games/arcade-names.tsv`). Ikke fundne gemmes i `games/covers-missing.txt` til næste scanning.
-- **Test:** `veyamux-retro-test <kerne> <spil>` og `tests/run_retro_test.sh` (Gambatte + dmg-acid2, Genesis Plus GX),
+- **Test:** `veyamux-retro-test <kerne> <spil> [crash-kerne [gl-kerne]]` og `tests/run_retro_test.sh` (Gambatte + dmg-acid2,
+  Genesis Plus GX; alt igen i egen proces; `tests/crash_core.c` crasher efter 40 billeder; `tests/gl_core.c` tegner med OpenGL),
   `VEYAMUX_TEST_GAME=<fil>`, `VEYAMUX_TEST_COVERS=1`, `VEYAMUX_TEST_PAGE=media|games|audio`, `VEYAMUX_GRAB_SIZE=1920x1080`.
 
 ## Retter billedrytmen (frame pacing repair)

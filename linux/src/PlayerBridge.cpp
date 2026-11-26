@@ -1,4 +1,5 @@
 #include "PlayerBridge.h"
+#include "GameLibrary.h"
 #include <QPixmap>
 #include <QCursor>
 #include "Sandbox.h"
@@ -127,6 +128,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     engine_.setCallbacks(cb);
     engine_.setAudioSink(audioOutput().toStdString());
     engine_.setNormalize(normalize());
+    engine_.setSurround(surround());
     applyEnhance();
     {
         QSettings q;
@@ -1156,6 +1158,11 @@ QStringList PlayerBridge::profiles() const {
 }
 
 QString PlayerBridge::signalKey() const {
+    // a game: its console is the "signal", so a profile bound while a SNES game runs is used for every SNES game
+    if (retroActive_) {
+        const veyamux::GameSystem* g = veyamux::gameSystem(retroSystem_);
+        return "Games: " + (g ? QString::fromUtf8(g->name) : retroSystem_);
+    }
     if (!engine_.isLive()) return {};
     const auto& i = engine_.info();
     return QString("%1x%2@%3 %4").arg(i.width).arg(i.height).arg(std::lround(i.fps)).arg(QString::fromStdString(i.videoCodec));
@@ -1889,6 +1896,13 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         "State saved", "State loaded", "No saved state yet", "Could not save the state", "Could not load the state",
         "This emulator cannot save states", "The emulator could not start the game (a missing BIOS file? See the BIOS folder)",
         "The zip file holds no game this emulator can run", "Could not load the emulator core: ", "The game was closed", "Disc changed", "Continued where you left off", "Run-ahead does not work with this emulator",
+        // (RetroRemote.cpp; the longer ones first, they start alike)
+        "The emulator crashed while starting the game", "The emulator crashed", "The emulator did not start the game",
+        "Could not start the emulator: ", "Could not start the emulator",
+        // RetroAchievements (Achievements.cpp)
+        "Achievement unlocked: ", "All achievements in this game unlocked", "Achievements unlocked so far: ",
+        "RetroAchievements sign-in failed: sign in again on the Games page",
+        "This emulator needs OpenGL: ",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

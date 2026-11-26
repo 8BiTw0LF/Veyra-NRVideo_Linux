@@ -171,6 +171,37 @@ Window {
                     }
                 }
             }
+            // continue playing: the last games (with "Continue" from where they were quit)
+            Column {
+                visible: games.recentGames.length > 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 8 * startCol.k
+                Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("startRecent"); color: Theme.label
+                    font.pixelSize: 15 * startCol.k; font.weight: Font.DemiBold }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12 * startCol.k
+                    Repeater {
+                        model: games.recentGames.slice(0, Math.max(1, Math.min(6, Math.floor((win.width - 80) / (150 * startCol.k)))))
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 138 * startCol.k; height: 92 * startCol.k; radius: 12 * Theme.round
+                            color: rgMa.containsMouse ? Theme.surfaceHover : Theme.surface; clip: true
+                            border.width: Math.max(1, Theme.edge); border.color: rgMa.containsMouse ? Theme.accentLine : Theme.border
+                            Image { id: rgImg; anchors { fill: parent; margins: 6 * startCol.k; bottomMargin: 26 * startCol.k }
+                                source: modelData.image || ""; fillMode: Image.PreserveAspectFit; asynchronous: true
+                                sourceSize: Qt.size(240, 160) }
+                            Image { visible: rgImg.status !== Image.Ready; anchors.centerIn: rgImg; source: "icons/joystick.svg"; width: 26 * startCol.k; height: width
+                                sourceSize: Qt.size(52, 52); opacity: 0.5 }
+                            Text { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 * startCol.k }
+                                font.family: Theme.font; font.pixelSize: 12 * startCol.k; color: Theme.heading; elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter; text: (modelData.canResume ? "▶ " : "") + modelData.title }
+                            MouseArea { id: rgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: { win.returnTo = "games"; games.play(modelData.key, modelData.canResume) } }
+                        }
+                    }
+                }
+            }
             // the demo: try every feature without a capture card
             Column {
                 visible: player.demoAvailable
@@ -429,8 +460,74 @@ Window {
             horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             text: player.subtitleText
             color: "white"; style: Text.Outline; styleColor: "#e0000000"
-            font.pixelSize: Math.max(18, parent.height * 0.045); font.weight: Font.DemiBold
+            font.pixelSize: Math.max(14, parent.height * 0.045 * [0.75, 1, 1.3, 1.6][player.subtitleSize]); font.weight: Font.DemiBold
             textFormat: Text.PlainText
+        }
+    }
+
+    // ------------------------------------------------------------- a film or episode from Jellyfin / Plex: skip the
+    // intro or the credits, and the next episode (by itself 10 s after the end or into the credits). A on the
+    // controller takes the button shown.
+    Item {
+        id: mediaPrompt
+        z: 60
+        visible: player.hasMedia && media.playingFromLibrary && (showSkip || showNext)
+        readonly property bool showSkip: !showNext && seg !== null
+        anchors { right: parent.right; bottom: parent.bottom; rightMargin: 28; bottomMargin: (controlsShown ? bottomBar.height : 0) + 24 }
+        width: showNext ? nextCard.width : skipBtn.width; height: showNext ? nextCard.height : skipBtn.height
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 200 } }
+        // the segment the video is in ({kind, start, end}), or null
+        readonly property var seg: {
+            const p = player.position, s = media.segments
+            for (let i = 0; i < s.length; ++i) if (p >= s[i].start && p < s[i].end - 1) return s[i]
+            return null
+        }
+        property bool ended: false
+        property bool dismissed: false        // "not now" for this video
+        property int countdown: 10
+        readonly property bool showNext: media.nextTitle !== "" && !dismissed
+                                         && (ended || (seg !== null && seg.kind === "credits") || (player.duration > 0 && player.duration - player.position < 25 && !media.segments.some(s => s.kind === "credits")))
+        onShowNextChanged: { countdown = 10; if (showNext) nextTimer.restart(); else nextTimer.stop() }
+        Connections { target: media; function onPlaybackChanged() { mediaPrompt.ended = false; mediaPrompt.dismissed = false } }
+        Timer { id: nextTimer; interval: 1000; repeat: true
+            onTriggered: { if (--mediaPrompt.countdown <= 0) { stop(); media.playNext() } } }
+        function activate() { if (showNext) media.playNext(); else if (showSkip) player.seek(seg.end) }
+        Connections { target: gamepad; function onFreeButton(name) { if (name === "a" && mediaPrompt.visible && !win.panelOpen && !lib.visible) mediaPrompt.activate() } }
+
+        Rectangle {
+            id: skipBtn
+            visible: mediaPrompt.showSkip
+            anchors.right: parent.right; anchors.bottom: parent.bottom
+            width: skipText.implicitWidth + 48; height: 48; radius: 12 * Theme.round
+            gradient: Theme.sunset
+            Text { id: skipText; anchors.centerIn: parent; font.family: Theme.font; font.pixelSize: 17; font.weight: Font.DemiBold; color: "white"
+                text: mediaPrompt.seg && mediaPrompt.seg.kind === "credits" ? t("skipCredits") : t("skipIntro") }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: mediaPrompt.activate() }
+        }
+        Rectangle {
+            id: nextCard
+            visible: mediaPrompt.showNext
+            anchors.right: parent.right; anchors.bottom: parent.bottom
+            width: 380; height: nextCol.implicitHeight + 32; radius: 14 * Theme.round
+            color: Theme.toast; border.color: Theme.accentLine; border.width: Math.max(1, Theme.edge)
+            Column {
+                id: nextCol
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+                spacing: 10
+                Text { font.family: Theme.font; font.pixelSize: 13; color: Theme.label; text: t("nextEpisodeIn").replace("%1", mediaPrompt.countdown) }
+                Text { width: parent.width; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 17; font.weight: Font.DemiBold
+                    color: Theme.heading; text: media.nextTitle }
+                Row {
+                    spacing: 8
+                    Rectangle { width: playNow.implicitWidth + 32; height: 38; radius: 10 * Theme.round; gradient: Theme.sunset
+                        Text { id: playNow; anchors.centerIn: parent; font.family: Theme.font; font.pixelSize: 14; font.weight: Font.DemiBold; color: "white"; text: t("nextEpisodeNow") }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: media.playNext() } }
+                    Rectangle { width: notNow.implicitWidth + 32; height: 38; radius: 10 * Theme.round; color: Theme.surface; border.color: Theme.border
+                        Text { id: notNow; anchors.centerIn: parent; font.family: Theme.font; font.pixelSize: 14; color: Theme.text; text: t("nextEpisodeCancel") }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { mediaPrompt.dismissed = true; nextTimer.stop(); if (mediaPrompt.ended) media.stopPlayback() } } }
+                }
+            }
         }
     }
 
@@ -497,6 +594,7 @@ Window {
             height: 22
             Text { font.family: Theme.font; id: tCur; anchors.verticalCenter: parent.verticalCenter; text: fmt(scrubbing ? scrubValue : player.position); color: Theme.text; font.pixelSize: 12; width: 52 }
             VSlider {
+                id: seekSlider
                 anchors { left: tCur.right; right: tDur.left; verticalCenter: parent.verticalCenter; leftMargin: 6; rightMargin: 6 }
                 from: 0; to: Math.max(player.duration, 0.001)
                 value: scrubbing ? scrubValue : player.position
@@ -504,6 +602,27 @@ Window {
                 onMoved: (v) => { win.scrubValue = v; wake() }
             }
             Text { font.family: Theme.font; id: tDur; anchors { right: parent.right; verticalCenter: parent.verticalCenter } text: fmt(player.duration); color: Theme.label; font.pixelSize: 12; width: 52; horizontalAlignment: Text.AlignRight }
+            // the picture at the time being dragged to (Jellyfin / Plex seek bar pictures)
+            Rectangle {
+                id: thumbBox
+                property var th: (win.scrubbing && media.hasThumbs && thumbTick.v >= 0) ? media.thumbAt(win.scrubValue) : ({})
+                visible: win.scrubbing && th.url !== undefined
+                readonly property real pw: 240
+                readonly property real ph: th.w > 0 ? pw * th.h / th.w : pw * 9 / 16
+                width: pw + 6; height: ph + 6; radius: 8 * Theme.round; color: "#000000"; border.color: Theme.accentLine; border.width: 2
+                x: Math.max(0, Math.min(parent.width - width, seekSlider.x + seekSlider.width * (win.scrubValue / Math.max(player.duration, 0.001)) - width / 2))
+                y: -height - 10
+                Image {
+                    anchors.centerIn: parent; width: thumbBox.pw; height: thumbBox.ph
+                    source: thumbBox.th.url || ""; cache: true; asynchronous: true; fillMode: Image.PreserveAspectFit
+                    sourceClipRect: thumbBox.th.w > 0 ? Qt.rect(thumbBox.th.x, thumbBox.th.y, thumbBox.th.w, thumbBox.th.h) : Qt.rect(0, 0, 0, 0)
+                }
+                Text { anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 6 }
+                    font.family: Theme.font; font.pixelSize: 13; font.weight: Font.DemiBold; color: "white"; style: Text.Outline; styleColor: "black"
+                    text: fmt(win.scrubValue) }
+            }
+            QtObject { id: thumbTick; property int v: 0 }
+            Connections { target: media; function onThumbsChanged() { thumbTick.v++ } }
         }
 
         Rectangle {
@@ -669,7 +788,11 @@ Window {
         target: player
         function onMediaChanged() { if (!player.hasMedia && win.returnTo !== "" && !lib.visible) { const m = win.returnTo; lib.openPage(m); win.returnTo = m } }
         // a film or episode from the Media page that plays to the end: back to the page
-        function onEnded() { if (win.returnTo === "media" && media.playingFromLibrary) media.stopPlayback() }
+        function onEnded() {
+            if (!media.playingFromLibrary) return
+            if (media.nextTitle !== "" && !mediaPrompt.dismissed) { mediaPrompt.ended = true; return }   // the next episode in 10 s
+            if (win.returnTo === "media") media.stopPlayback()
+        }
     }
     CaptureDialog { id: capDlg; anchors.fill: parent; z: 100; tr: win.t; onRemotePlay: psDlg.openDialog() }
     RemotePlayDialog { id: psDlg; anchors.fill: parent; z: 101; tr: win.t }
@@ -755,11 +878,14 @@ Window {
         }
     }
     }   // hdrRoot
+    Timer { id: testMenuTimer; interval: testMenu; onTriggered: { win.panelOpen = true; panel.mapOpen = true } }
     Component.onCompleted: {
         hideTimer.start()
         if (startDialog) capDlg.openDialog()
         if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
         if (testPage === "audio") Qt.callLater(function () { trackPopup.toggle("audio", audioBtn) })   // VEYAMUX_TEST_PAGE=audio
         else if (testPage !== "") lib.openPage(testPage)                                          // VEYAMUX_TEST_PAGE
+        else if (startPageNow !== "") lib.openPage(startPageNow)                                  // System -> Start in
+        if (testMenu > 0) testMenuTimer.start()
     }
 }

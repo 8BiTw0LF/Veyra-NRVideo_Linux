@@ -2,12 +2,15 @@
 #include "PlayerBridge.h"
 #include "GameLibrary.h"
 #include "Libretro.h"
+#include "Achievements.h"
 #include "RemotePlay.h"
 #include <QFileInfo>
 #include <QHash>
 #include <QScreen>
 
 #include <QDir>
+#include <algorithm>
+#include <iterator>
 #include <QStandardPaths>
 
 namespace rp = veyamux::remoteplay;
@@ -25,11 +28,19 @@ void PlayerBridge::openGame(const QString& core, const QString& rom, const QStri
     g.stateDir = (data + "states/" + systemId).toStdString();
     g.stickAsDpad = !sys || !sys->analog;
     retroSystem_ = systemId;
+    retroCoreRunning_ = QFileInfo(core).fileName().remove("_libretro.so");
+    loadRetroMap();
     retroRewindKey_ = g.stickAsDpad;   // L2 is free on systems without analog sticks
     retroRewinding_ = false;
     g.runAhead = retroRunAhead();
     g.rewind = retroRewind();
     g.resume = resume;
+    {   // RetroAchievements, when signed in on the Games page
+        QSettings q;
+        g.raUser = q.value("games/ra/user").toString().toStdString();
+        g.raToken = q.value("games/ra/token").toString().toStdString();
+        g.raConsole = int(veyamux::retro::cheevos::consoleFor(systemId.toStdString()));
+    }
     emit retroOptionsChanged();
     emit playersReset();
     veyamux::retro::setGame(g);
@@ -75,12 +86,26 @@ void PlayerBridge::psPlayer(int player, quint32 buttons, double lx, double ly, d
         veyamux::retro::setRewinding(retroRewinding_);
         l2 = 0;
     }
-    veyamux::retro::setPad(player, veyamux::retro::fromPlayStation(buttons, l2, r2), lx, ly, rx, ry);
+    uint32_t b;
+    if (retroMap_.empty()) {
+        b = veyamux::retro::fromPlayStation(buttons, l2, r2);
+    } else {
+        // the D-pad and the stick clicks as always, the other buttons where this system's layout puts them
+        constexpr quint32 fixed = (1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 10) | (1u << 11) | (1u << 14);
+        b = veyamux::retro::fromPlayStation(buttons & fixed, 0, 0);
+        for (const auto& [id, phys] : retroMap_) {
+            const bool down = phys == 16 ? l2 > 0.5 : phys == 17 ? r2 > 0.5 : phys >= 0 && (buttons & (1u << phys));
+            if (down) b |= 1u << id;
+        }
+    }
+    veyamux::retro::setPad(player, b, lx, ly, rx, ry);
 }
 
 // run-ahead and rewind, kept per system (games/<system>/runAhead, .../rewind); the defaults: 1 frame and rewind on for
-// cartridge systems, off for CD systems (their states are large and the emulators heavier)
-static bool cdSystem(const QString& s) { return s == "psx" || s == "saturn" || s == "segacd" || s == "pcecd"; }
+// cartridge systems, off for CD systems and the 3D ones (their states are large and the emulators heavier)
+static bool cdSystem(const QString& s) {
+    return s == "psx" || s == "saturn" || s == "segacd" || s == "pcecd" || s == "n64" || s == "nds" || s == "dc" || s == "psp";
+}
 int PlayerBridge::retroRunAhead() const {
     return QSettings().value("games/" + retroSystem_ + "/runAhead", cdSystem(retroSystem_) ? 0 : 1).toInt();
 }
@@ -96,6 +121,68 @@ void PlayerBridge::setRetroRewind(bool on) {
     QSettings().setValue("games/" + retroSystem_ + "/rewind", on);
     veyamux::retro::setRewind(on);
     if (!on) { veyamux::retro::setRewinding(false); retroRewinding_ = false; }
+    emit retroOptionsChanged();
+}
+// ---- the controller layout per system (games/<system>/map: "<libretro id>:<controller button>,...")
+namespace {
+struct MapRow { int id; const char* name; int phys; };
+// libretro's buttons as a SNES pad names them, and where they are by default (fromPlayStation)
+constexpr MapRow kMapRows[] = {{0, "B", 0}, {8, "A", 1}, {1, "Y", 2}, {9, "X", 3}, {10, "L", 8}, {11, "R", 9},
+                               {12, "L2", 16}, {13, "R2", 17}, {2, "Select", 13}, {3, "Start", 12}};
+constexpr int kPhysOrder[] = {0, 1, 2, 3, 8, 9, 16, 17, 13, 12, -1};
+} // namespace
+
+void PlayerBridge::loadRetroMap() {
+    retroMap_.clear();
+    const QString s = QSettings().value("games/" + retroSystem_ + "/map").toString();
+    if (s.isEmpty()) return;
+    for (const MapRow& r : kMapRows) {
+        int phys = r.phys;
+        for (const QString& part : s.split(','))
+            if (part.section(':', 0, 0).toInt() == r.id && part.contains(':')) phys = part.section(':', 1).toInt();
+        retroMap_.push_back({r.id, phys});
+    }
+}
+
+QVariantList PlayerBridge::retroMap() const {
+    QVariantList out;
+    for (size_t i = 0; i < std::size(kMapRows); ++i) {
+        const int phys = retroMap_.empty() ? kMapRows[i].phys : retroMap_[i].second;
+        out << QVariantMap{{"button", kMapRows[i].name}, {"phys", phys}};
+    }
+    return out;
+}
+
+void PlayerBridge::cycleRetroMap(int row) {
+    if (row < 0 || row >= int(std::size(kMapRows))) return;
+    if (retroMap_.empty()) for (const MapRow& r : kMapRows) retroMap_.push_back({r.id, r.phys});
+    int& phys = retroMap_[size_t(row)].second;
+    const auto at = std::find(std::begin(kPhysOrder), std::end(kPhysOrder), phys);
+    phys = (at == std::end(kPhysOrder) || at + 1 == std::end(kPhysOrder)) ? kPhysOrder[0] : *(at + 1);
+    QStringList parts;
+    for (const auto& [id, p] : retroMap_) parts << QString::number(id) + ":" + QString::number(p);
+    QSettings().setValue("games/" + retroSystem_ + "/map", parts.join(','));
+    emit retroOptionsChanged();
+}
+
+void PlayerBridge::resetRetroMap() {
+    QSettings().remove("games/" + retroSystem_ + "/map");
+    retroMap_.clear();
+    emit retroOptionsChanged();
+}
+
+QStringList PlayerBridge::retroCores() const {
+    const veyamux::GameSystem* s = veyamux::gameSystem(retroSystem_);
+    return s ? QString::fromLatin1(s->cores).split(',') : QStringList();
+}
+// games/<system>/core: GameLibrary::coreFor tries it first
+QString PlayerBridge::retroCore() const {
+    const QString c = QSettings().value("games/" + retroSystem_ + "/core").toString();
+    return retroCores().contains(c) ? c : retroCoreRunning_;
+}
+void PlayerBridge::setRetroCore(const QString& core) {
+    if (!retroCores().contains(core)) return;
+    QSettings().setValue("games/" + retroSystem_ + "/core", core);
     emit retroOptionsChanged();
 }
 void PlayerBridge::retroRewindHold(bool held) { if (retroActive() && retroRewind()) veyamux::retro::setRewinding(held); }

@@ -259,7 +259,7 @@ void GamepadInput::onKey(int code, bool down) {
     case BTN_DPAD_DOWN: setDir("down", down); return;
     case BTN_DPAD_LEFT: setDir("left", down); return;
     case BTN_DPAD_RIGHT: setDir("right", down); return;
-    case BTN_SOUTH: if (down && wantGrab_) emit button("a"); return;
+    case BTN_SOUTH: if (down) { if (wantGrab_) emit button("a"); else emit freeButton("a"); } return;   // (free: skip intro, next episode)
     case BTN_EAST: if (down && wantGrab_) emit button("b"); return;
     case BTN_TL: trigBtn_[2] = down; if (down && wantGrab_) emit button("lb"); emitAnalog(); return;
     case BTN_TR: trigBtn_[3] = down; if (down && wantGrab_) emit button("rb"); emitAnalog(); return;
