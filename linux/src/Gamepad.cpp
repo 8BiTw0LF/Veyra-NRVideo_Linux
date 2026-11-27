@@ -104,6 +104,9 @@ void GamepadInput::addPad(const QString& path, bool test) {
             if (ioctl(fd, EVIOCGABS(axes[i]), &info) == 0 && info.maximum > info.minimum) {
                 p->absMin[i] = info.minimum;
                 p->absMax[i] = info.maximum;
+                // a trigger rests at its minimum; a generic pad's right stick on ABS_Z / ABS_RZ rests in the middle
+                if (i >= 4 && info.minimum >= 0 && info.value <= info.minimum + (info.maximum - info.minimum) / 8)
+                    p->analogTrig[i - 4] = true;
             }
         }
     } else {
@@ -146,6 +149,9 @@ void GamepadInput::readPad(Pad& p) {
             }
             if (e.type == EV_KEY) {
                 if (e.value == 2) continue;   // kernel auto-repeat: VeyAmux repeats itself
+                // a DualSense / DualShock 4 also reports L2 / R2 as a button at the lightest touch: with the axis there,
+                // the button would turn every half press into a full one (throttle and brake in racing games)
+                if ((e.code == BTN_TL2 && p.analogTrig[0]) || (e.code == BTN_TR2 && p.analogTrig[1])) continue;
                 psKey(e.code, e.value != 0);   // (the Steam Input copy sends the same state: harmless here)
                 const bool dup = duplicate(p, e.code, e.value != 0);
                 padKey(p, e.code, e.value != 0, dup);

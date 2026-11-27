@@ -1,17 +1,14 @@
-## VeyAmux-V.2.2.1
+## VeyAmux-V.2.2.2
 
 A small fix release.
 
 ### Fixes
-- When the menu closes, a button or stick you are already holding reaches the game or Remote Play at once (before,
-  only after the next movement).
-- The emulator process uses less CPU: the controller is still read every half millisecond, but game info is only
-  updated every 20 ms. Less power use, most noticeable on handhelds.
-- A controller stick could be missed right after a game started.
-- No busy loop in the sound thread while no game is running.
+- **L2 and R2 are analog again** with a DualSense or DualShock 4: a light press no longer counts as a full one, so
+  throttle and brake in racing and driving games (PlayStation Remote Play, and games on the Games page) follow how
+  far you press.
 
-Everything new in 2.2 (N64, Dreamcast, PSP and DS, RetroAchievements, run-ahead and rewind, search, skip intro and
-more) is in the [2.2 release notes](https://github.com/8BiTw0LF/VeyAmux/releases/tag/VeyAmux-V.2.2).
+Also in 2.2.1: controls reach the game at once when the menu closes, and the emulator uses less CPU. Everything new
+in 2.2 is in the [2.2 release notes](https://github.com/8BiTw0LF/VeyAmux/releases/tag/VeyAmux-V.2.2).
 
 ### Download
 Already on 1.6 or newer? VeyAmux offers the update by itself (on the start screen and under *System*). Otherwise,

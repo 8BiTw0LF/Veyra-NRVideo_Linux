@@ -28,7 +28,7 @@
 
 ## New in 2.2
 
-**2.2.1:** controls reach the game at once when the menu closes, and the emulator uses less CPU.
+**2.2.2:** L2 and R2 are analog again in PlayStation Remote Play (throttle and brake). **2.2.1:** controls reach the game at once when the menu closes, and the emulator uses less CPU.
 
 - **More consoles:** **Nintendo 64**, **Dreamcast**, **PSP** and **Nintendo DS**. The emulators that draw with OpenGL
   (N64, Dreamcast, PSP) get an OpenGL context from VeyAmux (GLX on the desktop's graphics card, EGL without X), and their

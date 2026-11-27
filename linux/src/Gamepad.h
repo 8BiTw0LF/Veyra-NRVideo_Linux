@@ -76,6 +76,7 @@ private:
         quint32 ps = 0;
         double ax[6]{};
         bool trig[2]{};
+        bool analogTrig[2]{};            // L2 / R2 have an axis: their digital button is ignored (else any touch = full)
     };
     void padKey(Pad& p, int code, bool down, bool dup);
     void markTwins(const QString& firstPath, const QString& laterPath);
